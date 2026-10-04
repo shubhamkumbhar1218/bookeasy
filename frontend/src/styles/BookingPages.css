@@ -1,0 +1,1151 @@
+/* =========================================================
+   BOOKEASY - CUSTOMER BOOKING PAGE
+   ========================================================= */
+
+.customer-booking-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 35%),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 30%),
+    #f8fafc;
+  color: #0f172a;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.customer-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  min-height: 72px;
+  padding: 0 6%;
+
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #111827;
+}
+
+.brand svg {
+  color: #6366f1;
+}
+
+.customer-header-text {
+  padding: 8px 14px;
+
+  border-radius: 999px;
+
+  background: #eef2ff;
+  color: #4f46e5;
+
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+
+/* =========================================================
+   MAIN
+   ========================================================= */
+
+.customer-main {
+  width: min(1150px, 92%);
+  margin: 0 auto;
+  padding: 45px 0 70px;
+}
+
+
+/* =========================================================
+   BUSINESS HERO
+   ========================================================= */
+
+.business-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
+
+  padding: 32px;
+
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+
+  box-shadow: 0 15px 45px rgba(15, 23, 42, 0.07);
+}
+
+.business-icon {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 20px;
+
+  background: linear-gradient(
+    135deg,
+    #6366f1,
+    #8b5cf6
+  );
+
+  color: white;
+
+  box-shadow:
+    0 12px 25px rgba(99, 102, 241, 0.25);
+}
+
+.eyebrow {
+  margin: 0 0 7px;
+
+  color: #6366f1;
+
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.business-hero h1 {
+  margin: 0;
+
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
+
+  color: #0f172a;
+}
+
+.business-type {
+  margin: 10px 0;
+
+  color: #64748b;
+
+  font-size: 1rem;
+  font-weight: 600;
+
+  text-transform: capitalize;
+}
+
+.business-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-top: 8px;
+
+  color: #64748b;
+
+  font-size: 0.9rem;
+}
+
+.business-detail svg {
+  flex-shrink: 0;
+  color: #6366f1;
+}
+
+
+/* =========================================================
+   CHECK APPOINTMENT BUTTON
+   ========================================================= */
+
+.customer-appointment-section {
+  display: flex;
+  justify-content: flex-end;
+
+  margin: 22px 0;
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+
+  min-height: 46px;
+  padding: 0 20px;
+
+  border: none;
+  border-radius: 12px;
+
+  background: linear-gradient(
+    135deg,
+    #6366f1,
+    #7c3aed
+  );
+
+  color: white;
+
+  font-size: 0.95rem;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 10px 20px rgba(99, 102, 241, 0.2);
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.primary:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 14px 25px rgba(99, 102, 241, 0.28);
+}
+
+.primary:active {
+  transform: translateY(0);
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+
+/* Empty section currently present in JSX */
+.booking-section {
+  display: none;
+}
+
+
+/* =========================================================
+   ALERTS
+   ========================================================= */
+
+.booking-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  margin: 20px 0;
+  padding: 15px 18px;
+
+  border-radius: 14px;
+
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+
+/* =========================================================
+   BOOKING LAYOUT
+   ========================================================= */
+
+.booking-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+
+  gap: 22px;
+
+  margin-top: 22px;
+}
+
+
+/* =========================================================
+   BOOKING PANEL
+   ========================================================= */
+
+.booking-panel {
+  padding: 28px;
+
+  background: rgba(255, 255, 255, 0.95);
+
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+
+  box-shadow:
+    0 12px 35px rgba(15, 23, 42, 0.06);
+}
+
+.booking-panel:last-child {
+  grid-column: span 2;
+}
+
+.booking-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  margin-bottom: 22px;
+}
+
+.booking-panel-header svg {
+  width: 28px;
+  height: 28px;
+
+  color: #6366f1;
+}
+
+.step-number {
+  margin: 0 0 5px;
+
+  color: #6366f1;
+
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.booking-panel h2 {
+  margin: 0;
+
+  font-size: 1.45rem;
+  color: #111827;
+}
+
+.muted {
+  margin: 6px 0 0;
+
+  color: #64748b;
+
+  font-size: 0.9rem;
+}
+
+
+/* =========================================================
+   SERVICES
+   ========================================================= */
+
+.customer-service-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.customer-service-card {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+
+  padding: 17px;
+
+  text-align: left;
+
+  background: #ffffff;
+
+  border: 1.5px solid #e2e8f0;
+  border-radius: 15px;
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.customer-service-card:hover {
+  transform: translateY(-2px);
+
+  border-color: #a5b4fc;
+
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.07);
+}
+
+.customer-service-card.selected {
+  background: #eef2ff;
+  border-color: #6366f1;
+
+  box-shadow:
+    0 8px 20px rgba(99, 102, 241, 0.12);
+}
+
+.customer-service-card strong {
+  display: block;
+
+  color: #111827;
+
+  font-size: 1rem;
+}
+
+.customer-service-card p {
+  margin: 5px 0;
+
+  color: #64748b;
+
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.customer-service-card small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+
+  color: #64748b;
+
+  font-size: 0.78rem;
+}
+
+.customer-service-card small svg {
+  color: #6366f1;
+}
+
+.customer-service-price {
+  flex-shrink: 0;
+
+  color: #4f46e5;
+
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+
+/* =========================================================
+   DATE SELECTION
+   ========================================================= */
+
+.date-selection label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  color: #334155;
+
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.date-selection input {
+  width: 100%;
+  height: 48px;
+
+  padding: 0 13px;
+
+  background: #ffffff;
+
+  border: 1.5px solid #dbe3ef;
+  border-radius: 12px;
+
+  color: #0f172a;
+
+  font-size: 0.95rem;
+
+  outline: none;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.date-selection input:focus {
+  border-color: #6366f1;
+
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+
+/* =========================================================
+   TIME SLOTS
+   ========================================================= */
+
+.slot-section {
+  margin-top: 25px;
+}
+
+.slot-section h3 {
+  margin: 0 0 13px;
+
+  color: #1e293b;
+
+  font-size: 0.95rem;
+}
+
+.time-slots {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+
+  gap: 10px;
+}
+
+.time-slots button {
+  min-height: 43px;
+
+  padding: 8px;
+
+  background: #ffffff;
+
+  border: 1.5px solid #dbe3ef;
+  border-radius: 10px;
+
+  color: #334155;
+
+  font-size: 0.84rem;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    all 0.2s ease;
+}
+
+.time-slots button:hover {
+  border-color: #818cf8;
+
+  background: #eef2ff;
+
+  color: #4f46e5;
+}
+
+.time-slots button.selected {
+  background: linear-gradient(
+    135deg,
+    #6366f1,
+    #7c3aed
+  );
+
+  border-color: #6366f1;
+
+  color: white;
+
+  box-shadow:
+    0 7px 16px rgba(99, 102, 241, 0.2);
+}
+
+
+/* =========================================================
+   LOADING SLOTS
+   ========================================================= */
+
+.slot-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  min-height: 100px;
+
+  justify-content: center;
+
+  color: #64748b;
+
+  font-size: 0.9rem;
+}
+
+.small-spinner {
+  width: 19px;
+  height: 19px;
+
+  border: 3px solid #e2e8f0;
+  border-top-color: #6366f1;
+
+  border-radius: 50%;
+
+  animation: spin 0.8s linear infinite;
+}
+
+
+/* =========================================================
+   NO SLOTS
+   ========================================================= */
+
+.no-slots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 150px;
+
+  padding: 20px;
+
+  text-align: center;
+
+  background: #f8fafc;
+
+  border: 1px dashed #cbd5e1;
+  border-radius: 15px;
+
+  color: #64748b;
+}
+
+.no-slots svg {
+  margin-bottom: 8px;
+
+  color: #94a3b8;
+}
+
+.no-slots p {
+  margin: 0;
+
+  color: #475569;
+
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.no-slots small {
+  margin-top: 5px;
+
+  color: #94a3b8;
+}
+
+
+/* =========================================================
+   SELECTED BOOKING SUMMARY
+   ========================================================= */
+
+.selected-booking-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+
+  margin-bottom: 22px;
+  padding: 17px;
+
+  background: #f8fafc;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+}
+
+.selected-booking-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.selected-booking-summary strong {
+  color: #111827;
+
+  font-size: 1rem;
+}
+
+.selected-booking-summary span {
+  color: #64748b;
+
+  font-size: 0.83rem;
+}
+
+.selected-booking-summary > strong {
+  color: #4f46e5;
+
+  font-size: 1.15rem;
+}
+
+
+/* =========================================================
+   CUSTOMER FORM
+   ========================================================= */
+
+.customer-booking-form {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+}
+
+.customer-booking-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  color: #334155;
+
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.customer-booking-form input {
+  width: 100%;
+  height: 48px;
+
+  padding: 0 14px;
+
+  background: #ffffff;
+
+  border: 1.5px solid #dbe3ef;
+  border-radius: 12px;
+
+  color: #0f172a;
+
+  font-size: 0.95rem;
+
+  outline: none;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.customer-booking-form input::placeholder {
+  color: #94a3b8;
+}
+
+.customer-booking-form input:focus {
+  border-color: #6366f1;
+
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.booking-submit {
+  width: 100%;
+
+  margin-top: 4px;
+}
+
+
+/* =========================================================
+   LOADING PAGE
+   ========================================================= */
+
+.booking-loading {
+  min-height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  background: #f8fafc;
+
+  color: #64748b;
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+
+  margin-bottom: 14px;
+
+  border: 4px solid #e2e8f0;
+  border-top-color: #6366f1;
+
+  border-radius: 50%;
+
+  animation: spin 0.8s linear infinite;
+}
+
+.booking-loading p {
+  margin: 0;
+
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+
+/* =========================================================
+   ERROR PAGE
+   ========================================================= */
+
+.booking-error-page {
+  min-height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  padding: 30px;
+
+  background: #f8fafc;
+
+  text-align: center;
+}
+
+.booking-error-page svg {
+  margin-bottom: 15px;
+
+  color: #ef4444;
+}
+
+.booking-error-page h1 {
+  margin: 0;
+
+  color: #111827;
+
+  font-size: 2rem;
+}
+
+.booking-error-page p {
+  max-width: 500px;
+
+  margin: 10px 0 0;
+
+  color: #64748b;
+
+  line-height: 1.6;
+}
+
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.customer-footer {
+  padding: 25px 20px;
+
+  border-top: 1px solid #e2e8f0;
+
+  background: rgba(255, 255, 255, 0.8);
+
+  color: #94a3b8;
+
+  text-align: center;
+
+  font-size: 0.82rem;
+}
+
+
+/* =========================================================
+   ANIMATION
+   ========================================================= */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+/* =========================================================
+   ACCESSIBILITY
+   ========================================================= */
+
+.primary:focus-visible,
+.customer-service-card:focus-visible,
+.time-slots button:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(99, 102, 241, 0.3);
+  outline-offset: 2px;
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .customer-main {
+    width: min(94%, 750px);
+
+    padding-top: 30px;
+  }
+
+  .booking-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-panel:last-child {
+    grid-column: span 1;
+  }
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 600px) {
+  .customer-header {
+    min-height: 64px;
+
+    padding: 0 18px;
+  }
+
+  .brand {
+    font-size: 1.15rem;
+  }
+
+  .customer-header-text {
+    padding: 7px 10px;
+
+    font-size: 0.72rem;
+  }
+
+  .customer-main {
+    width: 94%;
+
+    padding: 20px 0 45px;
+  }
+
+  .business-hero {
+    flex-direction: column;
+
+    padding: 22px;
+
+    border-radius: 20px;
+  }
+
+  .business-icon {
+    width: 60px;
+    height: 60px;
+
+    border-radius: 17px;
+  }
+
+  .business-icon svg {
+    width: 29px;
+    height: 29px;
+  }
+
+  .business-hero h1 {
+    font-size: 1.8rem;
+  }
+
+  .business-detail {
+    align-items: flex-start;
+
+    font-size: 0.82rem;
+  }
+
+  .customer-appointment-section {
+    justify-content: stretch;
+
+    margin: 16px 0;
+  }
+
+  .customer-appointment-section .primary {
+    width: 100%;
+  }
+
+  .booking-panel {
+    padding: 20px;
+
+    border-radius: 18px;
+  }
+
+  .booking-panel h2 {
+    font-size: 1.25rem;
+  }
+
+  .booking-panel-header {
+    margin-bottom: 18px;
+  }
+
+  .customer-service-card {
+    padding: 14px;
+
+    gap: 10px;
+  }
+
+  .customer-service-card strong {
+    font-size: 0.92rem;
+  }
+
+  .customer-service-card p {
+    font-size: 0.78rem;
+  }
+
+  .customer-service-price {
+    font-size: 0.95rem;
+  }
+
+  .time-slots {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .selected-booking-summary {
+    align-items: flex-start;
+
+    flex-direction: column;
+  }
+
+  .selected-booking-summary > strong {
+    font-size: 1rem;
+  }
+
+  .booking-submit {
+    min-height: 50px;
+  }
+}
+
+
+/* =========================================================
+   VERY SMALL MOBILE
+   ========================================================= */
+
+@media (max-width: 380px) {
+  .customer-header-text {
+    display: none;
+  }
+
+  .business-hero h1 {
+    font-size: 1.55rem;
+  }
+
+  .booking-panel {
+    padding: 16px;
+  }
+
+  .time-slots {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* =========================================
+   SERVICE WRAPPER
+========================================= */
+
+.customer-service-wrapper {
+  width: 100%;
+}
+
+
+/* =========================================
+   SERVICE INFORMATION
+========================================= */
+
+.customer-service-info {
+  min-width: 0;
+}
+
+.customer-service-info strong {
+  display: block;
+
+  color: #111827;
+
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.customer-service-info p {
+  margin: 6px 0;
+
+  color: #64748b;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.customer-service-info small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  margin-top: 8px;
+
+  color: #94a3b8;
+
+  font-size: 12px;
+}
+
+
+/* =========================================
+   REVIEW LOADING
+========================================= */
+
+.service-rating-loading {
+  margin-top: 9px;
+
+  color: #94a3b8;
+
+  font-size: 11px;
+  font-weight: 600;
+}
+
+
+/* =========================================
+   NO REVIEWS
+========================================= */
+
+.no-service-reviews {
+  padding: 35px 20px;
+
+  text-align: center;
+
+  color: #94a3b8;
+}
+
+.no-service-reviews svg {
+  margin-bottom: 8px;
+
+  color: #cbd5e1;
+}
+
+.no-service-reviews h4 {
+  margin: 0;
+
+  color: #475569;
+
+  font-size: 16px;
+}
+
+.no-service-reviews p {
+  max-width: 400px;
+
+  margin: 7px auto 0;
+
+  color: #94a3b8;
+
+  font-size: 13px;
+
+  line-height: 1.6;
+}
+
+
+/* =========================================
+   REVIEWS LOADING
+========================================= */
+
+.reviews-loading {
+  padding: 25px;
+
+  text-align: center;
+
+  color: #64748b;
+
+  font-size: 13px;
+}
+
+
+/* =========================================
+   REVIEW CARD
+========================================= */
+
+.service-review-card {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.service-review-card:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.05);
+}

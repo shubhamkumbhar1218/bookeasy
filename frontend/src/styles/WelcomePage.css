@@ -1,0 +1,504 @@
+/* =========================================================
+   BOOKEASY - WELCOME PAGE
+   ========================================================= */
+
+.welcome-page {
+  min-height: 100vh;
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 40px 20px;
+
+  background:
+    radial-gradient(
+      circle at 10% 10%,
+      rgba(99, 102, 241, 0.12),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 90% 85%,
+      rgba(79, 70, 229, 0.09),
+      transparent 30%
+    ),
+    #f7f8fc;
+
+  color: #172033;
+}
+
+/* =========================================================
+   MAIN CONTAINER
+   ========================================================= */
+
+.welcome-container {
+  width: min(900px, 100%);
+
+  text-align: center;
+}
+
+/* =========================================================
+   BRAND
+   ========================================================= */
+
+.welcome-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+
+  margin-bottom: 45px;
+
+  color: #171c2d;
+
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.welcome-brand-icon {
+  width: 50px;
+  height: 50px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 14px;
+
+  background: linear-gradient(
+    135deg,
+    #6366f1,
+    #4f46e5
+  );
+
+  color: white;
+
+  box-shadow:
+    0 10px 25px rgba(79, 70, 229, 0.25);
+}
+
+.welcome-brand-icon svg {
+  stroke-width: 2.2;
+}
+
+/* =========================================================
+   HEADING
+   ========================================================= */
+
+.welcome-heading {
+  max-width: 700px;
+
+  margin: 0 auto 38px;
+}
+
+.welcome-eyebrow {
+  display: inline-block;
+
+  margin-bottom: 13px;
+
+  color: #4f46e5;
+
+  font-size: 11px;
+  font-weight: 800;
+
+  letter-spacing: 0.16em;
+}
+
+.welcome-heading h1 {
+  margin: 0 0 13px;
+
+  color: #121827;
+
+  font-size: clamp(38px, 6vw, 58px);
+  line-height: 1.08;
+
+  letter-spacing: -2px;
+}
+
+.welcome-heading > p:last-child {
+  max-width: 560px;
+
+  margin: 0 auto;
+
+  color: #697386;
+
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+/* =========================================================
+   QUESTION
+   ========================================================= */
+
+.welcome-question {
+  margin-bottom: 20px;
+
+  color: #202638;
+
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* =========================================================
+   OPTIONS
+   ========================================================= */
+
+.welcome-options {
+  display: grid;
+
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  gap: 18px;
+
+  max-width: 760px;
+
+  margin: 0 auto;
+}
+
+/* =========================================================
+   WELCOME CARD
+   ========================================================= */
+
+.welcome-card {
+  position: relative;
+
+  min-height: 275px;
+
+  padding: 28px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  text-align: left;
+
+  background: rgba(255, 255, 255, 0.92);
+
+  border: 1px solid #e3e7ef;
+
+  border-radius: 20px;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 10px 35px rgba(15, 23, 42, 0.055);
+
+  overflow: hidden;
+
+  transition:
+    transform 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    background 0.25s ease;
+}
+
+.welcome-card::before {
+  content: "";
+
+  position: absolute;
+
+  width: 150px;
+  height: 150px;
+
+  top: -70px;
+  right: -70px;
+
+  border-radius: 50%;
+
+  background: rgba(99, 102, 241, 0.07);
+
+  transition:
+    transform 0.3s ease;
+}
+
+.welcome-card:hover {
+  transform: translateY(-6px);
+
+  border-color: #cfd3ff;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 20px 45px rgba(15, 23, 42, 0.11);
+}
+
+.welcome-card:hover::before {
+  transform: scale(1.35);
+}
+
+/* =========================================================
+   CARD ICON
+   ========================================================= */
+
+.welcome-card-icon {
+  width: 58px;
+  height: 58px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 15px;
+
+  margin-bottom: 22px;
+
+  position: relative;
+  z-index: 1;
+}
+
+.customer-icon {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.business-icon {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.welcome-card:hover .customer-icon {
+  background: #e0e7ff;
+}
+
+.welcome-card:hover .business-icon {
+  background: #dcfce7;
+}
+
+/* =========================================================
+   CARD CONTENT
+   ========================================================= */
+
+.welcome-card-content {
+  position: relative;
+  z-index: 1;
+
+  flex: 1;
+}
+
+.welcome-card-content h3 {
+  margin-bottom: 8px;
+
+  color: #182033;
+
+  font-size: 20px;
+  font-weight: 750;
+
+  letter-spacing: -0.3px;
+}
+
+.welcome-card-content p {
+  max-width: 300px;
+
+  color: #737d8f;
+
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* =========================================================
+   CONTINUE BUTTON
+   ========================================================= */
+
+.welcome-button {
+  width: 100%;
+
+  margin-top: 24px;
+
+  padding: 11px 14px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 8px;
+
+  border: 1px solid #e1e5ed;
+  border-radius: 9px;
+
+  background: #fafbfc;
+
+  color: #374151;
+
+  font-size: 12px;
+  font-weight: 700;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.welcome-button svg {
+  transition: transform 0.2s ease;
+}
+
+.welcome-card:hover .welcome-button {
+  background: #4f46e5;
+
+  border-color: #4f46e5;
+
+  color: white;
+}
+
+.welcome-card:hover .welcome-button svg {
+  transform: translateX(4px);
+}
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.welcome-footer {
+  margin-top: 30px;
+
+  color: #929aaa;
+
+  font-size: 12px;
+}
+
+.welcome-footer::before {
+  content: "✓";
+
+  margin-right: 6px;
+
+  color: #16a34a;
+
+  font-weight: 800;
+}
+
+/* =========================================================
+   RESPONSIVE - TABLET
+   ========================================================= */
+
+@media (max-width: 700px) {
+  .welcome-page {
+    padding: 30px 16px;
+  }
+
+  .welcome-brand {
+    margin-bottom: 35px;
+
+    font-size: 22px;
+  }
+
+  .welcome-brand-icon {
+    width: 46px;
+    height: 46px;
+  }
+
+  .welcome-heading {
+    margin-bottom: 30px;
+  }
+
+  .welcome-heading h1 {
+    letter-spacing: -1.5px;
+  }
+
+  .welcome-heading > p:last-child {
+    font-size: 14px;
+  }
+
+  .welcome-options {
+    grid-template-columns: 1fr;
+
+    max-width: 450px;
+  }
+
+  .welcome-card {
+    min-height: 240px;
+  }
+}
+
+/* =========================================================
+   RESPONSIVE - MOBILE
+   ========================================================= */
+
+@media (max-width: 450px) {
+  .welcome-page {
+    align-items: flex-start;
+
+    padding: 25px 15px;
+  }
+
+  .welcome-container {
+    padding-top: 10px;
+  }
+
+  .welcome-brand {
+    margin-bottom: 32px;
+
+    font-size: 21px;
+  }
+
+  .welcome-brand-icon {
+    width: 43px;
+    height: 43px;
+
+    border-radius: 12px;
+  }
+
+  .welcome-heading {
+    margin-bottom: 27px;
+  }
+
+  .welcome-eyebrow {
+    font-size: 9px;
+
+    letter-spacing: 0.13em;
+  }
+
+  .welcome-heading h1 {
+    font-size: 35px;
+
+    letter-spacing: -1.5px;
+  }
+
+  .welcome-heading > p:last-child {
+    font-size: 13px;
+
+    line-height: 1.6;
+  }
+
+  .welcome-question {
+    font-size: 16px;
+
+    margin-bottom: 17px;
+  }
+
+  .welcome-card {
+    min-height: 225px;
+
+    padding: 22px;
+
+    border-radius: 17px;
+  }
+
+  .welcome-card-icon {
+    width: 52px;
+    height: 52px;
+
+    margin-bottom: 18px;
+
+    border-radius: 13px;
+  }
+
+  .welcome-card-content h3 {
+    font-size: 18px;
+  }
+
+  .welcome-card-content p {
+    font-size: 12px;
+  }
+
+  .welcome-button {
+    margin-top: 20px;
+  }
+
+  .welcome-footer {
+    margin-top: 23px;
+
+    font-size: 11px;
+  }
+}

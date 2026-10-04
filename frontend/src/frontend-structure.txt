@@ -1,0 +1,22 @@
+Folder PATH listing for volume Windows-SSD
+Volume serial number is F4C9-FB5E
+C:.
+¦   App.jsx
+¦   CustomerBookings.jsx
+¦   frontend-structure.txt
+¦   main.jsx
+¦   style.css
+¦   
++---pages
+¦       BookingPages.jsx
+¦       CustomerDashboard.jsx
+¦       ResetPassword.jsx
+¦       WelcomePage.jsx
+¦       
++---styles
+        BookingPages.css
+        CustomerBookings.css
+        CustomerDashboard.css
+        ResetPassword.css
+        WelcomePage.css
+        
