@@ -208,9 +208,10 @@ router.post("/forgot-password", async (req, res) => {
     await user.save();
 
     // Frontend reset page
-    const resetUrl =
-      `http://localhost:5173/reset-password/${resetToken}`;
-
+    //  const resetUrl =
+    //    `http://localhost:5173/reset-password/${resetToken}`;
+const resetUrl =
+  `bookeasy://business/reset-password/${resetToken}`;
     // Send email
     await sendEmail({
       to: user.email,
