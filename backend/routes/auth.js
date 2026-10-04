@@ -211,7 +211,7 @@ router.post("/forgot-password", async (req, res) => {
     //  const resetUrl =
     //    `http://localhost:5173/reset-password/${resetToken}`;
 const resetUrl =
-  `bookeasy://business/reset-password/${resetToken}`;
+  `https://bookeasy-azure.vercel.app/reset-password/${resetToken}`;
     // Send email
     await sendEmail({
       to: user.email,
