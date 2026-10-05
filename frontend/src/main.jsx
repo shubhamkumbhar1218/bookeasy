@@ -12,6 +12,7 @@ import CustomerBookings from "./CustomerBookings";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import WelcomePage from "./pages/WelcomePage";
 import ResetPassword from "./pages/ResetPassword";
+import BusinessReports from "./pages/BusinessReports";
 
 import {
   CalendarDays,
@@ -29,6 +30,7 @@ import {
   Check,
   ArrowLeft,
   Bell,
+  BarChart3,
 } from "lucide-react";
 
 import "./style.css";
@@ -441,37 +443,6 @@ function Auth({ onLogin, initialMode = "login" }) {
   </button>
 )}
 
-        {/* {mode === "login" && (
-          <button
-            type="button"
-            className="link"
-            onClick={() => {
-              setMode("forgot");
-              setError("");
-              setForgotMessage("");
-            }}
-          >
-            Forgot Password?
-          </button>
-        )}
-
-        <button
-          type="button"
-          className="link"
-          onClick={() => {
-            setMode(
-              mode === "login"
-                ? "register"
-                : "login"
-            );
-
-            setError("");
-          }}
-        >
-          {mode === "login"
-            ? "Create a new business account"
-            : "Already have an account? Login"}
-        </button> */}
 
       </div>
     </div>
@@ -940,14 +911,6 @@ function Dashboard({ user, logout }) {
   // ===============================
   // STATES
   // ===============================
-  const [stats, setStats] = useState({
-  totalBookings: 0,
-  pendingBookings: 0,
-  confirmedBookings: 0,
-  cancelledBookings: 0,
-  completedBookings: 0,
-  revenue: 0,
-});
 
   const [notifications, setNotifications] = useState([]);
 const [unreadCount, setUnreadCount] = useState(0);
@@ -1051,23 +1014,6 @@ const [rescheduleLoading, setRescheduleLoading] =
     setUnreadCount(unread);
   } catch (error) {
     console.log("Notification error:", error);
-  }
-};
-
-
-const loadStats = async () => {
-  try {
-    const user = JSON.parse(
-      localStorage.getItem("bookeasy_user")
-    );
-
-    const data = await api(
-      `/bookings/stats/${user.id}`
-    );
-
-    setStats(data);
-  } catch (error) {
-    console.log("Stats error:", error);
   }
 };
 
@@ -1265,9 +1211,6 @@ const loadStats = async () => {
 
   // Load notifications
   loadNotifications();
-
-  // Load statistics
-  loadStats();
 
   // Check for new notifications every 10 seconds
   const notificationInterval = setInterval(() => {
@@ -1540,7 +1483,6 @@ const rescheduleBooking = async () => {
 
     await load();
 
-    await loadStats();
   } catch (e) {
     console.log(
       "Reschedule booking error:",
@@ -1552,60 +1494,6 @@ const rescheduleBooking = async () => {
     setRescheduleLoading(false);
   }
 };
-
-  // ===============================
-  // STATISTICS
-  // ===============================
-
-  const today =
-    new Date().toLocaleDateString(
-      "en-CA"
-    );
-
-  const todayBookings =
-    bookings.filter(
-      (booking) => {
-        if (!booking.bookingDate) {
-          return false;
-        }
-
-        const bookingDate =
-          new Date(
-            booking.bookingDate
-          ).toLocaleDateString(
-            "en-CA"
-          );
-
-        return (
-          bookingDate === today
-        );
-      }
-    );
-
-  const pendingBookings =
-    bookings.filter(
-      (booking) =>
-        booking.status ===
-        "pending"
-    );
-
-  const completedBookings =
-    bookings.filter(
-      (booking) =>
-        booking.status ===
-        "completed"
-    );
-
-  const revenue =
-    completedBookings.reduce(
-      (sum, booking) =>
-        sum +
-        Number(
-          booking.serviceId?.price ||
-            0
-        ),
-      0
-    );
 
   // ===============================
   // DASHBOARD UI
@@ -1743,35 +1631,47 @@ const rescheduleBooking = async () => {
       <main>
         {/* HERO */}
 
-        <div className="hero">
-          <div>
-            <p className="eyebrow">
-              BUSINESS DASHBOARD
-            </p>
+<div className="hero">
+  <div>
+    <p className="eyebrow">
+      BUSINESS DASHBOARD
+    </p>
 
-            <h1>
-              Good morning,{" "}
-              {user.name ||
-                "Business Owner"}
-            </h1>
+    <h1>
+      Good morning,{" "}
+      {user.name || "Business Owner"}
+    </h1>
 
-            <p className="muted">
-              Manage services and
-              appointments from one
-              place.
-            </p>
-          </div>
+    <p className="muted">
+      Manage services and appointments from one place.
+    </p>
+  </div>
 
-          <button
-            className="outline"
-            onClick={load}
-            title="Refresh dashboard"
-          >
-            <RefreshCw size={17} />
+  <div className="hero-actions">
 
-            Refresh
-          </button>
-        </div>
+    <button
+      className="outline"
+      type="button"
+      onClick={() => {
+        window.location.href = "/reports";
+      }}
+    >
+      <BarChart3 size={17} />
+      Reports & Analytics
+    </button>
+
+    <button
+      className="outline"
+      type="button"
+      onClick={load}
+      title="Refresh dashboard"
+    >
+      <RefreshCw size={17} />
+      Refresh
+    </button>
+
+  </div>
+</div>
 
         {/* ERROR */}
 
@@ -1789,41 +1689,6 @@ const rescheduleBooking = async () => {
           </p>
         )}
 
-        {/* STATS */}
-
-        {/* STATS */}
-
-<div className="stats-grid">
-  <div className="stat-card">
-    <span>Total Bookings</span>
-    <strong>{stats.totalBookings}</strong>
-  </div>
-
-  <div className="stat-card">
-    <span>Pending</span>
-    <strong>{stats.pendingBookings}</strong>
-  </div>
-
-  <div className="stat-card">
-    <span>Confirmed</span>
-    <strong>{stats.confirmedBookings}</strong>
-  </div>
-
-  <div className="stat-card">
-    <span>Completed</span>
-    <strong>{stats.completedBookings}</strong>
-  </div>
-
-  <div className="stat-card">
-    <span>Cancelled</span>
-    <strong>{stats.cancelledBookings}</strong>
-  </div>
-
-  <div className="stat-card revenue">
-    <span>Revenue</span>
-    <strong>₹{stats.revenue}</strong>
-  </div>
-</div>
 
         <div className="grid">
           {/* SERVICES */}
@@ -2143,25 +2008,28 @@ const rescheduleBooking = async () => {
                         {" · "}
 
                         {booking.bookingDate
-                          ? new Date(
-                              booking.bookingDate
-                            ).toLocaleDateString()
-                          : "No date"}
+  ? new Date(
+      booking.bookingDate
+    ).toLocaleDateString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
+  : "No date"}
 
-                        {" at "}
+{" at "}
 
-                        {booking.bookingDate
-                          ? new Date(
-                              booking.bookingDate
-                            ).toLocaleTimeString(
-                              [],
-                              {
-                                hour: "2-digit",
-                                minute:
-                                  "2-digit",
-                              }
-                            )
-                          : "No time"}
+{booking.bookingDate
+  ? new Date(
+      booking.bookingDate
+    ).toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+  : "No time"}
                       </span>
 
                       <small>
@@ -2180,25 +2048,6 @@ const rescheduleBooking = async () => {
                         }
                       </span>
 
-                      {/* PENDING */}
-
-
-{/* RESCHEDULE */}
-
-<button
-  type="button"
-  className="reschedule-button"
-  title="Reschedule Booking"
-  onClick={() => {
-    console.log("RESCHEDULE CLICKED");
-    console.log("Booking:", booking);
-
-    startReschedule(booking);
-  }}
->
-  <RefreshCw size={16} />
-  Reschedule
-</button>
 
 {/* PENDING ACTIONS */}
 
@@ -2235,75 +2084,20 @@ const rescheduleBooking = async () => {
 {/* CONFIRMED ACTIONS */}
 
 {booking.status === "confirmed" && (
-  <button
-    type="button"
-    onClick={() =>
-      status(
-        booking._id,
-        "completed"
-      )
-    }
-  >
-    Complete
-  </button>
-)}
-
-{/* {booking.status === "pending" && (
   <>
     <button
+      type="button"
       title="Reschedule"
-      onClick={() =>
-        startReschedule(booking)
-      }
+      onClick={() => startReschedule(booking)}
     >
       Reschedule
     </button>
 
     <button
-      title="Confirm"
+      type="button"
+      title="Complete"
       onClick={() =>
-        status(
-          booking._id,
-          "confirmed"
-        )
-      }
-    >
-      <CheckCircle2 />
-    </button>
-
-    <button
-      title="Cancel"
-      onClick={() =>
-        status(
-          booking._id,
-          "cancelled"
-        )
-      }
-    >
-      <XCircle />
-    </button>
-  </>
-)} */}
-
-{/* CONFIRMED */}
-
-{booking.status === "confirmed" && (
-  <>
-    <button
-      title="Reschedule"
-      onClick={() =>
-        startReschedule(booking)
-      }
-    >
-      Reschedule
-    </button>
-
-    <button
-      onClick={() =>
-        status(
-          booking._id,
-          "completed"
-        )
+        status(booking._id, "completed")
       }
     >
       Complete
@@ -2470,33 +2264,6 @@ const rescheduleBooking = async () => {
   );
 }
 
-// ===============================
-// STAT COMPONENT
-// ===============================
-
-function Stat({
-  icon,
-  label,
-  value,
-}) {
-  return (
-    <div className="stat">
-      <div className="stat-icon">
-        {icon}
-      </div>
-
-      <div>
-        <span>
-          {label}
-        </span>
-
-        <strong>
-          {value}
-        </strong>
-      </div>
-    </div>
-  );
-}
 
 // ===============================
 // APP
@@ -2586,18 +2353,19 @@ function App() {
     }
   />
 
-  {/* Existing booking routes */}
+  {/* Customer booking status */}
   <Route
     path="/book/:businessSlug/status"
     element={<CustomerBookings />}
   />
 
+  {/* Customer booking page */}
   <Route
     path="/book/:businessSlug"
     element={<BookingPages />}
   />
 
-  {/* Existing settings */}
+  {/* Business Settings */}
   <Route
     path="/settings"
     element={
@@ -2615,10 +2383,29 @@ function App() {
     }
   />
 
+  {/* Password Reset */}
   <Route
-  path="/reset-password/:token"
-  element={<ResetPassword />}
-/>
+    path="/reset-password/:token"
+    element={<ResetPassword />}
+  />
+
+  {/* Business Reports & Analytics */}
+  <Route
+    path="/reports"
+    element={
+      user ? (
+        <BusinessReports user={user} />
+      ) : (
+        <Navigate to="/business/login" />
+      )
+    }
+  />
+
+  {/* Unknown route */}
+  <Route
+    path="*"
+    element={<Navigate to="/" />}
+  />
 
 </Routes>
     </BrowserRouter>
