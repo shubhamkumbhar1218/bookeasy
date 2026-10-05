@@ -31,6 +31,11 @@ const bookingSchema = new mongoose.Schema(
       required: true,
     },
 
+    bookingSlot: {
+  type: String,
+  required: false,
+},
+
     status: {
       type: String,
       enum: ["pending", "confirmed", "cancelled", "completed"],
@@ -39,6 +44,21 @@ const bookingSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+  }
+);
+
+bookingSchema.index(
+  {
+    businessId: 1,
+    bookingSlot: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: {
+        $in: ["pending", "confirmed"],
+      },
+    },
   }
 );
 
