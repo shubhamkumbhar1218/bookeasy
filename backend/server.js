@@ -11,6 +11,7 @@ import serviceRoutes from "./routes/services.js";
 import bookingRoutes from "./routes/bookings.js";
 import notificationRoutes from "./routes/notifications.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
+import pushTokenRoutes from "./routes/pushToken.js";
 
 dotenv.config();
 
@@ -67,6 +68,10 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 app.use("/api/reviews", reviewRoutes);
+app.use(
+  "/api/push-tokens",
+  pushTokenRoutes
+);
 
 // ========================================
 // RATE LIMITING
