@@ -383,7 +383,14 @@ router.post("/public", async (req, res) => {
     // BUSINESS OWNER NOTIFICATION
     // --------------------------------------------------
 
- const businessNotification =
+// --------------------------------------------------
+// BUSINESS OWNER NOTIFICATION
+// --------------------------------------------------
+// --------------------------------------------------
+// BUSINESS OWNER NOTIFICATION
+// --------------------------------------------------
+
+const businessNotification =
   await Notification.create({
     businessId:
       booking.businessId,
@@ -394,19 +401,17 @@ router.post("/public", async (req, res) => {
     bookingId: booking._id,
   });
 
-  console.log("BOOKEASY: ABOUT TO SEND BUSINESS PUSH");
+console.log(
+  "BOOKEASY: ABOUT TO SEND BUSINESS PUSH"
+);
+
 await sendPushForNotification(
   businessNotification
 );
 
-return res.status(201).json({
-  message: "Booking created successfully",
-  booking,
-});
-
-    // --------------------------------------------------
-    // CUSTOMER NOTIFICATION
-    // --------------------------------------------------
+// --------------------------------------------------
+// CUSTOMER NOTIFICATION
+// --------------------------------------------------
 
 const customerNotification =
   await Notification.create({
@@ -420,22 +425,23 @@ const customerNotification =
     bookingId: booking._id,
   });
 
+console.log(
+  "BOOKEASY: ABOUT TO SEND CUSTOMER PUSH"
+);
+
 await sendPushForNotification(
   customerNotification
 );
-  } catch (error) {
-    console.log(
-      "Public booking error:",
-      error
-    );
 
-    // Duplicate bookingSlot
-    if (error.code === 11000) {
-      return res.status(409).json({
-        message:
-          "This time slot was just booked by another customer. Please select another time.",
-      });
-    }
+// --------------------------------------------------
+// RESPONSE
+// --------------------------------------------------
+return res.status(201).json({
+  message: "Booking created successfully",
+  booking,
+});
+  } catch (error) {
+    console.log("Public booking error:", error);
 
     return res.status(500).json({
       message: "Server error",
