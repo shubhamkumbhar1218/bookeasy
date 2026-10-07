@@ -57,7 +57,7 @@ const notificationSchema = new mongoose.Schema(
 // Automatically delete notifications 90 days after creation
 notificationSchema.index(
   { createdAt: 1 },
-  { expireAfterSeconds: 60 * 60 * 24 * 90 }
+  { expireAfterSeconds: 60 * 60 * 24 * 30 }
 );
 
 const Notification = mongoose.model(

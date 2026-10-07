@@ -4,10 +4,14 @@ import Service from "../models/Service.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
+import {
+  sendPushForNotification,
+} from "../utils/sendPushNotification.js";
 
 const router = express.Router();
 
-// Get available booking slots
+// Get available booki
+// ng slots
 // ======================================================
 // GET AVAILABLE BOOKING SLOTS
 // ======================================================
@@ -148,25 +152,6 @@ router.get("/availability", async (req, res) => {
       );
 
       const minute = minutes % 60;
-
-      /*
-       * IMPORTANT:
-       *
-       * The selected time is an India local time.
-       *
-       * Example:
-       * 2026-10-05 09:00 IST
-       *
-       * becomes:
-       * 2026-10-05 03:30 UTC
-       *
-       * Render runs in UTC, so we must NOT use:
-       *
-       * new Date("2026-10-05T09:00:00")
-       *
-       * because that can be interpreted using the
-       * server timezone.
-       */
 
       const localWallClockAsUTC = Date.UTC(
         Number(date.split("-")[0]),
@@ -398,36 +383,46 @@ router.post("/public", async (req, res) => {
     // BUSINESS OWNER NOTIFICATION
     // --------------------------------------------------
 
-    await Notification.create({
-      businessId:
-        booking.businessId,
-      type: "new_booking",
-      title: "New appointment",
-      message:
-        `${customerName.trim()} booked an appointment.`,
-      bookingId: booking._id,
-    });
+ const businessNotification =
+  await Notification.create({
+    businessId:
+      booking.businessId,
+    type: "new_booking",
+    title: "New appointment",
+    message:
+      `${customerName.trim()} booked an appointment.`,
+    bookingId: booking._id,
+  });
+
+  console.log("BOOKEASY: ABOUT TO SEND BUSINESS PUSH");
+await sendPushForNotification(
+  businessNotification
+);
+
+return res.status(201).json({
+  message: "Booking created successfully",
+  booking,
+});
 
     // --------------------------------------------------
     // CUSTOMER NOTIFICATION
     // --------------------------------------------------
 
-    await Notification.create({
-      businessId,
-      customerPhone:
-        customerPhone.trim(),
-      type: "new_booking",
-      title: "Booking received",
-      message:
-        "Your appointment has been booked successfully.",
-      bookingId: booking._id,
-    });
+const customerNotification =
+  await Notification.create({
+    businessId,
+    customerPhone:
+      customerPhone.trim(),
+    type: "new_booking",
+    title: "Booking received",
+    message:
+      "Your appointment has been booked successfully.",
+    bookingId: booking._id,
+  });
 
-    return res.status(201).json({
-      message:
-        "Booking created successfully",
-      booking,
-    });
+await sendPushForNotification(
+  customerNotification
+);
   } catch (error) {
     console.log(
       "Public booking error:",
@@ -508,12 +503,6 @@ router.get("/customer", async (req, res) => {
 });
 
 
-// ======================================================
-// BUSINESS STATISTICS
-// ======================================================
-// ======================================================
-// BUSINESS REPORTS / STATISTICS
-// ======================================================
 router.get(
   "/stats/:businessId",
   authMiddleware,
@@ -594,19 +583,6 @@ router.get(
           });
         }
       }
-
-      // --------------------------------------------------
-      // INDIA TIME -> UTC RANGE
-      //
-      // Example:
-      // October 2026
-      //
-      // Start:
-      // 2026-10-01 00:00 IST
-      //
-      // End:
-      // 2026-11-01 00:00 IST
-      // --------------------------------------------------
 
       const IST_OFFSET_MS =
         5.5 * 60 * 60 * 1000;
@@ -730,12 +706,6 @@ router.get(
           (booking) =>
             booking.status === "completed"
         ).length;
-
-      // --------------------------------------------------
-      // PERIOD REVENUE
-      //
-      // Only completed appointments generate revenue.
-      // --------------------------------------------------
 
       const periodRevenue =
         periodBookings
@@ -1253,15 +1223,20 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
     // CUSTOMER NOTIFICATION
     // --------------------------------------------------
 
-    await Notification.create({
-      customerPhone:
-        booking.customerPhone,
-      type: "booking_rescheduled",
-      title: "Booking rescheduled",
-      message:
-        `Your appointment has been rescheduled to ${formattedDate}.`,
-      bookingId: booking._id,
-    });
+const rescheduledNotification =
+  await Notification.create({
+    customerPhone:
+      booking.customerPhone,
+    type: "booking_rescheduled",
+    title: "Booking rescheduled",
+    message:
+      `Your appointment has been rescheduled to ${formattedDate}.`,
+    bookingId: booking._id,
+  });
+
+await sendPushForNotification(
+  rescheduledNotification
+);
 
     // --------------------------------------------------
     // RESPONSE
@@ -1304,23 +1279,34 @@ router.patch("/:id/confirm", authMiddleware, async (req, res) => {
       });
     }
 
-    if (booking.businessId.toString() !== req.user.id) {
-      return res.status(403).json({
-        message: "You are not allowed to modify this booking",
-      });
-    }
+if (
+  booking.businessId.toString() !==
+  req.user.id.toString()
+) {
+  return res.status(403).json({
+    message:
+      "You are not allowed to modify this booking",
+  });
+}
 
     booking.status = "confirmed";
 
     await booking.save();
 
-    await Notification.create({
-      customerPhone: booking.customerPhone,
-      type: "booking_confirmed",
-      title: "Booking confirmed",
-      message: "Your booking has been confirmed.",
-      bookingId: booking._id,
-    });
+const confirmedNotification =
+  await Notification.create({
+    customerPhone:
+      booking.customerPhone,
+    type: "booking_confirmed",
+    title: "Booking confirmed",
+    message:
+      "Your booking has been confirmed.",
+    bookingId: booking._id,
+  });
+
+await sendPushForNotification(
+  confirmedNotification
+);
 
     res.json({
       message: "Booking confirmed successfully",
@@ -1357,13 +1343,20 @@ router.patch("/:id/cancel", authMiddleware, async (req, res) => {
 
     await booking.save();
 
-await Notification.create({
-  customerPhone: booking.customerPhone,
-  type: "booking_cancelled",
-  title: "Booking cancelled",
-  message: "Your booking has been cancelled by the business.",
-  bookingId: booking._id,
-});
+const cancelledNotification =
+  await Notification.create({
+    customerPhone:
+      booking.customerPhone,
+    type: "booking_cancelled",
+    title: "Booking cancelled",
+    message:
+      "Your booking has been cancelled by the business.",
+    bookingId: booking._id,
+  });
+
+await sendPushForNotification(
+  cancelledNotification
+);
 
     res.json({
       message: "Booking cancelled successfully",
@@ -1390,7 +1383,7 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
         message: "Booking not found",
       });
     }
-    
+
 if (booking.businessId.toString() !== req.user.id.toString()) {
   return res.status(403).json({
     message: "You are not allowed to modify this booking",
@@ -1407,14 +1400,20 @@ if (booking.businessId.toString() !== req.user.id.toString()) {
 
     await booking.save();
 
-    await Notification.create({
-      customerPhone: booking.customerPhone,
-      type: "booking_completed",
-      title: "Booking completed",
-      message:
-        "Your booking has been completed. Thank you for choosing us!",
-      bookingId: booking._id,
-    });
+const completedNotification =
+  await Notification.create({
+    customerPhone:
+      booking.customerPhone,
+    type: "booking_completed",
+    title: "Booking completed",
+    message:
+      "Your booking has been completed. Thank you for choosing us!",
+    bookingId: booking._id,
+  });
+
+await sendPushForNotification(
+  completedNotification
+);
 
     res.json({
       message: "Booking completed successfully",
