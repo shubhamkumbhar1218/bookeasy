@@ -25,24 +25,29 @@ router.post(
         });
       }
 
-      await PushToken.findOneAndUpdate(
-        {
-          expoPushToken,
-        },
-        {
-          expoPushToken,
-          businessId: req.user.id,
-          customerPhone: "",
-          platform:
-            platform || "unknown",
-        },
-        {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
-        }
-      );
+      // Remove old token(s) for this business owner
+await PushToken.deleteMany({
+  businessId: req.user.id,
+});
 
+// Register the current token
+await PushToken.findOneAndUpdate(
+  {
+    expoPushToken,
+  },
+  {
+    expoPushToken,
+    businessId: req.user.id,
+    customerPhone: "",
+    platform:
+      platform || "unknown",
+  },
+  {
+    upsert: true,
+    new: true,
+    setDefaultsOnInsert: true,
+  }
+);
       res.json({
         message:
           "Business push token registered",
