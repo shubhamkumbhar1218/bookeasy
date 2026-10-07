@@ -415,7 +415,6 @@ await sendPushForNotification(
 
 const customerNotification =
   await Notification.create({
-    businessId,
     customerPhone:
       customerPhone.trim(),
     type: "new_booking",
