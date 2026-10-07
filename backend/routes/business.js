@@ -7,7 +7,7 @@
 // const router = express.Router();
 
 // // ======================================================
-// // SEARCH BUSINESSES + SERVICES - CUSTOMER
+// // SEARCH BUSINESSES + SERVICES + RATINGS
 // // ======================================================
 
 // router.get("/search", async (req, res) => {
@@ -67,7 +67,6 @@
 //         },
 //       ];
 
-//       // Add businesses that have matching services
 //       if (matchingServiceBusinessIds.length > 0) {
 //         query.$or.push({
 //           _id: {
@@ -103,20 +102,24 @@
 //       .sort({ businessName: 1 });
 
 //     // --------------------------------------------------
-//     // Add services + ratings to every business
+//     // Add services + service ratings
+//     // + business overall rating
 //     // --------------------------------------------------
 
 //     const businessesWithServices =
 //       await Promise.all(
 //         businesses.map(async (business) => {
+//           // ============================================
+//           // SERVICES
+//           // ============================================
+
 //           let serviceQuery = {
 //             businessId: business._id,
 //             isActive: true,
 //           };
 
-//           // If customer searched something,
-//           // show matching services when search matches
-//           // a service name.
+//           // If customer searched by service name,
+//           // show matching services for that business.
 //           if (
 //             searchText &&
 //             matchingServiceIds.length > 0
@@ -128,8 +131,6 @@
 //                   business._id.toString()
 //               );
 
-//             // If this business was found because of
-//             // its service, only show matching services.
 //             if (businessHasMatchingService) {
 //               serviceQuery._id = {
 //                 $in: matchingServiceIds,
@@ -145,9 +146,9 @@
 //             )
 //             .sort({ name: 1 });
 
-//           // ------------------------------------------------
-//           // Get ratings for all services
-//           // ------------------------------------------------
+//           // ============================================
+//           // SERVICE RATINGS
+//           // ============================================
 
 //           const serviceIds = services.map(
 //             (service) => service._id
@@ -166,9 +167,11 @@
 //                   {
 //                     $group: {
 //                       _id: "$serviceId",
+
 //                       averageRating: {
 //                         $avg: "$rating",
 //                       },
+
 //                       totalReviews: {
 //                         $sum: 1,
 //                       },
@@ -184,7 +187,9 @@
 //               averageRating: Number(
 //                 item.averageRating.toFixed(1)
 //               ),
-//               totalReviews: item.totalReviews,
+
+//               totalReviews:
+//                 item.totalReviews,
 //             };
 //           });
 
@@ -206,15 +211,71 @@
 //               };
 //             });
 
+//           // ============================================
+//           // BUSINESS OVERALL RATING
+//           // ============================================
+
+//           const businessRating =
+//             await Review.aggregate([
+//               {
+//                 $match: {
+//                   businessId:
+//                     business._id,
+//                 },
+//               },
+//               {
+//                 $group: {
+//                   _id: null,
+
+//                   averageRating: {
+//                     $avg: "$rating",
+//                   },
+
+//                   totalReviews: {
+//                     $sum: 1,
+//                   },
+//                 },
+//               },
+//             ]);
+
+//           let businessAverageRating = 0;
+//           let businessTotalReviews = 0;
+
+//           if (
+//             businessRating.length > 0
+//           ) {
+//             businessAverageRating =
+//               Number(
+//                 businessRating[0].averageRating.toFixed(
+//                   1
+//                 )
+//               );
+
+//             businessTotalReviews =
+//               businessRating[0].totalReviews;
+//           }
+
+//           // ============================================
+//           // FINAL BUSINESS OBJECT
+//           // ============================================
+
 //           return {
 //             ...business.toObject(),
-//             services: servicesWithRatings,
+
+//             services:
+//               servicesWithRatings,
+
+//             averageRating:
+//               businessAverageRating,
+
+//             totalReviews:
+//               businessTotalReviews,
 //           };
 //         })
 //       );
 
 //     // --------------------------------------------------
-//     // Remove businesses that have no active services
+//     // Remove businesses with no active services
 //     // --------------------------------------------------
 
 //     const businessesWithActiveServices =
@@ -251,8 +312,7 @@
 //   authMiddleware,
 //   async (req, res) => {
 //     try {
-//       const user = await User.findById(
-//         req.userId
+//       const user = await User.findById(req.user.id
 //       ).select("-password");
 
 //       if (!user) {
@@ -298,7 +358,7 @@
 //       }
 
 //       const user = await User.findById(
-//         req.userId
+//         req.user.id
 //       );
 
 //       if (!user) {
@@ -698,7 +758,8 @@ router.get(
   authMiddleware,
   async (req, res) => {
     try {
-      const user = await User.findById(req.user.id
+      const user = await User.findById(
+        req.user.id
       ).select("-password");
 
       if (!user) {
@@ -709,7 +770,10 @@ router.get(
 
       res.json(user);
     } catch (error) {
-      console.log(error);
+      console.log(
+        "Get business profile error:",
+        error
+      );
 
       res.status(500).json({
         message: "Server error",
@@ -736,12 +800,20 @@ router.patch(
         workingHours,
       } = req.body;
 
+      // --------------------------------------------------
+      // Validate required fields
+      // --------------------------------------------------
+
       if (!name || !businessName) {
         return res.status(400).json({
           message:
             "Name and business name are required",
         });
       }
+
+      // --------------------------------------------------
+      // Find business owner
+      // --------------------------------------------------
 
       const user = await User.findById(
         req.user.id
@@ -753,21 +825,106 @@ router.patch(
         });
       }
 
+      // --------------------------------------------------
+      // Update basic business information
+      // --------------------------------------------------
+
       user.name = name.trim();
+
       user.businessName =
         businessName.trim();
 
       user.businessType =
         businessType || "other";
 
-      user.phone = phone || "";
-      user.address = address || "";
+      user.phone =
+        phone?.trim() || "";
+
+      user.address =
+        address?.trim() || "";
+
+      // ==================================================
+      // WORKING HOURS
+      // ==================================================
+      // Mobile sends:
+      //
+      // Monday
+      // Tuesday
+      // Wednesday
+      //
+      // Backend booking logic uses:
+      //
+      // monday
+      // tuesday
+      // wednesday
+      //
+      // Therefore normalize everything to lowercase.
+      // ==================================================
 
       if (workingHours) {
-        user.workingHours = workingHours;
+        const dayNames = [
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+          "saturday",
+          "sunday",
+        ];
+
+        const normalizedWorkingHours = {};
+
+        for (const day of dayNames) {
+          const capitalizedDay =
+            day.charAt(0).toUpperCase() +
+            day.slice(1);
+
+          // Accept both:
+          // workingHours.monday
+          // workingHours.Monday
+
+          const dayData =
+            workingHours[day] ||
+            workingHours[capitalizedDay];
+
+          // If a day is missing, use default hours.
+          if (!dayData) {
+            normalizedWorkingHours[day] = {
+              open: "09:00",
+              close: "18:00",
+              closed: false,
+            };
+
+            continue;
+          }
+
+          normalizedWorkingHours[day] = {
+            open:
+              dayData.open?.trim() ||
+              "09:00",
+
+            close:
+              dayData.close?.trim() ||
+              "18:00",
+
+            closed:
+              dayData.closed === true,
+          };
+        }
+
+        user.workingHours =
+          normalizedWorkingHours;
       }
 
+      // --------------------------------------------------
+      // Save
+      // --------------------------------------------------
+
       await user.save();
+
+      // --------------------------------------------------
+      // Response
+      // --------------------------------------------------
 
       res.json({
         message:
@@ -777,20 +934,31 @@ router.patch(
           id: user._id,
           name: user.name,
           email: user.email,
+
           businessName:
             user.businessName,
+
           businessSlug:
             user.businessSlug,
+
           businessType:
             user.businessType,
-          phone: user.phone,
-          address: user.address,
+
+          phone:
+            user.phone,
+
+          address:
+            user.address,
+
           workingHours:
             user.workingHours,
         },
       });
     } catch (error) {
-      console.log(error);
+      console.log(
+        "Update business profile error:",
+        error
+      );
 
       res.status(500).json({
         message: "Server error",
@@ -819,7 +987,10 @@ router.get("/:slug", async (req, res) => {
 
     res.json(business);
   } catch (error) {
-    console.log(error);
+    console.log(
+      "Get public business error:",
+      error
+    );
 
     res.status(500).json({
       message: "Server error",
