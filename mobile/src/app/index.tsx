@@ -9,6 +9,7 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function HomeScreen() {
   return (
@@ -69,9 +70,9 @@ export default function HomeScreen() {
               style={styles.continueButton}
               activeOpacity={0.8}
               onPress={() => {
-                console.log("Find a Business clicked");
-                router.push("/customer/dashboard");
-              }}
+  console.log("Find a Business clicked");
+  router.push("/customer/dashboard");
+}}
             >
               <Text style={styles.continueText}>
                 Continue
@@ -102,10 +103,23 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.continueButton}
               activeOpacity={0.8}
-              onPress={() => {
-                console.log("Business Owner clicked");
-                router.push("/business/login");
-              }}
+              onPress={async () => {
+  console.log("Business Owner clicked");
+
+  const token = await AsyncStorage.getItem("bookeasy_token");
+  const userData = await AsyncStorage.getItem("bookeasy_user");
+
+  console.log("BOOKEASY TOKEN:", token);
+  console.log("BOOKEASY USER:", userData);
+
+  if (token && userData) {
+    console.log("Existing Business Owner session found");
+    router.replace("/business/dashboard");
+  } else {
+    console.log("No Business Owner session found");
+    router.push("/business/login");
+  }
+}}
             >
               <Text style={styles.continueText}>
                 Continue

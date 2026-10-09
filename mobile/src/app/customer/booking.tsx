@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import {
+  registerPushTokenWithBackend,
+} from "../../services/notifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import {
   ActivityIndicator,
   Alert,
   ScrollView,
@@ -9,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { router, useLocalSearchParams } from "expo-router";
 import API_URL from "../../api";
 
@@ -46,7 +52,10 @@ export default function CustomerBookingScreen() {
 
   const [error, setError] = useState("");
 
-  // Create dates for the next 7 days
+  // ======================================================
+  // NEXT 7 DATES
+  // ======================================================
+
   const getNextDates = () => {
     const dates: string[] = [];
 
@@ -56,14 +65,18 @@ export default function CustomerBookingScreen() {
       date.setDate(date.getDate() + i);
 
       const year = date.getFullYear();
+
       const month = String(
         date.getMonth() + 1
       ).padStart(2, "0");
+
       const day = String(
         date.getDate()
       ).padStart(2, "0");
 
-      dates.push(`${year}-${month}-${day}`);
+      dates.push(
+        `${year}-${month}-${day}`
+      );
     }
 
     return dates;
@@ -71,17 +84,30 @@ export default function CustomerBookingScreen() {
 
   const dates = getNextDates();
 
-  const formatDate = (dateString: string) => {
+  // ======================================================
+  // FORMAT DATE
+  // ======================================================
+
+  const formatDate = (
+    dateString: string
+  ) => {
     const date = new Date(
       `${dateString}T00:00:00`
     );
 
-    return date.toLocaleDateString("en-IN", {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-    });
+    return date.toLocaleDateString(
+      "en-IN",
+      {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+      }
+    );
   };
+
+  // ======================================================
+  // LOAD AVAILABILITY
+  // ======================================================
 
   const loadAvailability = async (
     date: string
@@ -93,6 +119,7 @@ export default function CustomerBookingScreen() {
       setError(
         "Business or service information is missing."
       );
+
       return;
     }
 
@@ -110,16 +137,20 @@ export default function CustomerBookingScreen() {
         `&serviceId=${encodeURIComponent(
           params.serviceId
         )}` +
-        `&date=${encodeURIComponent(date)}`;
+        `&date=${encodeURIComponent(
+          date
+        )}`;
 
       console.log(
         "Availability URL:",
         url
       );
 
-      const response = await fetch(url);
+      const response =
+        await fetch(url);
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -159,19 +190,35 @@ export default function CustomerBookingScreen() {
     }
   };
 
+  // ======================================================
+  // INITIAL DATE
+  // ======================================================
+
   useEffect(() => {
     if (dates.length > 0) {
-      setSelectedDate(dates[0]);
-      loadAvailability(dates[0]);
+      const firstDate = dates[0];
+
+      setSelectedDate(firstDate);
+
+      loadAvailability(firstDate);
     }
   }, []);
+
+  // ======================================================
+  // DATE SELECT
+  // ======================================================
 
   const handleDateSelect = (
     date: string
   ) => {
     setSelectedDate(date);
+
     loadAvailability(date);
   };
+
+  // ======================================================
+  // BOOK SERVICE
+  // ======================================================
 
   const handleBookService = async () => {
     if (!params.businessId) {
@@ -179,6 +226,7 @@ export default function CustomerBookingScreen() {
         "Error",
         "Business information is missing."
       );
+
       return;
     }
 
@@ -187,6 +235,7 @@ export default function CustomerBookingScreen() {
         "Error",
         "Service information is missing."
       );
+
       return;
     }
 
@@ -195,6 +244,7 @@ export default function CustomerBookingScreen() {
         "Name required",
         "Please enter your name."
       );
+
       return;
     }
 
@@ -203,14 +253,18 @@ export default function CustomerBookingScreen() {
         "Phone required",
         "Please enter your phone number."
       );
+
       return;
     }
 
-    if (customerPhone.trim().length < 10) {
+    if (
+      customerPhone.trim().length < 10
+    ) {
       Alert.alert(
         "Invalid phone",
         "Please enter a valid phone number."
       );
+
       return;
     }
 
@@ -219,48 +273,121 @@ export default function CustomerBookingScreen() {
         "Time required",
         "Please select an available time."
       );
+
       return;
     }
 
     try {
-      setBooking(true);
+  setBooking(true);
 
-      const response = await fetch(
-        `${API_URL}/bookings/public`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            businessId:
-              params.businessId,
-            serviceId:
-              params.serviceId,
-            customerName:
-              customerName.trim(),
-            customerPhone:
-              customerPhone.trim(),
-            bookingDate:
-              selectedSlot.value,
-          }),
-        }
-      );
+  // ==================================================
+  // REGISTER CUSTOMER PUSH TOKEN BEFORE BOOKING
+  // ==================================================
 
-      const data = await response.json();
+  await AsyncStorage.setItem(
+    "bookeasy_customer_phone",
+    customerPhone.trim()
+  );
+
+  console.log(
+    "BOOKEASY CUSTOMER PHONE SAVED:",
+    customerPhone.trim()
+  );
+
+  await registerPushTokenWithBackend();
+
+  // ==================================================
+  // CREATE BOOKING
+  // ==================================================
+
+  const response =
+    await fetch(
+      `${API_URL}/bookings/public`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              businessId:
+                params.businessId,
+
+              serviceId:
+                params.serviceId,
+
+              customerName:
+                customerName.trim(),
+
+              customerPhone:
+                customerPhone.trim(),
+
+              bookingDate:
+                selectedSlot.value,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
 
       console.log(
         "Booking response:",
         data
       );
 
+      // ==================================================
+      // SLOT ALREADY BOOKED
+      // ==================================================
+
       if (!response.ok) {
+        if (response.status === 409) {
+          await loadAvailability(
+            selectedDate
+          );
+
+          setSelectedSlot(null);
+
+          Alert.alert(
+            "Time Slot Unavailable",
+            data.message ||
+              "This time slot was just booked by another customer. Please select another time."
+          );
+
+          return;
+        }
+
         throw new Error(
           data.message ||
             "Unable to create booking."
         );
       }
+
+      // ==================================================
+      // SAVE CUSTOMER PHONE
+      //
+      // We still save the phone number.
+      // Push notification registration is intentionally
+      // disabled here while using Expo Go.
+      // ==================================================
+
+      await AsyncStorage.setItem(
+        "bookeasy_customer_phone",
+        customerPhone.trim()
+      );
+
+      console.log(
+        "BOOKEASY CUSTOMER PHONE SAVED:",
+        customerPhone.trim()
+      );
+
+      await registerPushTokenWithBackend();
+
+      // ==================================================
+      // SUCCESS
+      // ==================================================
 
       Alert.alert(
         "Booking Successful 🎉",
@@ -268,13 +395,16 @@ export default function CustomerBookingScreen() {
         [
           {
             text: "View My Bookings",
+
             onPress: () => {
               router.replace({
                 pathname:
                   "/customer/bookings",
+
                 params: {
                   phone:
                     customerPhone.trim(),
+
                   businessId:
                     params.businessId,
                 },
@@ -300,6 +430,10 @@ export default function CustomerBookingScreen() {
     }
   };
 
+  // ======================================================
+  // UI
+  // ======================================================
+
   return (
     <ScrollView
       style={styles.container}
@@ -307,7 +441,7 @@ export default function CustomerBookingScreen() {
         styles.content
       }
     >
-      {/* Header */}
+      {/* HEADER */}
 
       <View style={styles.header}>
         <TouchableOpacity
@@ -326,7 +460,7 @@ export default function CustomerBookingScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Service Information */}
+      {/* SERVICE INFORMATION */}
 
       <View style={styles.serviceCard}>
         <Text style={styles.businessName}>
@@ -358,7 +492,7 @@ export default function CustomerBookingScreen() {
         </View>
       </View>
 
-      {/* Date */}
+      {/* DATE */}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
@@ -369,7 +503,7 @@ export default function CustomerBookingScreen() {
           horizontal
           showsHorizontalScrollIndicator={
             false
-        }
+          }
           contentContainerStyle={
             styles.dateList
           }
@@ -379,6 +513,7 @@ export default function CustomerBookingScreen() {
               key={date}
               style={[
                 styles.dateButton,
+
                 selectedDate === date &&
                   styles.selectedDateButton,
               ]}
@@ -389,6 +524,7 @@ export default function CustomerBookingScreen() {
               <Text
                 style={[
                   styles.dateText,
+
                   selectedDate ===
                     date &&
                     styles.selectedDateText,
@@ -401,7 +537,7 @@ export default function CustomerBookingScreen() {
         </ScrollView>
       </View>
 
-      {/* Time */}
+      {/* TIME */}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
@@ -444,6 +580,7 @@ export default function CustomerBookingScreen() {
                 key={slot.value}
                 style={[
                   styles.slotButton,
+
                   selectedSlot?.value ===
                     slot.value &&
                     styles.selectedSlotButton,
@@ -457,6 +594,7 @@ export default function CustomerBookingScreen() {
                 <Text
                   style={[
                     styles.slotText,
+
                     selectedSlot?.value ===
                       slot.value &&
                       styles.selectedSlotText,
@@ -470,7 +608,7 @@ export default function CustomerBookingScreen() {
         )}
       </View>
 
-      {/* Error */}
+      {/* ERROR */}
 
       {error ? (
         <Text style={styles.errorText}>
@@ -478,7 +616,7 @@ export default function CustomerBookingScreen() {
         </Text>
       ) : null}
 
-      {/* Customer Details */}
+      {/* CUSTOMER DETAILS */}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
@@ -491,7 +629,9 @@ export default function CustomerBookingScreen() {
 
         <TextInput
           value={customerName}
-          onChangeText={setCustomerName}
+          onChangeText={
+            setCustomerName
+          }
           placeholder="Enter your name"
           placeholderTextColor="#9ca3af"
           style={styles.input}
@@ -503,7 +643,9 @@ export default function CustomerBookingScreen() {
 
         <TextInput
           value={customerPhone}
-          onChangeText={setCustomerPhone}
+          onChangeText={
+            setCustomerPhone
+          }
           placeholder="Enter phone number"
           placeholderTextColor="#9ca3af"
           keyboardType="phone-pad"
@@ -512,7 +654,7 @@ export default function CustomerBookingScreen() {
         />
       </View>
 
-      {/* Booking Summary */}
+      {/* BOOKING SUMMARY */}
 
       {selectedSlot ? (
         <View style={styles.summaryCard}>
@@ -567,11 +709,12 @@ export default function CustomerBookingScreen() {
         </View>
       ) : null}
 
-      {/* Book Button */}
+      {/* BOOK BUTTON */}
 
       <TouchableOpacity
         style={[
           styles.bookButton,
+
           booking &&
             styles.disabledButton,
         ]}
@@ -592,6 +735,8 @@ export default function CustomerBookingScreen() {
           </Text>
         )}
       </TouchableOpacity>
+
+      {/* MY BOOKINGS */}
 
       <TouchableOpacity
         style={styles.myBookingsButton}

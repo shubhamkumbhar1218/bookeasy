@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +22,7 @@ type Service = {
 };
 
 type Business = {
+  _id: string;
   businessName: string;
   businessSlug: string;
   businessType?: string;
@@ -37,13 +39,60 @@ type Business = {
   >;
 };
 
-export default function BusinessDetailsScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+type ServiceReview = {
+  _id?: string;
+  customerName: string;
+  rating: number;
+  review: string;
+  createdAt?: string;
+};
 
-  const [business, setBusiness] = useState<Business | null>(null);
-  const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+type ServiceReviewsResponse = {
+  reviews: ServiceReview[];
+  totalReviews: number;
+  averageRating: number;
+};
+
+export default function BusinessDetailsScreen() {
+  const { slug } =
+    useLocalSearchParams<{ slug: string }>();
+
+  const [business, setBusiness] =
+    useState<Business | null>(null);
+
+  const [services, setServices] =
+    useState<Service[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  // ======================================================
+  // REVIEW STATES
+  // ======================================================
+
+  const [selectedService, setSelectedService] =
+    useState<Service | null>(null);
+
+  const [serviceReviews, setServiceReviews] =
+    useState<ServiceReview[]>([]);
+
+  const [reviewsLoading, setReviewsLoading] =
+    useState(false);
+
+  const [reviewsModalVisible, setReviewsModalVisible] =
+    useState(false);
+
+  const [reviewsSummary, setReviewsSummary] = useState({
+    totalReviews: 0,
+    averageRating: 0,
+  });
+
+  // ======================================================
+  // LOAD BUSINESS + SERVICES + SERVICE RATINGS
+  // ======================================================
 
   const loadBusiness = async () => {
     try {
@@ -55,37 +104,134 @@ export default function BusinessDetailsScreen() {
         return;
       }
 
-      // Get business profile
+      // --------------------------------------------------
+      // GET BUSINESS
+      // --------------------------------------------------
+
       const businessResponse = await fetch(
         `${API_URL}/business/${slug}`
       );
 
-      const businessData = await businessResponse.json();
+      const businessData =
+        await businessResponse.json();
 
       if (!businessResponse.ok) {
         throw new Error(
-          businessData.message || "Unable to load business"
+          businessData.message ||
+            "Unable to load business"
         );
       }
 
       setBusiness(businessData);
 
-      // Get business services
       const businessId = businessData._id;
 
-      if (businessId) {
-        const servicesResponse = await fetch(
-          `${API_URL}/services/${businessId}`
+      if (!businessId) {
+        setServices([]);
+        return;
+      }
+
+      // --------------------------------------------------
+      // GET SERVICES
+      // --------------------------------------------------
+
+      const servicesResponse = await fetch(
+        `${API_URL}/services/${businessId}`
+      );
+
+      const servicesData =
+        await servicesResponse.json();
+
+      if (!servicesResponse.ok) {
+        throw new Error(
+          servicesData.message ||
+            "Unable to load services"
+        );
+      }
+
+      if (!Array.isArray(servicesData)) {
+        setServices([]);
+        return;
+      }
+
+      // --------------------------------------------------
+      // GET RATING FOR EACH SERVICE
+      //
+      // Example:
+      //
+      // Chest  -> /reviews/service/CHEST_ID
+      // Cardio -> /reviews/service/CARDIO_ID
+      //
+      // Each service gets its OWN rating.
+      // --------------------------------------------------
+
+      const servicesWithRatings =
+        await Promise.all(
+          servicesData.map(
+            async (service: any) => {
+              try {
+                const reviewResponse =
+                  await fetch(
+                    `${API_URL}/reviews/service/${service._id}`
+                  );
+
+                if (!reviewResponse.ok) {
+                  return {
+                    ...service,
+                    averageRating: 0,
+                    totalReviews: 0,
+                  };
+                }
+
+                const reviewData: ServiceReviewsResponse =
+                  await reviewResponse.json();
+
+                return {
+                  ...service,
+
+                  averageRating:
+                    Number(
+                      reviewData.averageRating
+                    ) || 0,
+
+                  totalReviews:
+                    Number(
+                      reviewData.totalReviews
+                    ) || 0,
+                };
+              } catch (error) {
+                console.log(
+                  `Rating error for ${service.name}:`,
+                  error
+                );
+
+                return {
+                  ...service,
+                  averageRating: 0,
+                  totalReviews: 0,
+                };
+              }
+            }
+          )
         );
 
-        const servicesData = await servicesResponse.json();
+      console.log(
+        "SERVICE RATINGS:",
+        JSON.stringify(
+          servicesWithRatings,
+          null,
+          2
+        )
+      );
 
-        if (servicesResponse.ok) {
-          setServices(servicesData);
-        }
-      }
+      setServices(
+        servicesWithRatings
+      );
     } catch (error) {
-      console.log("Business details error:", error);
+      console.log(
+        "Business details error:",
+        error
+      );
 
       setError(
         error instanceof Error
@@ -101,31 +247,115 @@ export default function BusinessDetailsScreen() {
     loadBusiness();
   }, [slug]);
 
-  const openBooking = (service: Service) => {
+  // ======================================================
+  // LOAD REVIEWS FOR EXACT SERVICE
+  // ======================================================
+
+  const loadServiceReviews = async (
+    service: Service
+  ) => {
+    try {
+      setReviewsLoading(true);
+
+      setSelectedService(service);
+
+      setReviewsModalVisible(true);
+
+      setServiceReviews([]);
+
+      setReviewsSummary({
+        totalReviews: 0,
+        averageRating: 0,
+      });
+
+      const response = await fetch(
+        `${API_URL}/reviews/service/${service._id}`
+      );
+
+      const data: ServiceReviewsResponse =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Unable to load reviews"
+        );
+      }
+
+      setServiceReviews(
+        data.reviews || []
+      );
+
+      setReviewsSummary({
+        totalReviews:
+          Number(data.totalReviews) || 0,
+
+        averageRating:
+          Number(data.averageRating) || 0,
+      });
+    } catch (error) {
+      console.log(
+        "Service reviews error:",
+        error
+      );
+
+      setServiceReviews([]);
+
+      setReviewsSummary({
+        totalReviews: 0,
+        averageRating: 0,
+      });
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  // ======================================================
+  // OPEN BOOKING
+  // ======================================================
+
+  const openBooking = (
+    service: Service
+  ) => {
     if (!business) return;
 
     router.push({
       pathname: "/customer/booking",
+
       params: {
-        businessId: businessDataId,
-        businessName: business.businessName,
-        businessSlug: business.businessSlug,
-        serviceId: service._id,
-        serviceName: service.name,
-        servicePrice: String(service.price),
-        serviceDuration: String(service.duration),
+        businessId: business._id,
+
+        businessName:
+          business.businessName,
+
+        businessSlug:
+          business.businessSlug,
+
+        serviceId:
+          service._id,
+
+        serviceName:
+          service.name,
+
+        servicePrice:
+          String(service.price),
+
+        serviceDuration:
+          String(service.duration),
       },
     });
   };
 
-  const businessDataId = business
-    ? (business as Business & { _id?: string })._id || ""
-    : "";
+  // ======================================================
+  // LOADING
+  // ======================================================
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator
+          size="large"
+        />
 
         <Text style={styles.loadingText}>
           Loading business...
@@ -134,17 +364,24 @@ export default function BusinessDetailsScreen() {
     );
   }
 
+  // ======================================================
+  // ERROR
+  // ======================================================
+
   if (error || !business) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorIcon}>⚠️</Text>
+        <Text style={styles.errorIcon}>
+          ⚠️
+        </Text>
 
         <Text style={styles.errorTitle}>
           Unable to load business
         </Text>
 
         <Text style={styles.errorText}>
-          {error || "Business not found"}
+          {error ||
+            "Business not found"}
         </Text>
 
         <TouchableOpacity
@@ -159,135 +396,503 @@ export default function BusinessDetailsScreen() {
     );
   }
 
+  // ======================================================
+  // MAIN SCREEN
+  // ======================================================
+
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backText}>‹</Text>
-        </TouchableOpacity>
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={
+          styles.content
+        }
+        showsVerticalScrollIndicator={
+          false
+        }
+      >
+        {/* HEADER */}
 
-        <Text style={styles.headerTitle}>
-          Business Details
-        </Text>
-
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* Business information */}
-      <View style={styles.businessCard}>
-        <View style={styles.businessIcon}>
-          <Text style={styles.businessIconText}>
-            {business.businessName
-              ?.charAt(0)
-              .toUpperCase()}
-          </Text>
-        </View>
-
-        <Text style={styles.businessName}>
-          {business.businessName}
-        </Text>
-
-        <Text style={styles.businessType}>
-          {business.businessType || "Local Business"}
-        </Text>
-
-        {business.address ? (
-          <Text style={styles.address}>
-            📍 {business.address}
-          </Text>
-        ) : null}
-
-        {business.phone ? (
-          <Text style={styles.phone}>
-            📞 {business.phone}
-          </Text>
-        ) : null}
-      </View>
-
-      {/* Services */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
-          Services
-        </Text>
-
-        <Text style={styles.serviceCount}>
-          {services.length}
-        </Text>
-      </View>
-
-      {services.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyTitle}>
-            No services available
-          </Text>
-
-          <Text style={styles.emptyText}>
-            This business hasn't added any services yet.
-          </Text>
-        </View>
-      ) : (
-        services.map((service) => (
-          <View
-            key={service._id}
-            style={styles.serviceCard}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() =>
+              router.back()
+            }
           >
-            <View style={styles.serviceInfo}>
-              <Text style={styles.serviceName}>
-                {service.name}
-              </Text>
+            <Text style={styles.backText}>
+              ‹
+            </Text>
+          </TouchableOpacity>
 
-              {service.description ? (
-                <Text
-                  style={styles.description}
-                  numberOfLines={2}
+          <Text style={styles.headerTitle}>
+            Business Details
+          </Text>
+
+          <View
+            style={{ width: 40 }}
+          />
+        </View>
+
+        {/* BUSINESS INFORMATION */}
+
+        <View
+          style={styles.businessCard}
+        >
+          <View
+            style={styles.businessIcon}
+          >
+            <Text
+              style={
+                styles.businessIconText
+              }
+            >
+              {business.businessName
+                ?.charAt(0)
+                .toUpperCase()}
+            </Text>
+          </View>
+
+          <Text
+            style={styles.businessName}
+          >
+            {business.businessName}
+          </Text>
+
+          <Text
+            style={styles.businessType}
+          >
+            {business.businessType ||
+              "Local Business"}
+          </Text>
+
+          {business.address ? (
+            <Text
+              style={styles.address}
+            >
+              📍 {business.address}
+            </Text>
+          ) : null}
+
+          {business.phone ? (
+            <Text
+              style={styles.phone}
+            >
+              📞 {business.phone}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* SERVICES HEADER */}
+
+        <View
+          style={styles.sectionHeader}
+        >
+          <Text
+            style={styles.sectionTitle}
+          >
+            Services
+          </Text>
+
+          <Text
+            style={styles.serviceCount}
+          >
+            {services.length}
+          </Text>
+        </View>
+
+        {/* SERVICES */}
+
+        {services.length === 0 ? (
+          <View
+            style={styles.emptyBox}
+          >
+            <Text
+              style={styles.emptyTitle}
+            >
+              No services available
+            </Text>
+
+            <Text
+              style={styles.emptyText}
+            >
+              This business hasn't added
+              any services yet.
+            </Text>
+          </View>
+        ) : (
+          services.map(
+            (service) => (
+              <View
+                key={service._id}
+                style={
+                  styles.serviceCard
+                }
+              >
+                <View
+                  style={
+                    styles.serviceInfo
+                  }
                 >
-                  {service.description}
-                </Text>
-              ) : null}
+                  {/* SERVICE NAME */}
 
-              <View style={styles.serviceMeta}>
-                <Text style={styles.price}>
-                  ₹{service.price}
+                  <Text
+                    style={
+                      styles.serviceName
+                    }
+                  >
+                    {service.name}
+                  </Text>
+
+                  {/* DESCRIPTION */}
+
+                  {service.description ? (
+                    <Text
+                      style={
+                        styles.description
+                      }
+                      numberOfLines={2}
+                    >
+                      {service.description}
+                    </Text>
+                  ) : null}
+
+                  {/* PRICE + DURATION */}
+
+                  <View
+                    style={
+                      styles.serviceMeta
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.price
+                      }
+                    >
+                      ₹{service.price}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.duration
+                      }
+                    >
+                      • {service.duration} min
+                    </Text>
+                  </View>
+
+                  {/* SERVICE-SPECIFIC RATING */}
+
+                  {Number(
+                    service.totalReviews
+                  ) > 0 ? (
+                    <TouchableOpacity
+                      onPress={() =>
+                        loadServiceReviews(
+                          service
+                        )
+                      }
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={
+                          styles.rating
+                        }
+                      >
+                        ⭐{" "}
+                        {Number(
+                          service.averageRating ||
+                            0
+                        ).toFixed(1)}{" "}
+                        (
+                        {
+                          service.totalReviews
+                        }
+                        ) • View Reviews
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text
+                      style={
+                        styles.noRating
+                      }
+                    >
+                      No reviews yet
+                    </Text>
+                  )}
+                </View>
+
+                {/* BOOK BUTTON */}
+
+                <TouchableOpacity
+                  style={
+                    styles.bookButton
+                  }
+                  onPress={() =>
+                    openBooking(service)
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={
+                      styles.bookButtonText
+                    }
+                  >
+                    Book Now
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )
+          )
+        )}
+      </ScrollView>
+
+      {/* REVIEWS MODAL */}
+
+      <Modal
+        visible={
+          reviewsModalVisible
+        }
+        animationType="slide"
+        transparent
+        onRequestClose={() =>
+          setReviewsModalVisible(
+            false
+          )
+        }
+      >
+        <View
+          style={
+            styles.modalOverlay
+          }
+        >
+          <View
+            style={
+              styles.modalContainer
+            }
+          >
+            {/* MODAL HEADER */}
+
+            <View
+              style={
+                styles.modalHeader
+              }
+            >
+              <View
+                style={
+                  styles.modalHeaderInfo
+                }
+              >
+                <Text
+                  style={
+                    styles.modalTitle
+                  }
+                  numberOfLines={1}
+                >
+                  {selectedService?.name ||
+                    "Reviews"}
                 </Text>
 
-                <Text style={styles.duration}>
-                  • {service.duration} min
+                <Text
+                  style={
+                    styles.modalSummary
+                  }
+                >
+                  ⭐{" "}
+                  {reviewsSummary.averageRating.toFixed(
+                    1
+                  )}{" "}
+                  •{" "}
+                  {
+                    reviewsSummary.totalReviews
+                  }{" "}
+                  reviews
                 </Text>
               </View>
 
-              {service.totalReviews &&
-              service.totalReviews > 0 ? (
-                <Text style={styles.rating}>
-                  ⭐{" "}
-                  {service.averageRating?.toFixed(1) ||
-                    "0.0"}{" "}
-                  ({service.totalReviews})
+              <TouchableOpacity
+                style={
+                  styles.closeButton
+                }
+                onPress={() =>
+                  setReviewsModalVisible(
+                    false
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.closeButtonText
+                  }
+                >
+                  ✕
                 </Text>
-              ) : null}
+              </TouchableOpacity>
             </View>
 
+            {/* REVIEWS */}
+
+            {reviewsLoading ? (
+              <View
+                style={
+                  styles.reviewsLoading
+                }
+              >
+                <ActivityIndicator
+                  size="large"
+                />
+
+                <Text
+                  style={
+                    styles.reviewsLoadingText
+                  }
+                >
+                  Loading reviews...
+                </Text>
+              </View>
+            ) : serviceReviews.length ===
+              0 ? (
+              <View
+                style={
+                  styles.noReviewsBox
+                }
+              >
+                <Text
+                  style={
+                    styles.noReviewsIcon
+                  }
+                >
+                  ⭐
+                </Text>
+
+                <Text
+                  style={
+                    styles.noReviewsTitle
+                  }
+                >
+                  No reviews yet
+                </Text>
+
+                <Text
+                  style={
+                    styles.noReviewsText
+                  }
+                >
+                  This service doesn't
+                  have any reviews yet.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={
+                  styles.reviewsList
+                }
+                showsVerticalScrollIndicator={
+                  false
+                }
+              >
+                {serviceReviews.map(
+                  (
+                    review,
+                    index
+                  ) => (
+                    <View
+                      key={
+                        review._id ||
+                        `${review.customerName}-${index}`
+                      }
+                      style={
+                        styles.reviewCard
+                      }
+                    >
+                      <View
+                        style={
+                          styles.reviewTop
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.customerName
+                          }
+                        >
+                          {
+                            review.customerName
+                          }
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.reviewRating
+                          }
+                        >
+                          ⭐{" "}
+                          {
+                            review.rating
+                          }
+                          /5
+                        </Text>
+                      </View>
+
+                      {review.review ? (
+                        <Text
+                          style={
+                            styles.reviewText
+                          }
+                        >
+                          {
+                            review.review
+                          }
+                        </Text>
+                      ) : null}
+
+                      {review.createdAt ? (
+                        <Text
+                          style={
+                            styles.reviewDate
+                          }
+                        >
+                          {new Date(
+                            review.createdAt
+                          ).toLocaleDateString()}
+                        </Text>
+                      ) : null}
+                    </View>
+                  )
+                )}
+              </ScrollView>
+            )}
+
+            {/* CLOSE */}
+
             <TouchableOpacity
-              style={styles.bookButton}
-              onPress={() => openBooking(service)}
+              style={
+                styles.doneButton
+              }
+              onPress={() =>
+                setReviewsModalVisible(
+                  false
+                )
+              }
+              activeOpacity={0.8}
             >
-              <Text style={styles.bookButtonText}>
-                Book Now
+              <Text
+                style={
+                  styles.doneButtonText
+                }
+              >
+                Close
               </Text>
             </TouchableOpacity>
           </View>
-        ))
-      )}
-    </ScrollView>
+        </View>
+      </Modal>
+    </>
   );
 }
+
+// ==========================================================
+// STYLES
+// ==========================================================
 
 const styles = StyleSheet.create({
   container: {
@@ -501,6 +1106,12 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
 
+  noRating: {
+    fontSize: 12,
+    color: "#9ca3af",
+    marginTop: 7,
+  },
+
   bookButton: {
     backgroundColor: "#111827",
     paddingHorizontal: 13,
@@ -532,5 +1143,157 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     textAlign: "center",
     marginTop: 6,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor:
+      "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+
+  modalContainer: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    maxHeight: "85%",
+    paddingTop: 20,
+    paddingHorizontal: 18,
+    paddingBottom: 20,
+  },
+
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+
+  modalHeaderInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  modalSummary: {
+    fontSize: 13,
+    color: "#6b7280",
+    marginTop: 5,
+  },
+
+  closeButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  closeButtonText: {
+    fontSize: 17,
+    color: "#374151",
+    fontWeight: "700",
+  },
+
+  reviewsLoading: {
+    paddingVertical: 50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  reviewsLoadingText: {
+    marginTop: 10,
+    color: "#6b7280",
+  },
+
+  reviewsList: {
+    marginTop: 12,
+  },
+
+  reviewCard: {
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+
+  reviewTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  customerName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+    flex: 1,
+  },
+
+  reviewRating: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+  },
+
+  reviewText: {
+    fontSize: 14,
+    color: "#4b5563",
+    lineHeight: 20,
+    marginTop: 8,
+  },
+
+  reviewDate: {
+    fontSize: 11,
+    color: "#9ca3af",
+    marginTop: 8,
+  },
+
+  noReviewsBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 55,
+  },
+
+  noReviewsIcon: {
+    fontSize: 35,
+    marginBottom: 10,
+  },
+
+  noReviewsTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#111827",
+  },
+
+  noReviewsText: {
+    fontSize: 13,
+    color: "#6b7280",
+    textAlign: "center",
+    marginTop: 6,
+  },
+
+  doneButton: {
+    backgroundColor: "#111827",
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+    marginTop: 12,
+  },
+
+  doneButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

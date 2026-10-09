@@ -12,6 +12,7 @@
     "@vitejs/plugin-react": "latest",
     "cors": "^2.8.6",
     "lucide-react": "latest",
+    "qrcode.react": "^4.2.0",
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "^7.18.4",

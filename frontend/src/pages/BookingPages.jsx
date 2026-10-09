@@ -341,11 +341,13 @@ function BookingPages() {
       setSelectedDate("");
       setSelectedService(null);
       setSlots([]);
-    } catch (error) {
-      console.log(error);
+} catch (error) {
+  console.log("Booking error:", error);
 
-      setError(error.message);
-    }
+  setError(
+    error.message || "Booking failed"
+  );
+}
   };
 
   // ==========================================

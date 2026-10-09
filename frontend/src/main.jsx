@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -502,6 +503,7 @@ function SettingsPage({ user, onUserUpdate, onBack }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [qrCopied, setQrCopied] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -607,6 +609,44 @@ function SettingsPage({ user, onUserUpdate, onBack }) {
       console.log(error);
     }
   };
+
+  const downloadQRCode = () => {
+  const canvas = document.getElementById("bookeasy-qr-code");
+
+  if (!canvas) {
+    return;
+  }
+
+  const pngUrl = canvas
+    .toDataURL("image/png")
+    .replace("image/png", "image/octet-stream");
+
+  const downloadLink = document.createElement("a");
+
+  downloadLink.href = pngUrl;
+  downloadLink.download = `${user.businessSlug}-bookeasy-qr.png`;
+
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+};
+
+const copyQRBookingLink = async () => {
+  const bookingLink =
+    `${window.location.origin}/book/${user.businessSlug}`;
+
+  try {
+    await navigator.clipboard.writeText(bookingLink);
+
+    setQrCopied(true);
+
+    setTimeout(() => {
+      setQrCopied(false);
+    }, 2000);
+  } catch (error) {
+    console.log(error);
+  }
+};
 
   const days = [
     ["monday", "Monday"],
@@ -846,7 +886,134 @@ function SettingsPage({ user, onUserUpdate, onBack }) {
 
           {/* BOOKING LINK */}
 
-          <section className="settings-card">
+          {/* BOOKING LINK + QR CODE */}
+
+<section className="settings-card">
+  <div className="settings-card-header">
+    <div>
+      <p className="step-number">
+        BOOKING LINK
+      </p>
+
+      <h3>
+        Share with customers
+      </h3>
+
+      <p className="muted">
+        Customers can use this link or scan the QR
+        code to book an appointment.
+      </p>
+    </div>
+
+    <Copy size={22} />
+  </div>
+
+  {/* BOOKING LINK */}
+
+  <div className="booking-link-box">
+    <input
+      type="text"
+      value={`${window.location.origin}/book/${user.businessSlug}`}
+      readOnly
+    />
+
+    <button
+      className="secondary"
+      type="button"
+      onClick={copyBookingLink}
+    >
+      {copied ? (
+        <>
+          <Check size={17} />
+          Copied
+        </>
+      ) : (
+        <>
+          <Copy size={17} />
+          Copy Link
+        </>
+      )}
+    </button>
+  </div>
+
+  {/* QR CODE */}
+
+  <div className="qr-section">
+
+    <div className="qr-content">
+
+      <div className="qr-info">
+        <p className="step-number">
+          QR CODE
+        </p>
+
+        <h3>
+          Let customers scan and book
+        </h3>
+
+        <p className="muted">
+          Print this QR code and place it at your
+          reception, counter, door, posters, or
+          business cards.
+        </p>
+
+        <div className="qr-actions">
+
+          <button
+            className="primary"
+            type="button"
+            onClick={downloadQRCode}
+          >
+            Download QR
+          </button>
+
+          <button
+            className="secondary"
+            type="button"
+            onClick={copyQRBookingLink}
+          >
+            {qrCopied ? (
+              <>
+                <Check size={17} />
+                Copied
+              </>
+            ) : (
+              <>
+                <Copy size={17} />
+                Copy Booking Link
+              </>
+            )}
+          </button>
+
+        </div>
+      </div>
+
+      <div className="qr-preview">
+        <QRCodeCanvas
+          id="bookeasy-qr-code"
+          value={`${window.location.origin}/book/${user.businessSlug}`}
+          size={220}
+          bgColor="#ffffff"
+          fgColor="#000000"
+          level="H"
+          includeMargin={true}
+        />
+
+        <strong>
+          {form.businessName || user.businessName}
+        </strong>
+
+        <span>
+          Scan to book an appointment
+        </span>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+          {/* <section className="settings-card">
             <div className="settings-card-header">
               <div>
                 <p className="step-number">BOOKING LINK</p>
@@ -884,7 +1051,7 @@ function SettingsPage({ user, onUserUpdate, onBack }) {
                 )}
               </button>
             </div>
-          </section>
+          </section> */}
 
           {/* SAVE */}
 

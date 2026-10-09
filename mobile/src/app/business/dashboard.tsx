@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BackHandler } from "react-native";
 import {
   ActivityIndicator,
   Alert,
@@ -23,27 +24,8 @@ type User = {
   businessType: string;
 };
 
-type Stats = {
-  totalBookings: number;
-  pendingBookings: number;
-  confirmedBookings: number;
-  completedBookings: number;
-  cancelledBookings: number;
-  todayEarnings: number;
-};
-
 export default function BusinessDashboard() {
   const [user, setUser] = useState<User | null>(null);
-
-  const [stats, setStats] = useState<Stats>({
-    totalBookings: 0,
-    pendingBookings: 0,
-    confirmedBookings: 0,
-    completedBookings: 0,
-    cancelledBookings: 0,
-    todayEarnings: 0,
-  });
-
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -59,36 +41,6 @@ export default function BusinessDashboard() {
 
       const parsedUser = JSON.parse(userData);
       setUser(parsedUser);
-
-      const response = await fetch(
-        `${API_URL}/bookings/stats/${parsedUser.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setStats({
-          totalBookings: data.totalBookings || 0,
-          pendingBookings: data.pendingBookings || 0,
-          confirmedBookings: data.confirmedBookings || 0,
-          completedBookings: data.completedBookings || 0,
-          cancelledBookings: data.cancelledBookings || 0,
-          todayEarnings: data.todayEarnings || 0,
-        });
-      } else if (response.status === 401) {
-        await AsyncStorage.multiRemove([
-          "bookeasy_token",
-          "bookeasy_user",
-          "bookeasy_role",
-        ]);
-
-        router.replace("/business/login");
-      }
     } catch (error) {
       console.log("Dashboard error:", error);
     } finally {
@@ -100,6 +52,20 @@ export default function BusinessDashboard() {
   useEffect(() => {
     loadDashboard();
   }, []);
+
+  useEffect(() => {
+  const backAction = () => {
+    router.replace("/");
+    return true;
+  };
+
+  const backHandler = BackHandler.addEventListener(
+    "hardwareBackPress",
+    backAction
+  );
+
+  return () => backHandler.remove();
+}, []);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -155,7 +121,9 @@ export default function BusinessDashboard() {
           />
         }
       >
-        {/* Header */}
+        {/* ========================= */}
+        {/* HEADER */}
+        {/* ========================= */}
 
         <View style={styles.header}>
           <View style={styles.headerText}>
@@ -178,87 +146,46 @@ export default function BusinessDashboard() {
               router.push("/business/notifications")
             }
           >
-            <Text style={styles.notificationIcon}>🔔</Text>
+            <Text style={styles.notificationIcon}>
+              🔔
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Stats */}
+        {/* ========================= */}
+        {/* WELCOME CARD */}
+        {/* ========================= */}
 
-        <Text style={styles.sectionTitle}>
-          Booking Overview
-        </Text>
-
-        <View style={styles.statsGrid}>
-  <View style={styles.statCard}>
-    <Text style={styles.statIcon}>💰</Text>
-
-    <Text style={styles.statNumber}>
-      ₹{stats.todayEarnings}
-    </Text>
-
-    <Text style={styles.statLabel}>
-      Revenue
-    </Text>
-  </View>
-
-  <View style={styles.statCard}>
-    <Text style={styles.statIcon}>📅</Text>
-
-    <Text style={styles.statNumber}>
-      {stats.totalBookings}
-    </Text>
-
-    <Text style={styles.statLabel}>
-      Total Bookings
-    </Text>
-  </View>
-
-  {/* existing cards... */}
-
-          <View style={styles.statCard}>
-            <Text style={styles.statIcon}>⏳</Text>
-
-            <Text style={styles.statNumber}>
-              {stats.pendingBookings}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              Pending
+        <View style={styles.welcomeCard}>
+          <View style={styles.welcomeIconBox}>
+            <Text style={styles.welcomeIcon}>
+              📅
             </Text>
           </View>
 
-          <View style={styles.statCard}>
-            <Text style={styles.statIcon}>✅</Text>
-
-            <Text style={styles.statNumber}>
-              {stats.confirmedBookings}
+          <View style={styles.welcomeTextContainer}>
+            <Text style={styles.welcomeTitle}>
+              Manage your business
             </Text>
 
-            <Text style={styles.statLabel}>
-              Confirmed
-            </Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Text style={styles.statIcon}>✔️</Text>
-
-            <Text style={styles.statNumber}>
-              {stats.completedBookings}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              Completed
+            <Text style={styles.welcomeDescription}>
+              Manage bookings, services, notifications and
+              business settings from one place.
             </Text>
           </View>
         </View>
 
-        {/* Quick Actions */}
+        {/* ========================= */}
+        {/* QUICK ACTIONS */}
+        {/* ========================= */}
 
         <Text style={styles.sectionTitle}>
           Quick Actions
         </Text>
 
         <View style={styles.actionGrid}>
+          {/* Bookings */}
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() =>
@@ -266,7 +193,9 @@ export default function BusinessDashboard() {
             }
           >
             <View style={styles.actionIconBox}>
-              <Text style={styles.actionIcon}>📅</Text>
+              <Text style={styles.actionIcon}>
+                📅
+              </Text>
             </View>
 
             <Text style={styles.actionTitle}>
@@ -278,6 +207,8 @@ export default function BusinessDashboard() {
             </Text>
           </TouchableOpacity>
 
+          {/* Services */}
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() =>
@@ -285,7 +216,9 @@ export default function BusinessDashboard() {
             }
           >
             <View style={styles.actionIconBox}>
-              <Text style={styles.actionIcon}>🛠️</Text>
+              <Text style={styles.actionIcon}>
+                🛠️
+              </Text>
             </View>
 
             <Text style={styles.actionTitle}>
@@ -297,6 +230,31 @@ export default function BusinessDashboard() {
             </Text>
           </TouchableOpacity>
 
+          {/* Reports */}
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() =>
+              router.push("/business/reports")
+            }
+          >
+            <View style={styles.actionIconBox}>
+              <Text style={styles.actionIcon}>
+                📊
+              </Text>
+            </View>
+
+            <Text style={styles.actionTitle}>
+              Reports
+            </Text>
+
+            <Text style={styles.actionDescription}>
+              View business analytics
+            </Text>
+          </TouchableOpacity>
+
+          {/* Notifications */}
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() =>
@@ -304,7 +262,9 @@ export default function BusinessDashboard() {
             }
           >
             <View style={styles.actionIconBox}>
-              <Text style={styles.actionIcon}>🔔</Text>
+              <Text style={styles.actionIcon}>
+                🔔
+              </Text>
             </View>
 
             <Text style={styles.actionTitle}>
@@ -316,6 +276,8 @@ export default function BusinessDashboard() {
             </Text>
           </TouchableOpacity>
 
+          {/* Settings */}
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() =>
@@ -323,7 +285,9 @@ export default function BusinessDashboard() {
             }
           >
             <View style={styles.actionIconBox}>
-              <Text style={styles.actionIcon}>⚙️</Text>
+              <Text style={styles.actionIcon}>
+                ⚙️
+              </Text>
             </View>
 
             <Text style={styles.actionTitle}>
@@ -336,25 +300,41 @@ export default function BusinessDashboard() {
           </TouchableOpacity>
         </View>
 
-        {/* Cancelled */}
+        {/* ========================= */}
+        {/* REPORTS SHORTCUT */}
+        {/* ========================= */}
 
-        <View style={styles.cancelledCard}>
-          <View>
-            <Text style={styles.cancelledTitle}>
-              Cancelled Bookings
-            </Text>
-
-            <Text style={styles.cancelledDescription}>
-              Total cancelled appointments
+        <TouchableOpacity
+          style={styles.reportsBanner}
+          onPress={() =>
+            router.push("/business/reports")
+          }
+        >
+          <View style={styles.reportsBannerIcon}>
+            <Text style={styles.reportsBannerEmoji}>
+              📈
             </Text>
           </View>
 
-          <Text style={styles.cancelledNumber}>
-            {stats.cancelledBookings}
-          </Text>
-        </View>
+          <View style={styles.reportsBannerContent}>
+            <Text style={styles.reportsBannerTitle}>
+              Reports & Analytics
+            </Text>
 
-        {/* Logout */}
+            <Text style={styles.reportsBannerDescription}>
+              Check running and past business performance
+              by year and month.
+            </Text>
+          </View>
+
+          <Text style={styles.reportsArrow}>
+            →
+          </Text>
+        </TouchableOpacity>
+
+        {/* ========================= */}
+        {/* LOGOUT */}
+        {/* ========================= */}
 
         <TouchableOpacity
           style={styles.logoutButton}
@@ -393,6 +373,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  /* ========================= */
+  /* HEADER */
+  /* ========================= */
+
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -400,7 +384,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563eb",
     borderRadius: 20,
     padding: 20,
-    marginBottom: 25,
+    marginBottom: 20,
   },
 
   headerText: {
@@ -440,6 +424,56 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
 
+  /* ========================= */
+  /* WELCOME CARD */
+  /* ========================= */
+
+  welcomeCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  welcomeIconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: "#eff6ff",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+
+  welcomeIcon: {
+    fontSize: 24,
+  },
+
+  welcomeTextContainer: {
+    flex: 1,
+  },
+
+  welcomeTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  welcomeDescription: {
+    fontSize: 12,
+    color: "#6b7280",
+    lineHeight: 18,
+    marginTop: 5,
+  },
+
+  /* ========================= */
+  /* SECTION */
+  /* ========================= */
+
   sectionTitle: {
     fontSize: 19,
     fontWeight: "800",
@@ -447,45 +481,15 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginBottom: 25,
-  },
-
-  statCard: {
-    width: "48%",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 17,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-
-  statIcon: {
-    fontSize: 22,
-    marginBottom: 8,
-  },
-
-  statNumber: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: "#111827",
-  },
-
-  statLabel: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginTop: 3,
-  },
+  /* ========================= */
+  /* ACTION GRID */
+  /* ========================= */
 
   actionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: 10,
   },
 
   actionCard: {
@@ -499,17 +503,17 @@ const styles = StyleSheet.create({
   },
 
   actionIconBox: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: "#eff6ff",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 11,
   },
 
   actionIcon: {
-    fontSize: 20,
+    fontSize: 21,
   },
 
   actionTitle: {
@@ -525,35 +529,60 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  cancelledCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+  /* ========================= */
+  /* REPORTS BANNER */
+  /* ========================= */
+
+  reportsBanner: {
+    backgroundColor: "#111827",
+    borderRadius: 17,
+    padding: 17,
+    marginTop: 8,
+    marginBottom: 25,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
   },
 
-  cancelledTitle: {
+  reportsBannerIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
+    backgroundColor: "#1f2937",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 13,
+  },
+
+  reportsBannerEmoji: {
+    fontSize: 22,
+  },
+
+  reportsBannerContent: {
+    flex: 1,
+  },
+
+  reportsBannerTitle: {
+    color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
   },
 
-  cancelledDescription: {
+  reportsBannerDescription: {
+    color: "#d1d5db",
     fontSize: 12,
-    color: "#6b7280",
+    lineHeight: 17,
     marginTop: 4,
   },
 
-  cancelledNumber: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#dc2626",
+  reportsArrow: {
+    color: "#ffffff",
+    fontSize: 24,
+    marginLeft: 10,
   },
+
+  /* ========================= */
+  /* LOGOUT */
+  /* ========================= */
 
   logoutButton: {
     height: 50,

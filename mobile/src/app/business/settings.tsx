@@ -1,6 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import QRCode from "react-native-qrcode-svg";
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   ActivityIndicator,
   Alert,
@@ -64,6 +67,7 @@ const days: (keyof WorkingHours)[] = [
 export default function BusinessSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const qrRef = useRef<any>(null);
 
  const [name, setName] = useState("");
 const [businessName, setBusinessName] = useState("");
@@ -130,7 +134,9 @@ const [businessName, setBusinessName] = useState("");
     const result: any = {};
 
     days.forEach((day) => {
-      const value = hours?.[day];
+      const value =
+  hours?.[day] ||
+  hours?.[day.toLowerCase()];
 
       if (!value) {
         result[day] = defaultDay();
@@ -286,17 +292,18 @@ if (!phone.trim()) {
     }
   };
 
-  const getBookingLink = () => {
-    if (!businessSlug) {
-      Alert.alert(
-        "Booking link unavailable",
-        "Business slug is not available yet."
-      );
-      return "";
-    }
+const getBookingLink = () => {
+  if (!businessSlug) {
+    return "";
+  }
 
-   return `http://192.168.206.233:5173/book/${businessSlug}`;
-  };
+  return `https://bookeasy-2fbhokhk0-friendship-app.vercel.app/book/${businessSlug}`;
+};
+
+const qrBookingLink = businessSlug
+  ? `https://bookeasy-2fbhokhk0-friendship-app.vercel.app/book/${businessSlug}`
+  : "";
+
 
   const copyBookingLink = async () => {
     const link = getBookingLink();
@@ -310,6 +317,80 @@ if (!phone.trim()) {
       "Booking link copied to clipboard."
     );
   };
+
+  const shareQRCode = async () => {
+  const link = getBookingLink();
+
+  if (!link) return;
+
+  try {
+    if (!qrRef.current) {
+      Alert.alert(
+        "QR Code",
+        "QR code is not ready yet."
+      );
+      return;
+    }
+
+    const available =
+      await Sharing.isAvailableAsync();
+
+    if (!available) {
+      Alert.alert(
+        "Sharing unavailable",
+        "Sharing is not available on this device."
+      );
+      return;
+    }
+
+    qrRef.current.toDataURL(
+      async (data: string) => {
+        try {
+          const fileUri =
+            `${FileSystem.cacheDirectory}bookeasy-${businessSlug}.png`;
+
+          await FileSystem.writeAsStringAsync(
+            fileUri,
+            data,
+            {
+              encoding:
+                FileSystem.EncodingType.Base64,
+            }
+          );
+
+          await Sharing.shareAsync(
+            fileUri,
+            {
+              mimeType: "image/png",
+              dialogTitle:
+                "Share BookEasy QR Code",
+            }
+          );
+        } catch (error) {
+          console.log(
+            "QR sharing error:",
+            error
+          );
+
+          Alert.alert(
+            "Error",
+            "Unable to share QR code."
+          );
+        }
+      }
+    );
+  } catch (error) {
+    console.log(
+      "QR code error:",
+      error
+    );
+
+    Alert.alert(
+      "Error",
+      "Unable to generate QR code."
+    );
+  }
+};
 
   if (loading) {
     return (
@@ -535,6 +616,50 @@ if (!phone.trim()) {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* QR CODE */}
+
+<View style={styles.qrDivider} />
+
+<Text style={styles.qrSectionTitle}>
+  Booking QR Code
+</Text>
+
+<Text style={styles.sectionDescription}>
+  Customers can scan this QR code to open your
+  booking page and book an appointment.
+</Text>
+
+<View style={styles.qrContainer}>
+<QRCode
+  value={qrBookingLink || "https://bookeasy-2fbhokhk0-friendship-app.vercel.app"}
+  size={200}
+  color="#111827"
+  backgroundColor="#ffffff"
+  level="H"
+  quietZone={10}
+  getRef={(ref) => {
+    qrRef.current = ref;
+  }}
+/>
+
+  <Text style={styles.qrBusinessName}>
+    {businessName}
+  </Text>
+
+  <Text style={styles.qrScanText}>
+    Scan to book an appointment
+  </Text>
+</View>
+
+<TouchableOpacity
+  style={styles.shareQRButton}
+  onPress={shareQRCode}
+>
+  <Text style={styles.shareQRButtonText}>
+    📤 Share QR Code
+  </Text>
+</TouchableOpacity>
 
         {/* Save */}
         <TouchableOpacity
@@ -762,6 +887,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+
+  qrDivider: {
+  height: 1,
+  backgroundColor: "#e5e7eb",
+  marginVertical: 22,
+},
+
+qrSectionTitle: {
+  fontSize: 17,
+  fontWeight: "700",
+  color: "#111827",
+  marginBottom: 6,
+},
+
+qrContainer: {
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "#ffffff",
+  borderWidth: 1,
+  borderColor: "#e5e7eb",
+  borderRadius: 14,
+  paddingVertical: 22,
+  paddingHorizontal: 16,
+  marginTop: 5,
+},
+
+qrBusinessName: {
+  fontSize: 16,
+  fontWeight: "700",
+  color: "#111827",
+  marginTop: 12,
+  textAlign: "center",
+},
+
+qrScanText: {
+  fontSize: 12,
+  color: "#6b7280",
+  marginTop: 4,
+  textAlign: "center",
+},
+
+shareQRButton: {
+  marginTop: 12,
+  height: 46,
+  borderRadius: 10,
+  backgroundColor: "#111827",
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+shareQRButtonText: {
+  color: "#ffffff",
+  fontSize: 14,
+  fontWeight: "700",
+},
 
   saveButton: {
     height: 52,
