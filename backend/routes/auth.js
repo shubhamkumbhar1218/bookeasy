@@ -142,18 +142,21 @@ const token = jwt.sign(
   }
 );
 
-    res.json({
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        businessName: user.businessName,
-        businessSlug: user.businessSlug,
-        businessType: user.businessType,
-      },
-    });
+
+res.json({
+  message: "Login successful",
+  token,
+  user: {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    businessName: user.businessName,
+    businessSlug: user.businessSlug,
+    businessType: user.businessType,
+  },
+});
+
   } catch (error) {
     console.log(error);
 
@@ -176,9 +179,49 @@ router.post("/forgot-password", async (req, res) => {
       });
     }
 
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-    });
+    // const user = await User.findOne({
+    //   email: email.toLowerCase().trim(),
+    // });
+
+
+
+
+
+const normalizedEmail = email.toLowerCase().trim();
+
+const user = await User.findOne({
+  email: normalizedEmail,
+});
+
+console.log("LOGIN DEBUG: Email received:", normalizedEmail);
+console.log("LOGIN DEBUG: User found:", Boolean(user));
+
+if (!user) {
+  return res.status(401).json({
+    message: "Invalid email or password",
+  });
+}
+
+console.log("LOGIN DEBUG: Role:", user.role);
+console.log("LOGIN DEBUG: Password hash exists:", Boolean(user.password));
+console.log(
+  "LOGIN DEBUG: Password hash format:",
+  /^\$2[aby]\$\d{2}\$/.test(user.password || "")
+);
+
+const passwordMatch = await bcrypt.compare(
+  password,
+  user.password
+);
+
+console.log("LOGIN DEBUG: Password matches:", passwordMatch);
+
+if (!passwordMatch) {
+  return res.status(401).json({
+    message: "Invalid email or password",
+  });
+}
+
 
     // Don't reveal whether email exists
     if (!user) {
