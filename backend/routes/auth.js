@@ -9,6 +9,8 @@ import sendEmail from "../utils/sendEmail.js";
 
 const router = express.Router();
 
+console.log("BOOKEASY AUTH ROUTE LOADED");
+
 router.post("/register", async (req, res) => {
   try {
     const {
