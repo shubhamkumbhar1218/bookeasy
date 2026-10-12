@@ -36,6 +36,19 @@ const bookingSchema = new mongoose.Schema(
   required: false,
 },
 
+
+    // Automated reminder tracking
+    reminder24hSentAt: {
+      type: Date,
+      default: null,
+    },
+
+    reminder1hSentAt: {
+      type: Date,
+      default: null,
+    },
+
+
     status: {
       type: String,
       enum: ["pending", "confirmed", "cancelled", "completed"],

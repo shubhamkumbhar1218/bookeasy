@@ -23,7 +23,11 @@ const notificationSchema = new mongoose.Schema(
         "booking_confirmed",
         "booking_cancelled",
         "booking_completed",
+        
         "booking_rescheduled",
+        "appointment_reminder_24h",
+        "appointment_reminder_1h",
+
       ],
       required: true,
     },

@@ -1,6 +1,8 @@
 import express from "express";
 import PushToken from "../models/PushToken.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import { normalizePhone } from "../utils/normalizePhone.js";
+import { Expo } from "expo-server-sdk";
 
 const router = express.Router();
 
@@ -69,61 +71,63 @@ await PushToken.findOneAndUpdate(
 // CUSTOMER PUSH TOKEN
 // =====================================================
 
-router.post(
-  "/customer",
-  async (req, res) => {
-    try {
-      const {
-        expoPushToken,
-        customerPhone,
-        platform,
-      } = req.body;
+router.post("/customer", async (req, res) => {
+  try {
+    const { expoPushToken, customerPhone, platform } = req.body;
 
-      if (
-        !expoPushToken ||
-        !customerPhone
-      ) {
-        return res.status(400).json({
-          message:
-            "Expo push token and customer phone are required",
-        });
-      }
-
-      await PushToken.findOneAndUpdate(
-        {
-          expoPushToken,
-        },
-        {
-          expoPushToken,
-          businessId: null,
-          customerPhone:
-            customerPhone.trim(),
-          platform:
-            platform || "unknown",
-        },
-        {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
-        }
-      );
-
-      res.json({
-        message:
-          "Customer push token registered",
-      });
-    } catch (error) {
-      console.log(
-        "Customer push token error:",
-        error
-      );
-
-      res.status(500).json({
-        message: "Server error",
+    if (!expoPushToken || !customerPhone) {
+      return res.status(400).json({
+        message: "Expo push token and customer phone are required",
       });
     }
+
+    if (!Expo.isExpoPushToken(expoPushToken)) {
+      return res.status(400).json({
+        message: "Invalid Expo push token",
+      });
+    }
+
+    const normalizedPhone = normalizePhone(customerPhone);
+
+    if (!/^\d{10}$/.test(normalizedPhone)) {
+      return res.status(400).json({
+        message: "Enter a valid Indian mobile number",
+      });
+    }
+
+    await PushToken.findOneAndUpdate(
+      { expoPushToken },
+      {
+        $set: {
+          expoPushToken,
+          businessId: null,
+          customerPhone: normalizedPhone,
+          platform: platform || "unknown",
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+
+    console.log(
+      "BOOKEASY: Customer push token registered for:",
+      normalizedPhone
+    );
+
+    return res.json({
+      message: "Customer push token registered",
+    });
+  } catch (error) {
+    console.error("BusinessEasy customer push registration error:", error);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
-);
+});
 
 
 

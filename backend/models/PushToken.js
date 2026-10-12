@@ -1,3 +1,48 @@
+// import mongoose from "mongoose";
+
+// const pushTokenSchema = new mongoose.Schema(
+//   {
+//     expoPushToken: {
+//       type: String,
+//       required: true,
+//       unique: true,
+//       trim: true,
+//     },
+
+//     // Business owner receiving push notifications
+//     businessId: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       ref: "User",
+//       default: null,
+//     },
+
+//     // Customer receiving push notifications
+//     customerPhone: {
+//       type: String,
+//       default: "",
+//       trim: true,
+//     },
+
+//     platform: {
+//       type: String,
+//       enum: ["android", "ios", "unknown"],
+//       default: "unknown",
+//     },
+//   },
+//   {
+//     timestamps: true,
+//   }
+// );
+
+// const PushToken = mongoose.model(
+//   "PushToken",
+//   pushTokenSchema
+// );
+
+// export default PushToken;
+
+
+
 import mongoose from "mongoose";
 
 const pushTokenSchema = new mongoose.Schema(
@@ -5,7 +50,6 @@ const pushTokenSchema = new mongoose.Schema(
     expoPushToken: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
@@ -34,9 +78,12 @@ const pushTokenSchema = new mongoose.Schema(
   }
 );
 
-const PushToken = mongoose.model(
-  "PushToken",
-  pushTokenSchema
+// A device token may be registered for different roles.
+pushTokenSchema.index(
+  { expoPushToken: 1, businessId: 1, customerPhone: 1 },
+  { unique: true }
 );
+
+const PushToken = mongoose.model("PushToken", pushTokenSchema);
 
 export default PushToken;
