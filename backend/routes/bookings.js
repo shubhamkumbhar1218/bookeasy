@@ -4,6 +4,8 @@ import Service from "../models/Service.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
+import { normalizePhone } from "../utils/normalizePhone.js";
+
 import {
   sendPushForNotification,
 } from "../utils/sendPushNotification.js";
@@ -373,8 +375,7 @@ router.post("/public", async (req, res) => {
         serviceId,
         customerName:
           customerName.trim(),
-        customerPhone:
-          customerPhone.trim(),
+        customerPhone: normalizePhone(customerPhone),
         bookingDate: startTime,
         bookingSlot,
       });
@@ -416,7 +417,7 @@ await sendPushForNotification(
 const customerNotification =
   await Notification.create({
     customerPhone:
-      customerPhone.trim(),
+      normalizePhone(customerPhone),
     type: "new_booking",
     title: "Booking received",
     message:
@@ -483,7 +484,7 @@ router.get("/customer", async (req, res) => {
       });
     }
 
-    const cleanPhone = phone.trim();
+    const cleanPhone = normalizePhone(phone);
 
     if (!cleanPhone) {
       return res.status(400).json({
@@ -1190,14 +1191,18 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
     // UPDATE BOOKING
     // --------------------------------------------------
 
-    booking.bookingDate =
-      newStartTime;
 
-    booking.bookingSlot =
-      bookingSlot;
+    // UPDATE BOOKING
+    booking.bookingDate = newStartTime;
+    booking.bookingSlot = bookingSlot;
+
+    // Reset reminders for the new appointment time
+    booking.reminder24hSentAt = null;
+    booking.reminder1hSentAt = null;
 
     try {
       await booking.save();
+
     } catch (saveError) {
       // MongoDB duplicate key
       if (saveError.code === 11000) {
@@ -1228,20 +1233,22 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
     // CUSTOMER NOTIFICATION
     // --------------------------------------------------
 
-const rescheduledNotification =
-  await Notification.create({
-    customerPhone:
-      booking.customerPhone,
-    type: "booking_rescheduled",
-    title: "Booking rescheduled",
-    message:
-      `Your appointment has been rescheduled to ${formattedDate}.`,
-    bookingId: booking._id,
-  });
 
-await sendPushForNotification(
-  rescheduledNotification
+const rescheduledNotification = await Notification.create({
+  customerPhone: normalizePhone(booking.customerPhone),
+  type: "booking_rescheduled",
+  title: "Booking rescheduled",
+  message: `Your appointment has been rescheduled to ${formattedDate}.`,
+  bookingId: booking._id,
+});
+
+console.log(
+  "BOOKEASY: Sending customer reschedule push:",
+  booking._id.toString()
 );
+
+await sendPushForNotification(rescheduledNotification);
+
 
     // --------------------------------------------------
     // RESPONSE
@@ -1300,8 +1307,7 @@ if (
 
 const confirmedNotification =
   await Notification.create({
-    customerPhone:
-      booking.customerPhone,
+    customerPhone: normalizePhone(booking.customerPhone),
     type: "booking_confirmed",
     title: "Booking confirmed",
     message:
@@ -1350,8 +1356,7 @@ router.patch("/:id/cancel", authMiddleware, async (req, res) => {
 
 const cancelledNotification =
   await Notification.create({
-    customerPhone:
-      booking.customerPhone,
+    customerPhone: normalizePhone(booking.customerPhone),
     type: "booking_cancelled",
     title: "Booking cancelled",
     message:
@@ -1407,8 +1412,7 @@ if (booking.businessId.toString() !== req.user.id.toString()) {
 
 const completedNotification =
   await Notification.create({
-    customerPhone:
-      booking.customerPhone,
+   customerPhone: normalizePhone(booking.customerPhone),
     type: "booking_completed",
     title: "Booking completed",
     message:
