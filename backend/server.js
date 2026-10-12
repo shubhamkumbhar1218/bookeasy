@@ -12,6 +12,10 @@ import bookingRoutes from "./routes/bookings.js";
 import notificationRoutes from "./routes/notifications.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import pushTokenRoutes from "./routes/pushToken.js";
+import adminRoutes from "./routes/admin.js";
+import {
+  startAppointmentReminderScheduler,
+} from "./utils/appointmentReminderScheduler.js";
 
 dotenv.config();
 
@@ -61,6 +65,8 @@ app.use("/api/auth", authRoutes);
 
 app.use("/api/business", businessRoutes);
 
+app.use("/api/admin", adminRoutes);
+
 app.use("/api/services", serviceRoutes);
 
 app.use("/api/bookings", bookingRoutes);
@@ -68,6 +74,7 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 app.use("/api/reviews", reviewRoutes);
+
 app.use(
   "/api/push-tokens",
   pushTokenRoutes
@@ -115,6 +122,8 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("MongoDB connected");
+
+    startAppointmentReminderScheduler();
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`BookEasy server running on port ${PORT}`);
