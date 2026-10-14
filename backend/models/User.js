@@ -54,6 +54,16 @@ resetPasswordExpires: {
       trim: true,
     },
 
+    profilePhoto: {
+  type: String,
+  default: "",
+},
+
+profilePhotoPublicId: {
+  type: String,
+  default: "",
+},
+
     businessSlug: {
       type: String,
       required: true,
@@ -61,6 +71,8 @@ resetPasswordExpires: {
       lowercase: true,
       trim: true,
     },
+
+
 
     businessType: {
       type: String,

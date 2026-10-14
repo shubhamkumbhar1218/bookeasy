@@ -1,456 +1,39 @@
-// import express from "express";
-// import User from "../models/User.js";
-// import Service from "../models/Service.js";
-// import Review from "../models/Review.js";
-// import authMiddleware from "../middleware/authMiddleware.js";
-
-// const router = express.Router();
-
-// // ======================================================
-// // SEARCH BUSINESSES + SERVICES + RATINGS
-// // ======================================================
-
-// router.get("/search", async (req, res) => {
-//   try {
-//     const { search, location, category } = req.query;
-
-//     const searchText =
-//       search?.trim() || location?.trim() || "";
-
-//     // --------------------------------------------------
-//     // Find services matching search text
-//     // --------------------------------------------------
-
-//     let matchingServiceBusinessIds = [];
-//     let matchingServiceIds = [];
-
-//     if (searchText) {
-//       const matchingServices = await Service.find({
-//         name: {
-//           $regex: searchText,
-//           $options: "i",
-//         },
-//         isActive: true,
-//       }).select("_id businessId");
-
-//       matchingServiceBusinessIds =
-//         matchingServices.map(
-//           (service) => service.businessId
-//         );
-
-//       matchingServiceIds =
-//         matchingServices.map(
-//           (service) => service._id.toString()
-//         );
-//     }
-
-//     // --------------------------------------------------
-//     // Business search
-//     // Business name OR address OR service name
-//     // --------------------------------------------------
-
-//     const query = {};
-
-//     if (searchText) {
-//       query.$or = [
-//         {
-//           businessName: {
-//             $regex: searchText,
-//             $options: "i",
-//           },
-//         },
-//         {
-//           address: {
-//             $regex: searchText,
-//             $options: "i",
-//           },
-//         },
-//       ];
-
-//       if (matchingServiceBusinessIds.length > 0) {
-//         query.$or.push({
-//           _id: {
-//             $in: matchingServiceBusinessIds,
-//           },
-//         });
-//       }
-//     }
-
-//     // --------------------------------------------------
-//     // Search by category
-//     // --------------------------------------------------
-
-//     if (
-//       category &&
-//       category.trim() &&
-//       category.toLowerCase() !== "all"
-//     ) {
-//       query.businessType = {
-//         $regex: `^${category.trim()}$`,
-//         $options: "i",
-//       };
-//     }
-
-//     // --------------------------------------------------
-//     // Find businesses
-//     // --------------------------------------------------
-
-//     const businesses = await User.find(query)
-//       .select(
-//         "businessName businessSlug businessType phone address name workingHours"
-//       )
-//       .sort({ businessName: 1 });
-
-//     // --------------------------------------------------
-//     // Add services + service ratings
-//     // + business overall rating
-//     // --------------------------------------------------
-
-//     const businessesWithServices =
-//       await Promise.all(
-//         businesses.map(async (business) => {
-//           // ============================================
-//           // SERVICES
-//           // ============================================
-
-//           let serviceQuery = {
-//             businessId: business._id,
-//             isActive: true,
-//           };
-
-//           // If customer searched by service name,
-//           // show matching services for that business.
-//           if (
-//             searchText &&
-//             matchingServiceIds.length > 0
-//           ) {
-//             const businessHasMatchingService =
-//               matchingServiceBusinessIds.some(
-//                 (id) =>
-//                   id.toString() ===
-//                   business._id.toString()
-//               );
-
-//             if (businessHasMatchingService) {
-//               serviceQuery._id = {
-//                 $in: matchingServiceIds,
-//               };
-//             }
-//           }
-
-//           const services = await Service.find(
-//             serviceQuery
-//           )
-//             .select(
-//               "_id businessId name description price duration isActive"
-//             )
-//             .sort({ name: 1 });
-
-//           // ============================================
-//           // SERVICE RATINGS
-//           // ============================================
-
-//           const serviceIds = services.map(
-//             (service) => service._id
-//           );
-
-//           const reviewStats =
-//             serviceIds.length > 0
-//               ? await Review.aggregate([
-//                   {
-//                     $match: {
-//                       serviceId: {
-//                         $in: serviceIds,
-//                       },
-//                     },
-//                   },
-//                   {
-//                     $group: {
-//                       _id: "$serviceId",
-
-//                       averageRating: {
-//                         $avg: "$rating",
-//                       },
-
-//                       totalReviews: {
-//                         $sum: 1,
-//                       },
-//                     },
-//                   },
-//                 ])
-//               : [];
-
-//           const ratingMap = {};
-
-//           reviewStats.forEach((item) => {
-//             ratingMap[item._id.toString()] = {
-//               averageRating: Number(
-//                 item.averageRating.toFixed(1)
-//               ),
-
-//               totalReviews:
-//                 item.totalReviews,
-//             };
-//           });
-
-//           const servicesWithRatings =
-//             services.map((service) => {
-//               const rating =
-//                 ratingMap[
-//                   service._id.toString()
-//                 ];
-
-//               return {
-//                 ...service.toObject(),
-
-//                 averageRating:
-//                   rating?.averageRating || 0,
-
-//                 totalReviews:
-//                   rating?.totalReviews || 0,
-//               };
-//             });
-
-//           // ============================================
-//           // BUSINESS OVERALL RATING
-//           // ============================================
-
-//           const businessRating =
-//             await Review.aggregate([
-//               {
-//                 $match: {
-//                   businessId:
-//                     business._id,
-//                 },
-//               },
-//               {
-//                 $group: {
-//                   _id: null,
-
-//                   averageRating: {
-//                     $avg: "$rating",
-//                   },
-
-//                   totalReviews: {
-//                     $sum: 1,
-//                   },
-//                 },
-//               },
-//             ]);
-
-//           let businessAverageRating = 0;
-//           let businessTotalReviews = 0;
-
-//           if (
-//             businessRating.length > 0
-//           ) {
-//             businessAverageRating =
-//               Number(
-//                 businessRating[0].averageRating.toFixed(
-//                   1
-//                 )
-//               );
-
-//             businessTotalReviews =
-//               businessRating[0].totalReviews;
-//           }
-
-//           // ============================================
-//           // FINAL BUSINESS OBJECT
-//           // ============================================
-
-//           return {
-//             ...business.toObject(),
-
-//             services:
-//               servicesWithRatings,
-
-//             averageRating:
-//               businessAverageRating,
-
-//             totalReviews:
-//               businessTotalReviews,
-//           };
-//         })
-//       );
-
-//     // --------------------------------------------------
-//     // Remove businesses with no active services
-//     // --------------------------------------------------
-
-//     const businessesWithActiveServices =
-//       businessesWithServices.filter(
-//         (business) =>
-//           business.services.length > 0
-//       );
-
-//     res.json({
-//       count:
-//         businessesWithActiveServices.length,
-
-//       businesses:
-//         businessesWithActiveServices,
-//     });
-//   } catch (error) {
-//     console.log(
-//       "Business search error:",
-//       error
-//     );
-
-//     res.status(500).json({
-//       message: "Server error",
-//     });
-//   }
-// });
-
-// // ======================================================
-// // GET LOGGED-IN BUSINESS PROFILE
-// // ======================================================
-
-// router.get(
-//   "/profile/me",
-//   authMiddleware,
-//   async (req, res) => {
-//     try {
-//       const user = await User.findById(req.user.id
-//       ).select("-password");
-
-//       if (!user) {
-//         return res.status(404).json({
-//           message: "User not found",
-//         });
-//       }
-
-//       res.json(user);
-//     } catch (error) {
-//       console.log(error);
-
-//       res.status(500).json({
-//         message: "Server error",
-//       });
-//     }
-//   }
-// );
-
-// // ======================================================
-// // UPDATE LOGGED-IN BUSINESS PROFILE
-// // ======================================================
-
-// router.patch(
-//   "/profile/me",
-//   authMiddleware,
-//   async (req, res) => {
-//     try {
-//       const {
-//         name,
-//         businessName,
-//         businessType,
-//         phone,
-//         address,
-//         workingHours,
-//       } = req.body;
-
-//       if (!name || !businessName) {
-//         return res.status(400).json({
-//           message:
-//             "Name and business name are required",
-//         });
-//       }
-
-//       const user = await User.findById(
-//         req.user.id
-//       );
-
-//       if (!user) {
-//         return res.status(404).json({
-//           message: "User not found",
-//         });
-//       }
-
-//       user.name = name.trim();
-//       user.businessName =
-//         businessName.trim();
-
-//       user.businessType =
-//         businessType || "other";
-
-//       user.phone = phone || "";
-//       user.address = address || "";
-
-//       if (workingHours) {
-//         user.workingHours = workingHours;
-//       }
-
-//       await user.save();
-
-//       res.json({
-//         message:
-//           "Business profile updated successfully",
-
-//         user: {
-//           id: user._id,
-//           name: user.name,
-//           email: user.email,
-//           businessName:
-//             user.businessName,
-//           businessSlug:
-//             user.businessSlug,
-//           businessType:
-//             user.businessType,
-//           phone: user.phone,
-//           address: user.address,
-//           workingHours:
-//             user.workingHours,
-//         },
-//       });
-//     } catch (error) {
-//       console.log(error);
-
-//       res.status(500).json({
-//         message: "Server error",
-//       });
-//     }
-//   }
-// );
-
-// // ======================================================
-// // PUBLIC BUSINESS INFORMATION
-// // ======================================================
-
-// router.get("/:slug", async (req, res) => {
-//   try {
-//     const business = await User.findOne({
-//       businessSlug: req.params.slug,
-//     }).select(
-//       "businessName businessSlug businessType phone address name workingHours"
-//     );
-
-//     if (!business) {
-//       return res.status(404).json({
-//         message: "Business not found",
-//       });
-//     }
-
-//     res.json(business);
-//   } catch (error) {
-//     console.log(error);
-
-//     res.status(500).json({
-//       message: "Server error",
-//     });
-//   }
-// });
-
-// export default router;
-
 
 import express from "express";
 import User from "../models/User.js";
 import Service from "../models/Service.js";
 import Review from "../models/Review.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import multer from "multer";
+import cloudinary from "../config/cloudinary.js";
 
 const router = express.Router();
+
+// ======================================================
+// IMAGE UPLOAD CONFIGURATION
+// ======================================================
+
+const profilePhotoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // Maximum 5 MB
+  },
+  fileFilter: (req, file, callback) => {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(file.mimetype)) {
+      return callback(
+        new Error("Only JPG, PNG, and WebP images are allowed.")
+      );
+    }
+
+    callback(null, true);
+  },
+});
 
 // ======================================================
 // SEARCH BUSINESSES + SERVICES + RATINGS
@@ -462,10 +45,6 @@ router.get("/search", async (req, res) => {
 
     const searchText =
       search?.trim() || location?.trim() || "";
-
-    // --------------------------------------------------
-    // Find services matching search text
-    // --------------------------------------------------
 
     let matchingServiceBusinessIds = [];
     let matchingServiceIds = [];
@@ -480,20 +59,11 @@ router.get("/search", async (req, res) => {
       }).select("_id businessId");
 
       matchingServiceBusinessIds =
-        matchingServices.map(
-          (service) => service.businessId
-        );
+        matchingServices.map((service) => service.businessId);
 
       matchingServiceIds =
-        matchingServices.map(
-          (service) => service._id.toString()
-        );
+        matchingServices.map((service) => service._id.toString());
     }
-
-    // --------------------------------------------------
-    // Business search
-    // Business name OR address OR service name
-    // --------------------------------------------------
 
     const query = {};
 
@@ -522,10 +92,6 @@ router.get("/search", async (req, res) => {
       }
     }
 
-    // --------------------------------------------------
-    // Search by category
-    // --------------------------------------------------
-
     if (
       category &&
       category.trim() &&
@@ -537,213 +103,136 @@ router.get("/search", async (req, res) => {
       };
     }
 
-    // --------------------------------------------------
-    // Find businesses
-    // --------------------------------------------------
-
     const businesses = await User.find(query)
       .select(
-        "businessName businessSlug businessType phone address name workingHours"
+        "businessName businessSlug businessType phone address name workingHours profilePhoto"
       )
       .sort({ businessName: 1 });
 
-    // --------------------------------------------------
-    // Add services + service ratings
-    // + business overall rating
-    // --------------------------------------------------
+    const businessesWithServices = await Promise.all(
+      businesses.map(async (business) => {
+        const serviceQuery = {
+          businessId: business._id,
+          isActive: true,
+        };
 
-    const businessesWithServices =
-      await Promise.all(
-        businesses.map(async (business) => {
-          // ============================================
-          // SERVICES
-          // ============================================
+        if (
+          searchText &&
+          matchingServiceIds.length > 0
+        ) {
+          const businessHasMatchingService =
+            matchingServiceBusinessIds.some(
+              (id) =>
+                id.toString() === business._id.toString()
+            );
 
-          let serviceQuery = {
-            businessId: business._id,
-            isActive: true,
-          };
-
-          // If customer searched by service name,
-          // show matching services for that business.
-          if (
-            searchText &&
-            matchingServiceIds.length > 0
-          ) {
-            const businessHasMatchingService =
-              matchingServiceBusinessIds.some(
-                (id) =>
-                  id.toString() ===
-                  business._id.toString()
-              );
-
-            if (businessHasMatchingService) {
-              serviceQuery._id = {
-                $in: matchingServiceIds,
-              };
-            }
+          if (businessHasMatchingService) {
+            serviceQuery._id = {
+              $in: matchingServiceIds,
+            };
           }
+        }
 
-          const services = await Service.find(
-            serviceQuery
+        const services = await Service.find(serviceQuery)
+          .select(
+            "_id businessId name description price duration isActive"
           )
-            .select(
-              "_id businessId name description price duration isActive"
-            )
-            .sort({ name: 1 });
+          .sort({ name: 1 });
 
-          // ============================================
-          // SERVICE RATINGS
-          // ============================================
+        const serviceIds = services.map(
+          (service) => service._id
+        );
 
-          const serviceIds = services.map(
-            (service) => service._id
+        const reviewStats =
+          serviceIds.length > 0
+            ? await Review.aggregate([
+                {
+                  $match: {
+                    serviceId: { $in: serviceIds },
+                  },
+                },
+                {
+                  $group: {
+                    _id: "$serviceId",
+                    averageRating: { $avg: "$rating" },
+                    totalReviews: { $sum: 1 },
+                  },
+                },
+              ])
+            : [];
+
+        const ratingMap = {};
+
+        reviewStats.forEach((item) => {
+          ratingMap[item._id.toString()] = {
+            averageRating: Number(
+              item.averageRating.toFixed(1)
+            ),
+            totalReviews: item.totalReviews,
+          };
+        });
+
+        const servicesWithRatings = services.map(
+          (service) => {
+            const rating = ratingMap[service._id.toString()];
+
+            return {
+              ...service.toObject(),
+              averageRating: rating?.averageRating || 0,
+              totalReviews: rating?.totalReviews || 0,
+            };
+          }
+        );
+
+        const businessRating = await Review.aggregate([
+          {
+            $match: {
+              businessId: business._id,
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              averageRating: { $avg: "$rating" },
+              totalReviews: { $sum: 1 },
+            },
+          },
+        ]);
+
+        let businessAverageRating = 0;
+        let businessTotalReviews = 0;
+
+        if (businessRating.length > 0) {
+          businessAverageRating = Number(
+            businessRating[0].averageRating.toFixed(1)
           );
 
-          const reviewStats =
-            serviceIds.length > 0
-              ? await Review.aggregate([
-                  {
-                    $match: {
-                      serviceId: {
-                        $in: serviceIds,
-                      },
-                    },
-                  },
-                  {
-                    $group: {
-                      _id: "$serviceId",
+          businessTotalReviews =
+            businessRating[0].totalReviews;
+        }
 
-                      averageRating: {
-                        $avg: "$rating",
-                      },
-
-                      totalReviews: {
-                        $sum: 1,
-                      },
-                    },
-                  },
-                ])
-              : [];
-
-          const ratingMap = {};
-
-          reviewStats.forEach((item) => {
-            ratingMap[item._id.toString()] = {
-              averageRating: Number(
-                item.averageRating.toFixed(1)
-              ),
-
-              totalReviews:
-                item.totalReviews,
-            };
-          });
-
-          const servicesWithRatings =
-            services.map((service) => {
-              const rating =
-                ratingMap[
-                  service._id.toString()
-                ];
-
-              return {
-                ...service.toObject(),
-
-                averageRating:
-                  rating?.averageRating || 0,
-
-                totalReviews:
-                  rating?.totalReviews || 0,
-              };
-            });
-
-          // ============================================
-          // BUSINESS OVERALL RATING
-          // ============================================
-
-          const businessRating =
-            await Review.aggregate([
-              {
-                $match: {
-                  businessId:
-                    business._id,
-                },
-              },
-              {
-                $group: {
-                  _id: null,
-
-                  averageRating: {
-                    $avg: "$rating",
-                  },
-
-                  totalReviews: {
-                    $sum: 1,
-                  },
-                },
-              },
-            ]);
-
-          let businessAverageRating = 0;
-          let businessTotalReviews = 0;
-
-          if (
-            businessRating.length > 0
-          ) {
-            businessAverageRating =
-              Number(
-                businessRating[0].averageRating.toFixed(
-                  1
-                )
-              );
-
-            businessTotalReviews =
-              businessRating[0].totalReviews;
-          }
-
-          // ============================================
-          // FINAL BUSINESS OBJECT
-          // ============================================
-
-          return {
-            ...business.toObject(),
-
-            services:
-              servicesWithRatings,
-
-            averageRating:
-              businessAverageRating,
-
-            totalReviews:
-              businessTotalReviews,
-          };
-        })
-      );
-
-    // --------------------------------------------------
-    // Remove businesses with no active services
-    // --------------------------------------------------
+        return {
+          ...business.toObject(),
+          services: servicesWithRatings,
+          averageRating: businessAverageRating,
+          totalReviews: businessTotalReviews,
+        };
+      })
+    );
 
     const businessesWithActiveServices =
       businessesWithServices.filter(
-        (business) =>
-          business.services.length > 0
+        (business) => business.services.length > 0
       );
 
-    res.json({
-      count:
-        businessesWithActiveServices.length,
-
-      businesses:
-        businessesWithActiveServices,
+    return res.json({
+      count: businessesWithActiveServices.length,
+      businesses: businessesWithActiveServices,
     });
   } catch (error) {
-    console.log(
-      "Business search error:",
-      error
-    );
+    console.error("Business search error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error",
     });
   }
@@ -753,14 +242,172 @@ router.get("/search", async (req, res) => {
 // GET LOGGED-IN BUSINESS PROFILE
 // ======================================================
 
-router.get(
-  "/profile/me",
+router.get("/profile/me", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    return res.json(user);
+  } catch (error) {
+    console.error("Get business profile error:", error);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+});
+
+// ======================================================
+// UPDATE LOGGED-IN BUSINESS PROFILE
+// ======================================================
+
+router.patch("/profile/me", authMiddleware, async (req, res) => {
+  try {
+    const {
+      name,
+      businessName,
+      businessType,
+      phone,
+      address,
+      workingHours,
+    } = req.body;
+
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      typeof businessName !== "string" ||
+      !businessName.trim()
+    ) {
+      return res.status(400).json({
+        message: "Name and business name are required",
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    user.name = name.trim();
+    user.businessName = businessName.trim();
+    user.businessType = businessType || "other";
+    user.phone = phone?.trim() || "";
+    user.address = address?.trim() || "";
+
+    if (workingHours) {
+      const dayNames = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+      ];
+
+      const normalizedWorkingHours = {};
+
+      for (const day of dayNames) {
+        const capitalizedDay =
+          day.charAt(0).toUpperCase() + day.slice(1);
+
+        const dayData =
+          workingHours[day] ||
+          workingHours[capitalizedDay];
+
+        if (!dayData) {
+          normalizedWorkingHours[day] = {
+            open: "09:00",
+            close: "18:00",
+            closed: false,
+          };
+
+          continue;
+        }
+
+        normalizedWorkingHours[day] = {
+          open: dayData.open?.trim() || "09:00",
+          close: dayData.close?.trim() || "18:00",
+          closed: dayData.closed === true,
+        };
+      }
+
+      user.workingHours = normalizedWorkingHours;
+    }
+
+    await user.save();
+
+    return res.json({
+      message: "Business profile updated successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        businessName: user.businessName,
+        businessSlug: user.businessSlug,
+        businessType: user.businessType,
+        phone: user.phone,
+        address: user.address,
+        workingHours: user.workingHours,
+        profilePhoto: user.profilePhoto || "",
+        profilePhotoPublicId: user.profilePhotoPublicId || "",
+      },
+    });
+  } catch (error) {
+    console.error("Update business profile error:", error);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+});
+
+// ======================================================
+// UPLOAD OR REPLACE BUSINESS PROFILE PHOTO
+// POST /api/business/profile/photo
+// ======================================================
+
+router.post(
+  "/profile/photo",
   authMiddleware,
+  (req, res, next) => {
+    profilePhotoUpload.single("profilePhoto")(
+      req,
+      res,
+      (error) => {
+        if (error) {
+          return res.status(400).json({
+            message:
+              error.code === "LIMIT_FILE_SIZE"
+                ? "Image must be 5 MB or smaller."
+                : error.message,
+          });
+        }
+
+        next();
+      }
+    );
+  },
   async (req, res) => {
+    let uploadedPublicId = "";
+
     try {
-      const user = await User.findById(
-        req.user.id
-      ).select("-password");
+      if (!req.file) {
+        return res.status(400).json({
+          message: "Please select a profile photo.",
+        });
+      }
+
+      const user = await User.findById(req.user.id);
 
       if (!user) {
         return res.status(404).json({
@@ -768,56 +415,94 @@ router.get(
         });
       }
 
-      res.json(user);
-    } catch (error) {
-      console.log(
-        "Get business profile error:",
-        error
+      const base64Image =
+        req.file.buffer.toString("base64");
+
+      const imageData =
+        `data:${req.file.mimetype};base64,${base64Image}`;
+
+      const result = await cloudinary.uploader.upload(
+        imageData,
+        {
+          folder: "bookeasy/business-profiles",
+          resource_type: "image",
+        }
       );
 
-      res.status(500).json({
-        message: "Server error",
+      uploadedPublicId = result.public_id;
+
+      const oldPublicId = user.profilePhotoPublicId;
+
+      user.profilePhoto = result.secure_url;
+      user.profilePhotoPublicId = result.public_id;
+
+      await user.save();
+
+      // Remove the previous image after the new image is saved.
+      if (
+        oldPublicId &&
+        oldPublicId !== result.public_id
+      ) {
+        try {
+          await cloudinary.uploader.destroy(oldPublicId);
+        } catch (deleteError) {
+          console.error(
+            "Old profile photo cleanup failed:",
+            deleteError.message
+          );
+        }
+      }
+
+      return res.json({
+        message: "Business profile photo updated successfully",
+        profilePhoto: user.profilePhoto,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          businessName: user.businessName,
+          businessSlug: user.businessSlug,
+          businessType: user.businessType,
+          phone: user.phone,
+          address: user.address,
+          workingHours: user.workingHours,
+          profilePhoto: user.profilePhoto,
+          profilePhotoPublicId: user.profilePhotoPublicId,
+        },
+      });
+    } catch (error) {
+      console.error("Profile photo upload error:", error);
+
+      // Clean up a newly uploaded image if saving failed.
+      if (uploadedPublicId) {
+        try {
+          await cloudinary.uploader.destroy(uploadedPublicId);
+        } catch (cleanupError) {
+          console.error(
+            "Upload cleanup failed:",
+            cleanupError.message
+          );
+        }
+      }
+
+      return res.status(500).json({
+        message: "Could not update profile photo.",
       });
     }
   }
 );
 
 // ======================================================
-// UPDATE LOGGED-IN BUSINESS PROFILE
+// REMOVE BUSINESS PROFILE PHOTO
+// DELETE /api/business/profile/photo
 // ======================================================
 
-router.patch(
-  "/profile/me",
+router.delete(
+  "/profile/photo",
   authMiddleware,
   async (req, res) => {
     try {
-      const {
-        name,
-        businessName,
-        businessType,
-        phone,
-        address,
-        workingHours,
-      } = req.body;
-
-      // --------------------------------------------------
-      // Validate required fields
-      // --------------------------------------------------
-
-      if (!name || !businessName) {
-        return res.status(400).json({
-          message:
-            "Name and business name are required",
-        });
-      }
-
-      // --------------------------------------------------
-      // Find business owner
-      // --------------------------------------------------
-
-      const user = await User.findById(
-        req.user.id
-      );
+      const user = await User.findById(req.user.id);
 
       if (!user) {
         return res.status(404).json({
@@ -825,143 +510,33 @@ router.patch(
         });
       }
 
-      // --------------------------------------------------
-      // Update basic business information
-      // --------------------------------------------------
+      const oldPublicId = user.profilePhotoPublicId;
 
-      user.name = name.trim();
-
-      user.businessName =
-        businessName.trim();
-
-      user.businessType =
-        businessType || "other";
-
-      user.phone =
-        phone?.trim() || "";
-
-      user.address =
-        address?.trim() || "";
-
-      // ==================================================
-      // WORKING HOURS
-      // ==================================================
-      // Mobile sends:
-      //
-      // Monday
-      // Tuesday
-      // Wednesday
-      //
-      // Backend booking logic uses:
-      //
-      // monday
-      // tuesday
-      // wednesday
-      //
-      // Therefore normalize everything to lowercase.
-      // ==================================================
-
-      if (workingHours) {
-        const dayNames = [
-          "monday",
-          "tuesday",
-          "wednesday",
-          "thursday",
-          "friday",
-          "saturday",
-          "sunday",
-        ];
-
-        const normalizedWorkingHours = {};
-
-        for (const day of dayNames) {
-          const capitalizedDay =
-            day.charAt(0).toUpperCase() +
-            day.slice(1);
-
-          // Accept both:
-          // workingHours.monday
-          // workingHours.Monday
-
-          const dayData =
-            workingHours[day] ||
-            workingHours[capitalizedDay];
-
-          // If a day is missing, use default hours.
-          if (!dayData) {
-            normalizedWorkingHours[day] = {
-              open: "09:00",
-              close: "18:00",
-              closed: false,
-            };
-
-            continue;
-          }
-
-          normalizedWorkingHours[day] = {
-            open:
-              dayData.open?.trim() ||
-              "09:00",
-
-            close:
-              dayData.close?.trim() ||
-              "18:00",
-
-            closed:
-              dayData.closed === true,
-          };
-        }
-
-        user.workingHours =
-          normalizedWorkingHours;
-      }
-
-      // --------------------------------------------------
-      // Save
-      // --------------------------------------------------
+      user.profilePhoto = "";
+      user.profilePhotoPublicId = "";
 
       await user.save();
 
-      // --------------------------------------------------
-      // Response
-      // --------------------------------------------------
+      if (oldPublicId) {
+        try {
+          await cloudinary.uploader.destroy(oldPublicId);
+        } catch (deleteError) {
+          console.error(
+            "Cloudinary photo deletion failed:",
+            deleteError.message
+          );
+        }
+      }
 
-      res.json({
-        message:
-          "Business profile updated successfully",
-
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-
-          businessName:
-            user.businessName,
-
-          businessSlug:
-            user.businessSlug,
-
-          businessType:
-            user.businessType,
-
-          phone:
-            user.phone,
-
-          address:
-            user.address,
-
-          workingHours:
-            user.workingHours,
-        },
+      return res.json({
+        message: "Business profile photo removed successfully",
+        profilePhoto: "",
       });
     } catch (error) {
-      console.log(
-        "Update business profile error:",
-        error
-      );
+      console.error("Profile photo removal error:", error);
 
-      res.status(500).json({
-        message: "Server error",
+      return res.status(500).json({
+        message: "Could not remove profile photo.",
       });
     }
   }
@@ -969,6 +544,7 @@ router.patch(
 
 // ======================================================
 // PUBLIC BUSINESS INFORMATION
+// GET /api/business/:slug
 // ======================================================
 
 router.get("/:slug", async (req, res) => {
@@ -976,7 +552,7 @@ router.get("/:slug", async (req, res) => {
     const business = await User.findOne({
       businessSlug: req.params.slug,
     }).select(
-      "businessName businessSlug businessType phone address name workingHours"
+      "businessName businessSlug businessType phone address name workingHours profilePhoto"
     );
 
     if (!business) {
@@ -985,14 +561,11 @@ router.get("/:slug", async (req, res) => {
       });
     }
 
-    res.json(business);
+    return res.json(business);
   } catch (error) {
-    console.log(
-      "Get public business error:",
-      error
-    );
+    console.error("Get public business error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error",
     });
   }
