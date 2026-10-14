@@ -1,6 +1,7 @@
 import express from "express";
 import Notification from "../models/Notification.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import { normalizePhone } from "../utils/normalizePhone.js";
 
 const router = express.Router();
 
@@ -125,9 +126,11 @@ router.get("/customer", async (req, res) => {
       });
     }
 
-    const notifications = await Notification.find({
-      customerPhone: phone.trim(),
-    })
+const normalizedPhone = normalizePhone(phone);
+
+const notifications = await Notification.find({
+  customerPhone: normalizedPhone,
+})
       .sort({ createdAt: -1 })
       .limit(50);
 

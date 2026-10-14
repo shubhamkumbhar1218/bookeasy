@@ -1364,9 +1364,16 @@ const cancelledNotification =
     bookingId: booking._id,
   });
 
-await sendPushForNotification(
-  cancelledNotification
-);
+
+console.log("BOOKEASY: CANCELLATION NOTIFICATION CREATED", {
+  bookingId: booking._id.toString(),
+  customerPhone: normalizePhone(booking.customerPhone),
+  notificationId: cancelledNotification._id.toString(),
+  type: cancelledNotification.type,
+});
+
+await sendPushForNotification(cancelledNotification);
+
 
     res.json({
       message: "Booking cancelled successfully",
