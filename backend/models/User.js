@@ -27,6 +27,17 @@ const userSchema = new mongoose.Schema(
   default: "BUSINESS",
 },
 
+accountStatus: {
+  type: String,
+  enum: ["ACTIVE", "SUSPENDED"],
+  default: "ACTIVE",
+},
+
+isActive: {
+  type: Boolean,
+  default: true,
+},
+
     resetPasswordToken: {
   type: String,
   default: null,

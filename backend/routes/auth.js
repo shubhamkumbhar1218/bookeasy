@@ -170,62 +170,23 @@ res.json({
 
 
 // Forgot Password
-// Forgot Password
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
+    if (!email || typeof email !== "string") {
       return res.status(400).json({
         message: "Email is required",
       });
     }
 
-    // const user = await User.findOne({
-    //   email: email.toLowerCase().trim(),
-    // });
+    const normalizedEmail = email.toLowerCase().trim();
 
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
 
-
-
-
-const normalizedEmail = email.toLowerCase().trim();
-
-const user = await User.findOne({
-  email: normalizedEmail,
-});
-
-console.log("LOGIN DEBUG: Email received:", normalizedEmail);
-console.log("LOGIN DEBUG: User found:", Boolean(user));
-
-if (!user) {
-  return res.status(401).json({
-    message: "Invalid email or password",
-  });
-}
-
-console.log("LOGIN DEBUG: Role:", user.role);
-console.log("LOGIN DEBUG: Password hash exists:", Boolean(user.password));
-console.log(
-  "LOGIN DEBUG: Password hash format:",
-  /^\$2[aby]\$\d{2}\$/.test(user.password || "")
-);
-
-const passwordMatch = await bcrypt.compare(
-  password,
-  user.password
-);
-
-console.log("LOGIN DEBUG: Password matches:", passwordMatch);
-
-if (!passwordMatch) {
-  return res.status(401).json({
-    message: "Invalid email or password",
-  });
-}
-
-
-    // Don't reveal whether email exists
+    // Do not reveal whether an account exists.
     if (!user) {
       return res.json({
         message:
@@ -233,112 +194,60 @@ if (!passwordMatch) {
       });
     }
 
-    // Generate reset token
-    const resetToken = crypto
-      .randomBytes(32)
-      .toString("hex");
+    // Generate a secure reset token.
+    const resetToken = crypto.randomBytes(32).toString("hex");
 
-    // Hash token before storing in database
+    // Store only the hashed token in the database.
     const hashedResetToken = crypto
       .createHash("sha256")
       .update(resetToken)
       .digest("hex");
 
     user.resetPasswordToken = hashedResetToken;
-
-    // Token valid for 15 minutes
-    user.resetPasswordExpires =
-      Date.now() + 15 * 60 * 1000;
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
 
     await user.save();
 
-    // Frontend reset page
-    //  const resetUrl =
-    //    `http://localhost:5173/reset-password/${resetToken}`;
-const resetUrl =
-  `https://bookeasy-zeta.vercel.app/reset-password/${resetToken}`;
-    // Send email
+    // Use your deployed frontend's actual reset-password route.
+    const resetUrl =
+      `https://bookeasy-zeta.vercel.app/reset-password/${resetToken}`;
+
     await sendEmail({
       to: user.email,
-
       subject: "BookEasy - Reset Your Password",
-
       html: `
-        <div style="
-          font-family: Arial, sans-serif;
-          max-width: 600px;
-          margin: auto;
-          padding: 30px;
-          border: 1px solid #ddd;
-          border-radius: 10px;
-        ">
-
-          <h2 style="color: #111827;">
-            BookEasy Password Reset
-          </h2>
-
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 30px;">
+          <h2>BookEasy Password Reset</h2>
+          <p>Hello ${user.name || "there"},</p>
+          <p>We received a request to reset your BookEasy password.</p>
           <p>
-            Hello ${user.name},
+            <a href="${resetUrl}"
+               style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">
+              Reset Password
+            </a>
           </p>
-
-          <p>
-            We received a request to reset your BookEasy
-            account password.
-          </p>
-
-          <p>
-            Click the button below to create a new password:
-          </p>
-
-          <a
-            href="${resetUrl}"
-            style="
-              display: inline-block;
-              padding: 12px 20px;
-              background: #111827;
-              color: white;
-              text-decoration: none;
-              border-radius: 6px;
-              font-weight: bold;
-            "
-          >
-            Reset Password
-          </a>
-
-          <p style="margin-top: 25px;">
-            This link will expire in 15 minutes.
-          </p>
-
-          <p>
-            If you did not request a password reset,
-            you can safely ignore this email.
-          </p>
-
-          <hr />
-
-          <p style="color: #777; font-size: 13px;">
-            © BookEasy
-          </p>
-
+          <p>This link expires in 15 minutes.</p>
+          <p>If you did not request this, you can ignore this email.</p>
         </div>
       `,
     });
 
     console.log("Password reset email sent to:", user.email);
 
-    res.json({
+    return res.json({
       message:
         "If this email is registered, a password reset link will be sent.",
     });
-
   } catch (error) {
-    console.log("Forgot password error:", error);
+    // Log the actual server-side error for diagnosis.
+    console.error("Forgot password error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Unable to send password reset email",
     });
   }
 });
+
 
 // Reset Password
 router.post("/reset-password/:token", async (req, res) => {

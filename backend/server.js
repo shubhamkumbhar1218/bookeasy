@@ -118,10 +118,30 @@ app.use((req, res) => {
 // MONGODB + SERVER
 // ========================================
 
+// mongoose
+//   .connect(process.env.MONGO_URI)
+//   .then(() => {
+//     console.log("MongoDB connected");
+
+//     startAppointmentReminderScheduler();
+
+//     app.listen(PORT, "0.0.0.0", () => {
+//       console.log(`BookEasy server running on port ${PORT}`);
+//     });
+//   })
+//   .catch((error) => {
+//     console.error("MongoDB connection error:", error);
+//   });
+
+
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("MongoDB connected");
+    console.log(
+      "BookEasy database name:",
+      mongoose.connection.name
+    );
 
     startAppointmentReminderScheduler();
 
