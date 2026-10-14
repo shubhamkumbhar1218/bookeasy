@@ -33,16 +33,20 @@ await PushToken.deleteMany({
 });
 
 // Register the current token
-await PushToken.findOneAndUpdate(
+
+const tokenRecord = await PushToken.findOneAndUpdate(
   {
     expoPushToken,
+    businessId: null,
+    customerPhone: normalizedPhone,
   },
   {
-    expoPushToken,
-    businessId: req.user.id,
-    customerPhone: "",
-    platform:
-      platform || "unknown",
+    $set: {
+      expoPushToken,
+      businessId: null,
+      customerPhone: normalizedPhone,
+      platform: platform || "unknown",
+    },
   },
   {
     upsert: true,
@@ -50,6 +54,14 @@ await PushToken.findOneAndUpdate(
     setDefaultsOnInsert: true,
   }
 );
+
+console.log("BOOKEASY: CUSTOMER TOKEN SAVED", {
+  id: tokenRecord._id.toString(),
+  customerPhone: tokenRecord.customerPhone,
+  businessId: tokenRecord.businessId,
+  tokenPrefix: tokenRecord.expoPushToken.slice(0, 25),
+});
+
       res.json({
         message:
           "Business push token registered",
