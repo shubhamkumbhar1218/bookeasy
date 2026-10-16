@@ -1,3 +1,91 @@
+// import jwt from "jsonwebtoken";
+// import User from "../models/User.js";
+
+// const authMiddleware = async (req, res, next) => {
+//   try {
+//     const authHeader = req.headers.authorization;
+
+//     if (!authHeader) {
+//       return res.status(401).json({
+//         message: "Authentication required",
+//       });
+//     }
+
+//     if (!authHeader.startsWith("Bearer ")) {
+//       return res.status(401).json({
+//         message: "Invalid authorization format",
+//       });
+//     }
+
+//     const token = authHeader.split(" ")[1];
+
+//     if (!token) {
+//       return res.status(401).json({
+//         message: "Authentication token missing",
+//       });
+//     }
+
+//     const decoded = jwt.verify(
+//       token,
+//       process.env.JWT_SECRET
+//     );
+
+//     if (!decoded.id) {
+//       return res.status(401).json({
+//         message: "Invalid authentication token",
+//       });
+//     }
+
+//     const user = await User.findById(decoded.id).select(
+//       "-password -resetPasswordToken -resetPasswordExpires"
+//     );
+
+//     if (!user) {
+//       return res.status(401).json({
+//         message: "User account not found",
+//       });
+//     }
+
+//     if (
+//   user.role !== "ADMIN" &&
+//   user.accountStatus === "SUSPENDED"
+// ) {
+//   return res.status(403).json({
+//     success: false,
+//     message:
+//       "Your business account is suspended. Please contact BookEasy support.",
+//     code: "ACCOUNT_SUSPENDED",
+//   });
+// }
+
+//     req.user = {
+//       id: user._id.toString(),
+//       role: user.role || "BUSINESS",
+//       name: user.name,
+//       email: user.email,
+//       businessName: user.businessName,
+//       businessSlug: user.businessSlug,
+//     };
+
+//     next();
+//   } catch (error) {
+//     console.error("JWT authentication error:", error.message);
+
+//     if (error.name === "TokenExpiredError") {
+//       return res.status(401).json({
+//         message: "Authentication token expired",
+//       });
+//     }
+
+//     return res.status(401).json({
+//       message: "Invalid authentication token",
+//     });
+//   }
+// };
+
+// export default authMiddleware;
+
+
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
@@ -5,15 +93,9 @@ const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         message: "Authentication required",
-      });
-    }
-
-    if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        message: "Invalid authorization format",
       });
     }
 
@@ -25,10 +107,7 @@ const authMiddleware = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     if (!decoded.id) {
       return res.status(401).json({
@@ -40,6 +119,7 @@ const authMiddleware = async (req, res, next) => {
       "-password -resetPasswordToken -resetPasswordExpires"
     );
 
+    // Handle deleted or missing user accounts.
     if (!user) {
       return res.status(401).json({
         message: "User account not found",
@@ -47,16 +127,16 @@ const authMiddleware = async (req, res, next) => {
     }
 
     if (
-  user.role !== "ADMIN" &&
-  user.accountStatus === "SUSPENDED"
-) {
-  return res.status(403).json({
-    success: false,
-    message:
-      "Your business account is suspended. Please contact BookEasy support.",
-    code: "ACCOUNT_SUSPENDED",
-  });
-}
+      user.role !== "ADMIN" &&
+      user.accountStatus === "SUSPENDED"
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Your business account is suspended. Please contact BookEasy support.",
+        code: "ACCOUNT_SUSPENDED",
+      });
+    }
 
     req.user = {
       id: user._id.toString(),
@@ -67,7 +147,7 @@ const authMiddleware = async (req, res, next) => {
       businessSlug: user.businessSlug,
     };
 
-    next();
+    return next();
   } catch (error) {
     console.error("JWT authentication error:", error.message);
 
