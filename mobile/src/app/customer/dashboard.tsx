@@ -4,6 +4,7 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   View,
@@ -15,6 +16,7 @@ type Business = {
   _id?: string;
   businessName: string;
   businessSlug: string;
+  profilePhoto?: string;
   businessType?: string;
   phone?: string;
   address?: string;
@@ -31,22 +33,58 @@ type Business = {
 };
 
 const categories = [
-  "All",
-  "Salon",
-  "Barber",
-  "Tutor",
-  "Gym",
-  "Repair Shop",
-  "Hospital",
-  "Beauty Parlour",
-  "Other",
+  { label: "All", value: "All" },
+  { label: "Salon", value: "salon" },
+  { label: "Barber", value: "barber" },
+  { label: "Tutor", value: "tutor" },
+  { label: "Gym", value: "gym" },
+  { label: "Repair Shop", value: "repair shop" },
+  { label: "Hospital", value: "hospital" },
+  { label: "Dental Clinic", value: "dental clinic" },
+  { label: "Doctor / Clinic", value: "doctor / clinic" },
+  { label: "Physiotherapy", value: "physiotherapy" },
+  { label: "Spa & Wellness", value: "spa & wellness" },
+  { label: "Yoga & Meditation", value: "yoga & meditation" },
+  {
+    label: "Pet Clinic / Veterinary",
+    value: "pet clinic / veterinary",
+  },
+  {
+    label: "Car & Bike Service",
+    value: "car & bike service",
+  },
+  {
+    label: "Photography Studio",
+    value: "photography studio",
+  },
+  {
+    label: "Coaching Classes",
+    value: "coaching classes",
+  },
+  { label: "Makeup Artist", value: "makeup artist" },
+  { label: "Tailor", value: "tailor" },
+  { label: "Plumber", value: "plumber" },
+  { label: "Electrician", value: "electrician" },
+  { label: "Computer Repair", value: "computer repair" },
+  { label: "Consultant", value: "consultant" },
+  { label: "Driving School", value: "driving school" },
+  { label: "Diagnostic Lab", value: "diagnostic lab" },
+  {
+    label: "Nutritionist / Dietitian",
+    value: "nutritionist / dietitian",
+  },
+  {
+    label: "Laundry & Dry Cleaning",
+    value: "laundry & dry cleaning",
+  },
+  { label: "Other", value: "other" },
 ];
 
 export default function CustomerDashboard() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] =
-    useState("All");
+const [selectedCategory, setSelectedCategory] =
+  useState("All");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -59,19 +97,17 @@ export default function CustomerDashboard() {
 
       const params: string[] = [];
 
-      if (search.trim()) {
-        params.push(
-          `location=${encodeURIComponent(search.trim())}`
-        );
-      }
+if (search.trim()) {
+  params.push(
+    `search=${encodeURIComponent(search.trim())}`
+  );
+}
 
-      if (selectedCategory !== "All") {
-        params.push(
-          `category=${encodeURIComponent(
-            selectedCategory
-          )}`
-        );
-      }
+if (selectedCategory !== "All") {
+  params.push(
+    `category=${encodeURIComponent(selectedCategory)}`
+  );
+}
 
       if (params.length > 0) {
         url += `?${params.join("&")}`;
@@ -126,13 +162,19 @@ export default function CustomerDashboard() {
         }
       >
         <View style={styles.cardHeader}>
-          <View style={styles.businessIcon}>
-            <Text style={styles.businessIconText}>
-              {item.businessName
-                ?.charAt(0)
-                .toUpperCase()}
-            </Text>
-          </View>
+          {item.profilePhoto ? (
+  <Image
+    source={{ uri: item.profilePhoto }}
+    style={styles.businessPhoto}
+    resizeMode="cover"
+  />
+) : (
+  <View style={styles.businessIcon}>
+    <Text style={styles.businessIconText}>
+      {item.businessName?.charAt(0).toUpperCase() || "B"}
+    </Text>
+  </View>
+)}
 
           <View style={styles.businessInfo}>
             <Text style={styles.businessName}>
@@ -366,39 +408,33 @@ export default function CustomerDashboard() {
               Categories
             </Text>
 
-            <FlatList
-              horizontal
-              data={categories}
-              keyExtractor={(item) => item}
-              showsHorizontalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
-                styles.categoryList
-              }
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.categoryButton,
-                    selectedCategory === item &&
-                      styles.categoryButtonActive,
-                  ]}
-                  onPress={() =>
-                    setSelectedCategory(item)
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.categoryText,
-                      selectedCategory === item &&
-                        styles.categoryTextActive,
-                    ]}
-                  >
-                    {item}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
+<FlatList
+  horizontal
+  data={categories}
+  keyExtractor={(item) => item.value}
+  showsHorizontalScrollIndicator={false}
+  contentContainerStyle={styles.categoryList}
+  renderItem={({ item }) => (
+    <TouchableOpacity
+      style={[
+        styles.categoryButton,
+        selectedCategory === item.value &&
+          styles.categoryButtonActive,
+      ]}
+      onPress={() => setSelectedCategory(item.value)}
+    >
+      <Text
+        style={[
+          styles.categoryText,
+          selectedCategory === item.value &&
+            styles.categoryTextActive,
+        ]}
+      >
+        {item.label}
+      </Text>
+    </TouchableOpacity>
+  )}
+/>
 
             {/* Results Header */}
 
@@ -412,8 +448,10 @@ export default function CustomerDashboard() {
                   style={styles.resultsSubtitle}
                 >
                   {selectedCategory === "All"
-                    ? "Businesses available for booking"
-                    : `${selectedCategory} businesses`}
+  ? "Businesses available for booking"
+  : `${categories.find(
+      (item) => item.value === selectedCategory
+    )?.label || selectedCategory} businesses`}
                 </Text>
               </View>
 
@@ -724,6 +762,14 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
 
+  businessPhoto: {
+  width: 52,
+  height: 52,
+  borderRadius: 26,
+  marginRight: 12,
+  backgroundColor: "#E9F0E8",
+},
+
   businessIconText: {
     color: "#ffffff",
     fontSize: 21,
@@ -855,3 +901,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 });
+
+
+
+
+

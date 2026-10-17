@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  Image,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -29,6 +30,7 @@ type Business = {
   phone?: string;
   address?: string;
   name?: string;
+  profilePhoto?: string;
   workingHours?: Record<
     string,
     {
@@ -275,12 +277,9 @@ export default function BusinessDetailsScreen() {
       const data: ServiceReviewsResponse =
         await response.json();
 
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-            "Unable to load reviews"
-        );
-      }
+if (!response.ok) {
+  throw new Error("Unable to load reviews");
+}
 
       setServiceReviews(
         data.reviews || []
@@ -439,20 +438,24 @@ export default function BusinessDetailsScreen() {
         <View
           style={styles.businessCard}
         >
-          <View
-            style={styles.businessIcon}
-          >
-            <Text
-              style={
-                styles.businessIconText
-              }
-            >
-              {business.businessName
-                ?.charAt(0)
-                .toUpperCase()}
-            </Text>
-          </View>
-
+          {business.profilePhoto ? (
+            <Image
+              source={{ uri: business.profilePhoto }}
+              style={styles.businessPhoto}
+              resizeMode="cover"
+              onError={() => {
+                console.log("Unable to load business photo");
+              }}
+            />
+          ) : (
+            <View style={styles.businessIcon}>
+              <Text style={styles.businessIconText}>
+                {business.businessName
+                  ?.charAt(0)
+                  .toUpperCase()}
+              </Text>
+            </View>
+          )}
           <Text
             style={styles.businessName}
           >
@@ -1275,6 +1278,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
   },
+
+  businessPhoto: {
+  width: 110,
+  height: 110,
+  borderRadius: 18,
+  backgroundColor: "#e5e7eb",
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: "#e5e7eb",
+},
 
   noReviewsText: {
     fontSize: 13,

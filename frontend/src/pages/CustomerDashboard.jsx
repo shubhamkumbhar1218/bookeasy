@@ -1,685 +1,3 @@
-// import React, { useState } from "react";
-// import { useNavigate } from "react-router-dom";
-// import "../styles/CustomerDashboard.css";
-
-// import {
-//   Search,
-//   MapPin,
-//   Store,
-//   Phone,
-//   CalendarDays,
-//   X,
-//   Star,
-// } from "lucide-react";
-
-// const API =
-//   import.meta.env.VITE_API_URL ||
-//   "http://localhost:5000/api";
-
-// function CustomerDashboard() {
-//   const navigate = useNavigate();
-
-//   const [search, setSearch] = useState("");
-//   const [category, setCategory] = useState("all");
-
-//   const [businesses, setBusinesses] = useState([]);
-
-//   const [loading, setLoading] = useState(false);
-//   const [searched, setSearched] = useState(false);
-//   const [error, setError] = useState("");
-
-//   const categories = [
-//     {
-//       value: "all",
-//       label: "All Categories",
-//     },
-//     {
-//       value: "salon",
-//       label: "Salon",
-//     },
-//     {
-//       value: "barber",
-//       label: "Barber",
-//     },
-//     {
-//       value: "tutor",
-//       label: "Tutor",
-//     },
-//     {
-//       value: "gym",
-//       label: "Gym",
-//     },
-//     {
-//       value: "hospital",
-//       label: "Hospital",
-//     },
-//     {
-//       value: "repair shop",
-//       label: "Repair Shop",
-//     },
-//     {
-//       value: "other",
-//       label: "Other",
-//     },
-//   ];
-
-//   // ======================================================
-//   // SEARCH BUSINESSES
-//   // ======================================================
-
-//   const searchBusinesses = async () => {
-//     try {
-//       setLoading(true);
-//       setError("");
-//       setSearched(true);
-
-//       const params = new URLSearchParams();
-
-//       if (search.trim()) {
-//         params.append(
-//           "search",
-//           search.trim()
-//         );
-//       }
-
-//       if (category !== "all") {
-//         params.append(
-//           "category",
-//           category
-//         );
-//       }
-
-//       const response = await fetch(
-//         `${API}/business/search?${params.toString()}`
-//       );
-
-//       const data = await response.json();
-
-//       if (!response.ok) {
-//         throw new Error(
-//           data.message ||
-//             "Failed to search businesses"
-//         );
-//       }
-
-//       setBusinesses(
-//         data.businesses || []
-//       );
-//     } catch (error) {
-//       console.log(error);
-
-//       setError(
-//         error.message ||
-//           "Something went wrong"
-//       );
-
-//       setBusinesses([]);
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   // ======================================================
-//   // CLEAR SEARCH
-//   // ======================================================
-
-//   const clearSearch = () => {
-//     setSearch("");
-//     setCategory("all");
-//     setBusinesses([]);
-//     setSearched(false);
-//     setError("");
-//   };
-
-//   // ======================================================
-//   // CATEGORY NAME
-//   // ======================================================
-
-//   const getCategoryName = (type) => {
-//     const category = categories.find(
-//       (item) => item.value === type
-//     );
-
-//     return category
-//       ? category.label
-//       : "Other";
-//   };
-
-//   // ======================================================
-//   // RENDER STARS
-//   // ======================================================
-
-//   const renderStars = (rating) => {
-//     return (
-//       <div className="service-stars">
-//         {[1, 2, 3, 4, 5].map(
-//           (star) => (
-//             <Star
-//               key={star}
-//               size={15}
-//               fill={
-//                 star <=
-//                 Math.round(rating)
-//                   ? "currentColor"
-//                   : "none"
-//               }
-//             />
-//           )
-//         )}
-//       </div>
-//     );
-//   };
-
-//   return (
-//     <div className="customer-page">
-
-//       {/* ========================= */}
-//       {/* HEADER */}
-//       {/* ========================= */}
-
-//       <header className="customer-header">
-
-//         <div className="customer-brand">
-
-//           <div className="customer-brand-icon">
-//             <Store size={22} />
-//           </div>
-
-//           <div>
-//             <h1>BookEasy</h1>
-
-//             <span>
-//               Find & Book Local Services
-//             </span>
-//           </div>
-
-//         </div>
-
-//       </header>
-
-//       {/* ========================= */}
-//       {/* HERO */}
-//       {/* ========================= */}
-
-//       <main className="customer-main">
-
-//         <section className="customer-hero">
-
-//           <p className="eyebrow">
-//             FIND LOCAL BUSINESSES
-//           </p>
-
-//           <h2>
-//             Find a business near you
-//           </h2>
-
-//           <p className="customer-subtitle">
-//             Search businesses by name,
-//             location, or service and
-//             compare ratings before booking.
-//           </p>
-
-//           {/* ========================= */}
-//           {/* SEARCH BOX */}
-//           {/* ========================= */}
-
-//           <div className="customer-search-box">
-
-//             <div className="search-field">
-
-//               <Search size={20} />
-
-//               <input
-//                 type="text"
-//                 placeholder="Search business, location or service..."
-//                 value={search}
-//                 onChange={(e) =>
-//                   setSearch(
-//                     e.target.value
-//                   )
-//                 }
-//                 onKeyDown={(e) => {
-//                   if (
-//                     e.key === "Enter"
-//                   ) {
-//                     searchBusinesses();
-//                   }
-//                 }}
-//               />
-
-//             </div>
-
-//             <div className="search-field category-select-field">
-
-//   <Store size={20} />
-
-//   <select
-//     className="category-select"
-//     value={category}
-//     onChange={(e) =>
-//       setCategory(e.target.value)
-//     }
-//   >
-//     {categories.map((item) => (
-//       <option
-//         key={item.value}
-//         value={item.value}
-//       >
-//         {item.label}
-//       </option>
-//     ))}
-//   </select>
-
-// </div>
-
-//             <button
-//               className="primary customer-search-button"
-//               type="button"
-//               onClick={
-//                 searchBusinesses
-//               }
-//               disabled={loading}
-//             >
-//               <Search size={18} />
-
-//               {loading
-//                 ? "Searching..."
-//                 : "Search"}
-//             </button>
-
-//           </div>
-
-//         </section>
-
-//         {/* ========================= */}
-//         {/* ERROR */}
-//         {/* ========================= */}
-
-//         {error && (
-//           <div className="error customer-error">
-//             {error}
-//           </div>
-//         )}
-
-//         {/* ========================= */}
-//         {/* RESULTS */}
-//         {/* ========================= */}
-
-//         <section className="customer-results">
-
-//           <div className="customer-results-header">
-
-//             <div>
-
-//               <p className="eyebrow">
-//                 BUSINESSES
-//               </p>
-
-//               <h2>
-//                 {searched
-//                   ? `${businesses.length} businesses found`
-//                   : "Explore businesses"}
-//               </h2>
-
-//             </div>
-
-//             {searched && (
-//               <button
-//                 className="outline"
-//                 type="button"
-//                 onClick={
-//                   clearSearch
-//                 }
-//               >
-//                 <X size={17} />
-
-//                 Clear
-//               </button>
-//             )}
-
-//           </div>
-
-//           {/* ========================= */}
-//           {/* LOADING */}
-//           {/* ========================= */}
-
-//           {loading && (
-//             <div className="customer-empty">
-
-//               <p>
-//                 Searching for
-//                 businesses...
-//               </p>
-
-//             </div>
-//           )}
-
-//           {/* ========================= */}
-//           {/* NO RESULTS */}
-//           {/* ========================= */}
-
-//           {!loading &&
-//             searched &&
-//             businesses.length === 0 && (
-//               <div className="customer-empty">
-
-//                 <Store size={40} />
-
-//                 <h3>
-//                   No businesses found
-//                 </h3>
-
-//                 <p>
-//                   Try another business
-//                   name, location,
-//                   service, or category.
-//                 </p>
-
-//               </div>
-//             )}
-
-//           {/* ========================= */}
-//           {/* INITIAL STATE */}
-//           {/* ========================= */}
-
-//           {!loading &&
-//             !searched && (
-//               <div className="customer-empty">
-
-//                 <Search size={40} />
-
-//                 <h3>
-//                   Search for a business
-//                 </h3>
-
-//                 <p>
-//                   Search by business name,
-//                   location, or service
-//                   and choose a category.
-//                 </p>
-
-//               </div>
-//             )}
-
-//           {/* ========================= */}
-//           {/* BUSINESS CARDS */}
-//           {/* ========================= */}
-
-//           {!loading &&
-//             businesses.length > 0 && (
-//               <div className="business-results-grid">
-
-//                 {businesses.map(
-//                   (business) => (
-//                     <div
-//                       className="business-result-card"
-//                       key={
-//                         business._id
-//                       }
-//                     >
-
-//                       {/* BUSINESS TOP */}
-
-//                       <div className="business-card-top">
-
-//                         <div className="business-icon">
-//                           <Store
-//                             size={25}
-//                           />
-//                         </div>
-
-//                         <span className="business-category">
-//                           {getCategoryName(
-//                             business.businessType
-//                           )}
-//                         </span>
-
-//                       </div>
-
-//                       {/* BUSINESS NAME */}
-
-//                       <h3>
-//   {business.businessName}
-// </h3>
-
-// {/* BUSINESS OVERALL RATING */}
-
-// <div className="business-overall-rating">
-
-//   {business.totalReviews > 0 ? (
-//     <>
-//       <div className="business-rating-stars">
-//         {[1, 2, 3, 4, 5].map(
-//           (star) => (
-//             <Star
-//               key={star}
-//               size={17}
-//               fill={
-//                 star <=
-//                 Math.round(
-//                   business.averageRating
-//                 )
-//                   ? "currentColor"
-//                   : "none"
-//               }
-//             />
-//           )
-//         )}
-//       </div>
-
-//       <strong>
-//         {business.averageRating}
-//       </strong>
-
-//       <span>
-//         {business.totalReviews} review
-//         {business.totalReviews !== 1
-//           ? "s"
-//           : ""}
-//       </span>
-//     </>
-//   ) : (
-//     <div className="business-no-rating">
-
-//       <Star size={17} />
-
-//       <span>
-//         No reviews yet
-//       </span>
-
-//     </div>
-//   )}
-
-// </div>
-
-// <div className="business-info">
-
-//                         {business.address && (
-//                           <div>
-
-//                             <MapPin
-//                               size={17}
-//                             />
-
-//                             <span>
-//                               {
-//                                 business.address
-//                               }
-//                             </span>
-
-//                           </div>
-//                         )}
-
-//                         {business.phone && (
-//                           <div>
-
-//                             <Phone
-//                               size={17}
-//                             />
-
-//                             <span>
-//                               {
-//                                 business.phone
-//                               }
-//                             </span>
-
-//                           </div>
-//                         )}
-
-//                       </div>
-
-//                       {/* ========================= */}
-//                       {/* SERVICES */}
-//                       {/* ========================= */}
-
-//                       {business.services &&
-//                         business.services
-//                           .length > 0 && (
-//                           <div className="business-services">
-
-//                             <div className="services-title">
-//                               Services
-//                             </div>
-
-//                             {business.services.map(
-//                               (service) => (
-//                                 <div
-//                                   className="service-result-card"
-//                                   key={
-//                                     service._id
-//                                   }
-//                                 >
-
-//                                   <div className="service-result-main">
-
-//                                     <div>
-//                                       <h4>
-//                                         {
-//                                           service.name
-//                                         }
-//                                       </h4>
-
-//                                       {service.description && (
-//                                         <p>
-//                                           {
-//                                             service.description
-//                                           }
-//                                         </p>
-//                                       )}
-//                                     </div>
-
-//                                     <strong className="service-price">
-//                                       ₹
-//                                       {
-//                                         service.price
-//                                       }
-//                                     </strong>
-
-//                                   </div>
-
-//                                   <div className="service-result-bottom">
-
-//                                     <div className="service-rating">
-
-//                                       {service.totalReviews >
-//                                       0 ? (
-//                                         <>
-//                                           {renderStars(
-//                                             service.averageRating
-//                                           )}
-
-//                                           <strong>
-//                                             {
-//                                               service.averageRating
-//                                             }
-//                                           </strong>
-
-//                                           <span>
-//                                             (
-//                                             {
-//                                               service.totalReviews
-//                                             }{" "}
-//                                             review
-//                                             {service.totalReviews !==
-//                                             1
-//                                               ? "s"
-//                                               : ""}
-//                                             )
-//                                           </span>
-//                                         </>
-//                                       ) : (
-//                                         <div className="service-no-rating">
-
-//                                           <Star
-//                                             size={
-//                                               15
-//                                             }
-//                                           />
-
-//                                           <span>
-//                                             No
-//                                             reviews
-//                                             yet
-//                                           </span>
-
-//                                         </div>
-//                                       )}
-
-//                                     </div>
-
-//                                     <span className="service-duration">
-//                                       {
-//                                         service.duration
-//                                       }{" "}
-//                                       min
-//                                     </span>
-
-//                                   </div>
-
-//                                 </div>
-//                               )
-//                             )}
-
-//                           </div>
-//                         )}
-
-//                       {/* BOOK BUTTON */}
-
-//                       <button
-//                         className="primary book-business-button"
-//                         type="button"
-//                         onClick={() =>
-//                           navigate(
-//                             `/book/${business.businessSlug}`
-//                           )
-//                         }
-//                       >
-//                         <CalendarDays
-//                           size={18}
-//                         />
-
-//                         Book Now
-//                       </button>
-
-//                     </div>
-//                   )
-//                 )}
-
-//               </div>
-//             )}
-
-//         </section>
-
-//       </main>
-
-//     </div>
-//   );
-// }
-
-// export default CustomerDashboard;
-
-
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/CustomerDashboard.css";
@@ -698,7 +16,7 @@ import {
 
 const API =
   import.meta.env.VITE_API_URL ||
-  "http://localhost:5000/api";
+  "https://bookeasy-backend-ori1.onrender.com/api";
 
 function CustomerDashboard() {
   const navigate = useNavigate();
@@ -713,40 +31,53 @@ function CustomerDashboard() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
 
-  const categories = [
-    {
-      value: "all",
-      label: "All Categories",
-    },
-    {
-      value: "salon",
-      label: "Salon",
-    },
-    {
-      value: "barber",
-      label: "Barber",
-    },
-    {
-      value: "tutor",
-      label: "Tutor",
-    },
-    {
-      value: "gym",
-      label: "Gym",
-    },
-    {
-      value: "hospital",
-      label: "Hospital",
-    },
-    {
-      value: "repair shop",
-      label: "Repair Shop",
-    },
-    {
-      value: "other",
-      label: "Other",
-    },
-  ];
+const categories = [
+  { value: "all", label: "All Categories" },
+  { value: "salon", label: "Salon" },
+  { value: "barber", label: "Barber" },
+  { value: "tutor", label: "Tutor" },
+  { value: "gym", label: "Gym" },
+  { value: "repair shop", label: "Repair Shop" },
+  { value: "hospital", label: "Hospital" },
+  { value: "dental clinic", label: "Dental Clinic" },
+  { value: "doctor / clinic", label: "Doctor / Clinic" },
+  { value: "physiotherapy", label: "Physiotherapy" },
+  { value: "spa & wellness", label: "Spa & Wellness" },
+  { value: "yoga & meditation", label: "Yoga & Meditation" },
+  {
+    value: "pet clinic / veterinary",
+    label: "Pet Clinic / Veterinary",
+  },
+  {
+    value: "car & bike service",
+    label: "Car & Bike Service",
+  },
+  {
+    value: "photography studio",
+    label: "Photography Studio",
+  },
+  {
+    value: "coaching classes",
+    label: "Coaching Classes",
+  },
+  { value: "makeup artist", label: "Makeup Artist" },
+  { value: "tailor", label: "Tailor" },
+  { value: "plumber", label: "Plumber" },
+  { value: "electrician", label: "Electrician" },
+  { value: "computer repair", label: "Computer Repair" },
+  { value: "consultant", label: "Consultant" },
+  { value: "driving school", label: "Driving School" },
+  { value: "diagnostic lab", label: "Diagnostic Lab" },
+  {
+    value: "nutritionist / dietitian",
+    label: "Nutritionist / Dietitian",
+  },
+  {
+    value: "laundry & dry cleaning",
+    label: "Laundry & Dry Cleaning",
+  },
+  { value: "other", label: "Other" },
+];
 
   // ======================================================
   // SEARCH BUSINESSES
@@ -1341,19 +672,30 @@ function CustomerDashboard() {
 
                       {/* BUSINESS TOP */}
 
-                      <div className="business-card-top">
+                      
+<div className="business-card-top">
 
-                        <div className="business-icon">
-                          <Store size={25} />
-                        </div>
+  <div className="business-icon">
+    {business.profilePhoto ? (
+      <img
+        src={business.profilePhoto}
+        alt={`${business.businessName} profile`}
+        className="business-profile-photo"
+        onError={(event) => {
+          event.currentTarget.style.display = "none";
+        }}
+      />
+    ) : (
+      <Store size={25} />
+    )}
+  </div>
 
-                        <span className="business-category">
-                          {getCategoryName(
-                            business.businessType
-                          )}
-                        </span>
+  <span className="business-category">
+    {getCategoryName(business.businessType)}
+  </span>
 
-                      </div>
+</div>
+
 
                       {/* BUSINESS NAME */}
 

@@ -4,12 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "react-native-qrcode-svg";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
 import {
   ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   View,
@@ -76,6 +79,12 @@ const [businessName, setBusinessName] = useState("");
   const [address, setAddress] = useState("");
   const [businessSlug, setBusinessSlug] = useState("");
 
+  const [profilePhoto, setProfilePhoto] = useState("");
+const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+const [photoUrlInput, setPhotoUrlInput] = useState("");
+const [showPhotoUrlInput, setShowPhotoUrlInput] = useState(false);
+
   const [workingHours, setWorkingHours] =
     useState<WorkingHours>(defaultWorkingHours);
 
@@ -112,6 +121,7 @@ const [businessName, setBusinessName] = useState("");
       setPhone(data.phone || "");
       setAddress(data.address || "");
       setBusinessSlug(data.businessSlug || "");
+      setProfilePhoto(data.profilePhoto || "");
 
       if (data.workingHours) {
         setWorkingHours(normalizeWorkingHours(data.workingHours));
@@ -127,6 +137,260 @@ const [businessName, setBusinessName] = useState("");
       setLoading(false);
     }
   };
+
+  const saveBusinessPhotoUrl = async () => {
+  const photoUrl = photoUrlInput.trim();
+
+  if (!/^https?:\/\/\S+$/i.test(photoUrl)) {
+    Alert.alert(
+      "Invalid URL",
+      "Please enter a valid public image URL."
+    );
+    return;
+  }
+
+  try {
+    setUploadingPhoto(true);
+
+    const token = await AsyncStorage.getItem("bookeasy_token");
+
+    if (!token) {
+      Alert.alert("Session expired", "Please login again.");
+      router.replace("/business/login");
+      return;
+    }
+
+    const response = await fetch(`${API_URL}/business/profile/me`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        profilePhoto: photoUrl,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to save photo URL.");
+    }
+
+    setProfilePhoto(data.profilePhoto || photoUrl);
+    setShowPhotoUrlInput(false);
+
+    const savedUser = await AsyncStorage.getItem("bookeasy_user");
+
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+
+      await AsyncStorage.setItem(
+        "bookeasy_user",
+        JSON.stringify({
+          ...user,
+          profilePhoto: data.profilePhoto || photoUrl,
+        })
+      );
+    }
+
+    Alert.alert("Success", "Business photo URL saved.");
+  } catch (error: any) {
+    Alert.alert(
+      "Error",
+      error.message || "Unable to save business photo URL."
+    );
+  } finally {
+    setUploadingPhoto(false);
+  }
+};
+
+
+
+const chooseBusinessPhoto = async () => {
+  try {
+    const permission =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        "Permission required",
+        "Allow photo access to select your business photo."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const photo = result.assets[0];
+    const token = await AsyncStorage.getItem("bookeasy_token");
+
+    if (!token) {
+      Alert.alert("Session expired", "Please login again.");
+      router.replace("/business/login");
+      return;
+    }
+
+    setUploadingPhoto(true);
+
+    const imageFile = new File(photo.uri);
+    const formData = new FormData();
+
+    formData.append("profilePhoto", imageFile);
+
+    const response = await fetch(
+      `${API_URL}/business/profile/photo`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.message || `Upload failed with status ${response.status}.`
+      );
+    }
+
+    const uploadedPhoto = data.profilePhoto;
+
+    if (!uploadedPhoto) {
+      throw new Error("The server did not return the photo URL.");
+    }
+
+    setProfilePhoto(uploadedPhoto);
+    setShowPhotoUrlInput(false);
+
+    const savedUser = await AsyncStorage.getItem("bookeasy_user");
+
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+
+      await AsyncStorage.setItem(
+        "bookeasy_user",
+        JSON.stringify({
+          ...user,
+          profilePhoto: uploadedPhoto,
+          profilePhotoPublicId:
+            data.user?.profilePhotoPublicId ??
+            user.profilePhotoPublicId ??
+            "",
+        })
+      );
+    }
+
+    Alert.alert(
+      "Success",
+      "Business photo uploaded successfully."
+    );
+  } catch (error: any) {
+    console.error("Business photo error:", error);
+
+    Alert.alert(
+      "Photo upload failed",
+      error?.message || "Unable to upload the photo."
+    );
+  } finally {
+    setUploadingPhoto(false);
+  }
+};
+
+// Remove the business photo.
+
+
+const removeBusinessPhoto = () => {
+  Alert.alert(
+    "Remove business photo",
+    "Are you sure you want to remove this photo?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const token =
+              await AsyncStorage.getItem("bookeasy_token");
+
+            if (!token) {
+              Alert.alert(
+                "Session expired",
+                "Please login again."
+              );
+              router.replace("/business/login");
+              return;
+            }
+
+            setUploadingPhoto(true);
+
+            const response = await fetch(
+              `${API_URL}/business/profile/photo`,
+              {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(
+                data.message || "Failed to remove photo."
+              );
+            }
+
+            setProfilePhoto("");
+
+            const savedUser =
+              await AsyncStorage.getItem("bookeasy_user");
+
+            if (savedUser) {
+              const user = JSON.parse(savedUser);
+
+              await AsyncStorage.setItem(
+                "bookeasy_user",
+                JSON.stringify({
+                  ...user,
+                  profilePhoto: "",
+                  profilePhotoPublicId: "",
+                })
+              );
+            }
+
+            Alert.alert(
+              "Success",
+              "Business photo removed successfully."
+            );
+          } catch (error: any) {
+            Alert.alert(
+              "Error",
+              error.message || "Unable to remove business photo."
+            );
+          } finally {
+            setUploadingPhoto(false);
+          }
+        },
+      },
+    ]
+  );
+};
+
 
   const normalizeWorkingHours = (
     hours: any
@@ -432,20 +696,135 @@ const qrBookingLink = businessSlug
             Business Information
           </Text>
 
-<Text style={styles.label}>
-  Owner Name
-</Text>
+          {/* Business Photo */}
+          <View style={styles.photoSection}>
+            {profilePhoto ? (
+              <Image
+                source={{ uri: profilePhoto }}
+                style={styles.businessPhoto}
+                resizeMode="cover"
+                onError={() => {
+                  console.log("Unable to load business photo");
+                }}
+              />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Text style={styles.photoPlaceholderIcon}>🏪</Text>
+                <Text style={styles.photoPlaceholderText}>
+                  No business photo added
+                </Text>
+              </View>
+            )}
 
-<TextInput
-  value={name}
-  onChangeText={setName}
-  placeholder="Enter owner name"
-  style={styles.input}
-/>
+            <Text style={styles.photoDescription}>
+              Add one photo that represents your business.
+            </Text>
 
-          <Text style={styles.label}>
-            Business Type
-          </Text>
+            <TouchableOpacity
+              style={[
+                styles.photoButton,
+                uploadingPhoto && styles.disabledButton,
+              ]}
+              onPress={chooseBusinessPhoto}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.photoButtonText}>
+                  {profilePhoto
+                    ? "Replace Business Photo"
+                    : "Choose Business Photo"}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.removePhotoButton}
+              onPress={() =>
+                setShowPhotoUrlInput((previous) => !previous)
+              }
+              disabled={uploadingPhoto}
+            >
+              <Text style={styles.removePhotoButtonText}>
+                {showPhotoUrlInput
+                  ? "Hide Photo URL"
+                  : "Use Photo URL Instead"}
+              </Text>
+            </TouchableOpacity>
+
+            {showPhotoUrlInput && (
+              <View style={{ width: "100%", marginTop: 12 }}>
+                <TextInput
+                  value={photoUrlInput}
+                  onChangeText={setPhotoUrlInput}
+                  placeholder="Paste a public image URL"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  style={styles.input}
+                />
+
+                <TouchableOpacity
+                  style={[
+                    styles.photoButton,
+                    uploadingPhoto && styles.disabledButton,
+                  ]}
+                  onPress={saveBusinessPhotoUrl}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.photoButtonText}>
+                      Save Photo URL
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.removePhotoButton}
+                  onPress={() => setShowPhotoUrlInput(false)}
+                  disabled={uploadingPhoto}
+                >
+                  <Text style={styles.removePhotoButtonText}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {!!profilePhoto && (
+              <TouchableOpacity
+                style={styles.removePhotoButton}
+                onPress={removeBusinessPhoto}
+                disabled={uploadingPhoto}
+              >
+                <Text style={styles.removePhotoButtonText}>
+                  Remove Photo
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <Text style={styles.label}>Owner Name</Text>
+
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Enter owner name"
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Business Name</Text>
+
+          <TextInput
+            value={businessName}
+            onChangeText={setBusinessName}
+            placeholder="Enter business name"
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Business Type</Text>
 
           <TextInput
             value={businessType}
@@ -456,9 +835,7 @@ const qrBookingLink = businessSlug
             ]}
           />
 
-          <Text style={styles.label}>
-            Phone Number
-          </Text>
+          <Text style={styles.label}>Phone Number</Text>
 
           <TextInput
             value={phone}
@@ -468,9 +845,7 @@ const qrBookingLink = businessSlug
             style={styles.input}
           />
 
-          <Text style={styles.label}>
-            Address
-          </Text>
+          <Text style={styles.label}>Address</Text>
 
           <TextInput
             value={address}
@@ -499,10 +874,7 @@ const qrBookingLink = businessSlug
             const dayData = workingHours[day];
 
             return (
-              <View
-                key={day}
-                style={styles.dayCard}
-              >
+              <View key={day} style={styles.dayCard}>
                 <View style={styles.dayHeader}>
                   <Text style={styles.dayName}>
                     {day}
@@ -529,9 +901,7 @@ const qrBookingLink = businessSlug
                           styles.closedTextActive,
                       ]}
                     >
-                      {dayData.closed
-                        ? "Closed"
-                        : "Open"}
+                      {dayData.closed ? "Closed" : "Open"}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -546,20 +916,14 @@ const qrBookingLink = businessSlug
                       <TextInput
                         value={dayData.open}
                         onChangeText={(value) =>
-                          updateDay(
-                            day,
-                            "open",
-                            value
-                          )
+                          updateDay(day, "open", value)
                         }
                         placeholder="09:00"
                         style={styles.timeInput}
                       />
                     </View>
 
-                    <Text style={styles.toText}>
-                      to
-                    </Text>
+                    <Text style={styles.toText}>to</Text>
 
                     <View style={styles.timeBox}>
                       <Text style={styles.timeLabel}>
@@ -569,11 +933,7 @@ const qrBookingLink = businessSlug
                       <TextInput
                         value={dayData.close}
                         onChangeText={(value) =>
-                          updateDay(
-                            day,
-                            "close",
-                            value
-                          )
+                          updateDay(day, "close", value)
                         }
                         placeholder="18:00"
                         style={styles.timeInput}
@@ -586,7 +946,7 @@ const qrBookingLink = businessSlug
           })}
         </View>
 
-        {/* Booking Link */}
+        {/* Customer Booking Link */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
             Customer Booking Link
@@ -617,51 +977,52 @@ const qrBookingLink = businessSlug
           </TouchableOpacity>
         </View>
 
-        {/* QR CODE */}
+        {/* Booking QR Code */}
+        <View style={styles.section}>
+          <Text style={styles.qrSectionTitle}>
+            Booking QR Code
+          </Text>
 
-<View style={styles.qrDivider} />
+          <Text style={styles.sectionDescription}>
+            Customers can scan this QR code to open your
+            booking page and book an appointment.
+          </Text>
 
-<Text style={styles.qrSectionTitle}>
-  Booking QR Code
-</Text>
+          <View style={styles.qrContainer}>
+            <QRCode
+              value={
+                qrBookingLink ||
+                "https://bookeasy-2fbhokhk0-friendship-app.vercel.app"
+              }
+              size={200}
+              color="#111827"
+              backgroundColor="#ffffff"
+              quietZone={10}
+              getRef={(ref) => {
+                qrRef.current = ref;
+              }}
+            />
 
-<Text style={styles.sectionDescription}>
-  Customers can scan this QR code to open your
-  booking page and book an appointment.
-</Text>
+            <Text style={styles.qrBusinessName}>
+              {businessName}
+            </Text>
 
-<View style={styles.qrContainer}>
-<QRCode
-  value={qrBookingLink || "https://bookeasy-2fbhokhk0-friendship-app.vercel.app"}
-  size={200}
-  color="#111827"
-  backgroundColor="#ffffff"
-  level="H"
-  quietZone={10}
-  getRef={(ref) => {
-    qrRef.current = ref;
-  }}
-/>
+            <Text style={styles.qrScanText}>
+              Scan to book an appointment
+            </Text>
+          </View>
 
-  <Text style={styles.qrBusinessName}>
-    {businessName}
-  </Text>
+          <TouchableOpacity
+            style={styles.shareQRButton}
+            onPress={shareQRCode}
+          >
+            <Text style={styles.shareQRButtonText}>
+              📤 Share QR Code
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-  <Text style={styles.qrScanText}>
-    Scan to book an appointment
-  </Text>
-</View>
-
-<TouchableOpacity
-  style={styles.shareQRButton}
-  onPress={shareQRCode}
->
-  <Text style={styles.shareQRButtonText}>
-    📤 Share QR Code
-  </Text>
-</TouchableOpacity>
-
-        {/* Save */}
+        {/* Save Settings */}
         <TouchableOpacity
           style={[
             styles.saveButton,
@@ -684,6 +1045,7 @@ const qrBookingLink = businessSlug
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -978,4 +1340,79 @@ shareQRButtonText: {
   bottomSpace: {
     height: 30,
   },
+
+  
+photoSection: {
+  alignItems: "center",
+  marginBottom: 20,
+  padding: 18,
+  borderRadius: 16,
+  backgroundColor: "#EFF6FF",
+  borderWidth: 1,
+  borderColor: "#BFDBFE",
+},
+
+businessPhoto: {
+  width: 180,
+  height: 135,
+  borderRadius: 14,
+  backgroundColor: "#DBEAFE",
+},
+
+photoPlaceholder: {
+  width: 180,
+  height: 135,
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: "#93C5FD",
+  borderStyle: "dashed",
+  backgroundColor: "#DBEAFE",
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+photoPlaceholderIcon: {
+  fontSize: 36,
+  marginBottom: 8,
+},
+
+photoPlaceholderText: {
+  fontSize: 12,
+  color: "#475569",
+},
+
+photoDescription: {
+  marginTop: 10,
+  marginBottom: 12,
+  fontSize: 13,
+  color: "#475569",
+  textAlign: "center",
+},
+
+photoButton: {
+  minHeight: 44,
+  paddingHorizontal: 18,
+  borderRadius: 10,
+  backgroundColor: "#2563EB",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+photoButtonText: {
+  color: "#FFFFFF",
+  fontSize: 14,
+  fontWeight: "700",
+},
+
+removePhotoButton: {
+  marginTop: 8,
+  padding: 10,
+},
+
+removePhotoButtonText: {
+  color: "#DC2626",
+  fontSize: 13,
+  fontWeight: "600",
+},
+
 });

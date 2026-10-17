@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Image,
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -103,23 +104,58 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.continueButton}
               activeOpacity={0.8}
-              onPress={async () => {
+             
+onPress={async () => {
   console.log("Business Owner clicked");
 
   const token = await AsyncStorage.getItem("bookeasy_token");
   const userData = await AsyncStorage.getItem("bookeasy_user");
+  const savedRole = await AsyncStorage.getItem("bookeasy_role");
 
-  console.log("BOOKEASY TOKEN:", token);
-  console.log("BOOKEASY USER:", userData);
-
-  if (token && userData) {
-    console.log("Existing Business Owner session found");
-    router.replace("/business/dashboard");
-  } else {
-    console.log("No Business Owner session found");
+  if (!token || !userData) {
+    console.log("No saved session found");
     router.push("/business/login");
+    return;
+  }
+
+  try {
+    const user = JSON.parse(userData);
+
+    const role = String(
+      user.role || savedRole || ""
+    ).toUpperCase();
+
+    console.log("BOOKEASY ROLE:", role);
+
+    if (role === "ADMIN") {
+      console.log("Opening Admin Panel");
+      router.replace("/admin");
+    } else if (role === "BUSINESS") {
+      console.log("Opening Business Dashboard");
+      router.replace("/business/dashboard");
+    } else {
+      await AsyncStorage.multiRemove([
+        "bookeasy_token",
+        "bookeasy_user",
+        "bookeasy_role",
+      ]);
+
+      console.log("Invalid role; opening login");
+      router.replace("/business/login");
+    }
+  } catch (error) {
+    console.log("Unable to read saved user:", error);
+
+    await AsyncStorage.multiRemove([
+      "bookeasy_token",
+      "bookeasy_user",
+      "bookeasy_role",
+    ]);
+
+    router.replace("/business/login");
   }
 }}
+
             >
               <Text style={styles.continueText}>
                 Continue
@@ -265,7 +301,7 @@ const styles = StyleSheet.create({
 
     fontSize: 22,
 
-    fontWeight: "750",
+    fontWeight: "700",
 
     marginTop: 43,
     marginBottom: 25,
@@ -375,7 +411,7 @@ const styles = StyleSheet.create({
 
     fontSize: 24,
 
-    fontWeight: "750",
+    fontWeight: "700",
 
     marginBottom: 11,
 

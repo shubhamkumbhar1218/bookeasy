@@ -28,7 +28,7 @@ export default function CustomerBookingScreen() {
     businessId?: string;
     businessName?: string;
     businessSlug?: string;
-    serviceId?: string;
+    serviceId?: string; 
     serviceName?: string;
     servicePrice?: string;
     serviceDuration?: string;
@@ -257,16 +257,13 @@ export default function CustomerBookingScreen() {
       return;
     }
 
-    if (
-      customerPhone.trim().length < 10
-    ) {
-      Alert.alert(
-        "Invalid phone",
-        "Please enter a valid phone number."
-      );
-
-      return;
-    }
+if (customerPhone.trim().length < 10) {
+  Alert.alert(
+    "Invalid phone",
+    "Please enter a valid phone number."
+  );
+  return;
+}
 
     if (!selectedSlot) {
       Alert.alert(
@@ -277,24 +274,23 @@ export default function CustomerBookingScreen() {
       return;
     }
 
-    try {
+
+try {
   setBooking(true);
 
-  // ==================================================
   // REGISTER CUSTOMER PUSH TOKEN BEFORE BOOKING
-  // ==================================================
-
   await AsyncStorage.setItem(
     "bookeasy_customer_phone",
     customerPhone.trim()
   );
 
   console.log(
-    "BOOKEASY CUSTOMER PHONE SAVED:",
-    customerPhone.trim()
+    "BOOKEASY: Registering customer push token before booking..."
   );
 
-  await registerPushTokenWithBackend();
+  await registerPushTokenWithBackend("customer");
+
+  // CREATE BOOKING
 
   // ==================================================
   // CREATE BOOKING
@@ -366,24 +362,9 @@ export default function CustomerBookingScreen() {
       }
 
       // ==================================================
-      // SAVE CUSTOMER PHONE
-      //
-      // We still save the phone number.
-      // Push notification registration is intentionally
-      // disabled here while using Expo Go.
-      // ==================================================
-
-      await AsyncStorage.setItem(
-        "bookeasy_customer_phone",
-        customerPhone.trim()
-      );
-
-      console.log(
-        "BOOKEASY CUSTOMER PHONE SAVED:",
-        customerPhone.trim()
-      );
-
-      await registerPushTokenWithBackend();
+console.log(
+  "BOOKEASY: Booking created successfully."
+);
 
       // ==================================================
       // SUCCESS
@@ -1041,3 +1022,4 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
+

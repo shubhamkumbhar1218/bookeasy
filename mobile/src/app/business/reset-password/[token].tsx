@@ -9,7 +9,8 @@ import {
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { registerPushTokenWithBackend } from "../../../services/notifications";
 import API_URL from "../../../api";
 
 export default function BusinessResetPassword() {
@@ -19,86 +20,214 @@ export default function BusinessResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleResetPassword = async () => {
-    if (!password || !confirmPassword) {
-      Alert.alert("Required", "Please enter both passwords.");
-      return;
-    }
 
-    if (password.length < 6) {
-      Alert.alert(
-        "Invalid Password",
-        "Password must be at least 6 characters."
-      );
-      return;
-    }
+  
+const handleResetPassword = async () => {
+  if (!password || !confirmPassword) {
+    Alert.alert("Required", "Please enter both passwords.");
+    return;
+  }
 
-    if (password !== confirmPassword) {
-      Alert.alert("Password Error", "Passwords do not match.");
-      return;
-    }
+  if (password.length < 6) {
+    Alert.alert(
+      "Invalid Password",
+      "Password must be at least 6 characters."
+    );
+    return;
+  }
 
-    if (!token) {
-      Alert.alert(
-        "Invalid Link",
-        "The password reset link is invalid."
-      );
-      return;
-    }
+  if (password !== confirmPassword) {
+    Alert.alert("Password Error", "Passwords do not match.");
+    return;
+  }
 
-    try {
-      setLoading(true);
+  if (!token || typeof token !== "string") {
+    Alert.alert("Invalid Link", "The reset link is invalid.");
+    return;
+  }
 
-      const url = `${API_URL}/auth/reset-password/${token}`;
+  if (loading) return;
 
-      console.log("RESET PASSWORD URL:", url);
+  try {
+    setLoading(true);
 
-      const response = await fetch(url, {
+    // 1. Reset the password.
+    const resetResponse = await fetch(
+      `${API_URL}/auth/reset-password/${token}`,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          password,
-        }),
-      });
-
-      const data = await response.json();
-
-      console.log("RESET PASSWORD STATUS:", response.status);
-      console.log("RESET PASSWORD RESPONSE:", data);
-
-      if (!response.ok) {
-        Alert.alert(
-          "Reset Failed",
-          data.message || "Unable to reset password."
-        );
-        return;
+        body: JSON.stringify({ password }),
       }
+    );
 
-      Alert.alert(
-        "Success",
-        "Your password has been reset successfully.",
-        [
-          {
-            text: "Go to Login",
-            onPress: () => {
-              router.replace("/business/login");
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      console.log("RESET PASSWORD ERROR:", error);
+    const resetData = await resetResponse.json();
 
+    if (!resetResponse.ok) {
       Alert.alert(
-        "Connection Error",
-        "Could not connect to the BookEasy server."
+        "Reset Failed",
+        resetData.message || "Unable to reset password."
       );
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    // 2. Log in using the newly set password.
+    const loginResponse = await fetch(`${API_URL}/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: resetData.email,
+        password,
+      }),
+    });
+
+    const loginData = await loginResponse.json();
+
+    if (!loginResponse.ok || !loginData.token || !loginData.user?.id) {
+      Alert.alert(
+        "Password Reset Successful",
+        "Your password was changed. Please sign in using your new password."
+      );
+      router.replace("/business/login");
+      return;
+    }
+
+    const role = String(loginData.user.role || "").toUpperCase();
+
+    if (role !== "BUSINESS" && role !== "ADMIN") {
+      Alert.alert("Login Error", "Your account role is invalid.");
+      router.replace("/business/login");
+      return;
+    }
+
+    const user = {
+      id: loginData.user.id,
+      name: loginData.user.name || "",
+      email: loginData.user.email || "",
+      role,
+      businessName: loginData.user.businessName || "",
+      businessSlug: loginData.user.businessSlug || "",
+      businessType: loginData.user.businessType || "",
+    };
+
+    // 3. Save the same session format as the normal login screen.
+    await AsyncStorage.multiSet([
+      ["bookeasy_token", loginData.token],
+      ["bookeasy_user", JSON.stringify(user)],
+      ["bookeasy_role", role],
+    ]);
+
+    // 4. Register business notifications without blocking login.
+    if (role === "BUSINESS") {
+      try {
+        await registerPushTokenWithBackend("business");
+      } catch (pushError) {
+        console.log("Push-token registration failed:", pushError);
+      }
+    }
+
+    // 5. Open the correct dashboard.
+    router.replace(
+      role === "ADMIN" ? "/admin" : "/business/dashboard"
+    );
+  } catch (error) {
+    console.error("RESET PASSWORD ERROR:", error);
+
+    Alert.alert(
+      "Connection Error",
+      "Could not connect to BookEasy. Check your internet connection."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+  // const handleResetPassword = async () => {
+  //   if (!password || !confirmPassword) {
+  //     Alert.alert("Required", "Please enter both passwords.");
+  //     return;
+  //   }
+
+  //   if (password.length < 6) {
+  //     Alert.alert(
+  //       "Invalid Password",
+  //       "Password must be at least 6 characters."
+  //     );
+  //     return;
+  //   }
+
+  //   if (password !== confirmPassword) {
+  //     Alert.alert("Password Error", "Passwords do not match.");
+  //     return;
+  //   }
+
+  //   if (!token) {
+  //     Alert.alert(
+  //       "Invalid Link",
+  //       "The password reset link is invalid."
+  //     );
+  //     return;
+  //   }
+
+  //   try {
+  //     setLoading(true);
+
+  //     const url = `${API_URL}/auth/reset-password/${token}`;
+
+  //     console.log("RESET PASSWORD URL:", url);
+
+  //     const response = await fetch(url, {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //       },
+  //       body: JSON.stringify({
+  //         password,
+  //       }),
+  //     });
+
+  //     const data = await response.json();
+
+  //     console.log("RESET PASSWORD STATUS:", response.status);
+  //     console.log("RESET PASSWORD RESPONSE:", data);
+
+  //     if (!response.ok) {
+  //       Alert.alert(
+  //         "Reset Failed",
+  //         data.message || "Unable to reset password."
+  //       );
+  //       return;
+  //     }
+
+  //     Alert.alert(
+  //       "Success",
+  //       "Your password has been reset successfully.",
+  //       [
+  //         {
+  //           text: "Go to Login",
+  //           onPress: () => {
+  //             router.replace("/business/login");
+  //           },
+  //         },
+  //       ]
+  //     );
+  //   } catch (error) {
+  //     console.log("RESET PASSWORD ERROR:", error);
+
+  //     Alert.alert(
+  //       "Connection Error",
+  //       "Could not connect to the BookEasy server."
+  //     );
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   return (
     <View style={styles.container}>

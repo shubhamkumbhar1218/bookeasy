@@ -14,6 +14,7 @@ import CustomerDashboard from "./pages/CustomerDashboard";
 import WelcomePage from "./pages/WelcomePage";
 import ResetPassword from "./pages/ResetPassword";
 import BusinessReports from "./pages/BusinessReports";
+import AdminPanel from "./pages/AdminPanel";
 
 import {
   CalendarDays,
@@ -42,19 +43,18 @@ import "./style.css";
 
 const API =
   import.meta.env.VITE_API_URL ||
-  "http://localhost:5000/api";
-
-const token = () =>
-  localStorage.getItem("bookeasy_token");
+  "https://bookeasy-backend-ori1.onrender.com/api";
 
 const api = async (path, options = {}) => {
+  const currentToken = localStorage.getItem("bookeasy_token");
+
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
 
-  if (token()) {
-    headers.Authorization = `Bearer ${token()}`;
+  if (currentToken) {
+    headers.Authorization = `Bearer ${currentToken}`;
   }
 
   const res = await fetch(`${API}${path}`, {
@@ -64,6 +64,20 @@ const api = async (path, options = {}) => {
 
   const data = await res.json().catch(() => ({}));
 
+  // Automatically redirect when the session expires
+  if (
+    res.status === 401 &&
+    currentToken &&
+    !path.startsWith("/auth/")
+  ) {
+    localStorage.removeItem("bookeasy_token");
+    localStorage.removeItem("bookeasy_user");
+
+    window.location.replace("/business/login");
+
+    throw new Error("Session expired. Please log in again.");
+  }
+
   if (!res.ok) {
     throw new Error(
       data.message || "Something went wrong"
@@ -72,6 +86,8 @@ const api = async (path, options = {}) => {
 
   return data;
 };
+
+
 
 // ===============================
 // AUTH
@@ -295,43 +311,43 @@ function Auth({ onLogin, initialMode = "login" }) {
                 required
               />
 
-              <select
-                value={form.category}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    category: e.target.value,
-                  })
-                }
-              >
-                <option value="salon">
-                  Salon
-                </option>
-
-                <option value="barber">
-                  Barber
-                </option>
-
-                <option value="tutor">
-                  Tutor
-                </option>
-
-                <option value="gym">
-                  Gym
-                </option>
-
-                <option value="repair shop">
-                  Repair Shop
-                </option>
-
-                <option value="hospital">
-                  Hospital
-                </option>
-
-                <option value="other">
-                  Other
-                </option>
-              </select>
+              
+<select
+  value={form.category}
+  onChange={(e) =>
+    setForm({
+      ...form,
+      category: e.target.value,
+    })
+  }
+>
+  <option value="salon">Salon</option>
+  <option value="barber">Barber</option>
+  <option value="tutor">Tutor</option>
+  <option value="gym">Gym</option>
+  <option value="repair shop">Repair Shop</option>
+  <option value="hospital">Hospital</option>
+  <option value="dental clinic">Dental Clinic</option>
+  <option value="doctor / clinic">Doctor / Clinic</option>
+  <option value="physiotherapy">Physiotherapy</option>
+  <option value="spa & wellness">Spa & Wellness</option>
+  <option value="yoga & meditation">Yoga & Meditation</option>
+  <option value="pet clinic / veterinary">Pet Clinic / Veterinary</option>
+  <option value="car & bike service">Car & Bike Service</option>
+  <option value="photography studio">Photography Studio</option>
+  <option value="coaching classes">Coaching Classes</option>
+  <option value="makeup artist">Makeup Artist</option>
+  <option value="tailor">Tailor</option>
+  <option value="plumber">Plumber</option>
+  <option value="electrician">Electrician</option>
+  <option value="computer repair">Computer Repair</option>
+  <option value="consultant">Consultant</option>
+  <option value="driving school">Driving School</option>
+  <option value="diagnostic lab">Diagnostic Lab</option>
+  <option value="nutritionist / dietitian">Nutritionist / Dietitian</option>
+  <option value="laundry & dry cleaning">Laundry & Dry Cleaning</option>
+  <option value="other">Other</option>
+</select>
 
               <input
                 placeholder="Phone"
@@ -505,6 +521,13 @@ function SettingsPage({ user, onUserUpdate, onBack }) {
   const [copied, setCopied] = useState(false);
   const [qrCopied, setQrCopied] = useState(false);
 
+  const [profilePhoto, setProfilePhoto] = useState(
+  user?.profilePhoto || ""
+);
+const [uploadingPhoto, setUploadingPhoto] = useState(false);
+const [photoMessage, setPhotoMessage] = useState("");
+const [photoError, setPhotoError] = useState("");
+
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -512,6 +535,16 @@ function SettingsPage({ user, onUserUpdate, onBack }) {
         setError("");
 
         const data = await api("/business/profile/me");
+
+        setProfilePhoto(
+  data.user?.profilePhoto ||
+  data.profilePhoto ||
+  data.user?.business?.profilePhoto ||
+  data.profile?.profilePhoto ||
+  data.profilePhotoUrl ||
+  user?.profilePhoto ||
+  ""
+);
 
         setForm({
           name: data.name || "",
@@ -594,6 +627,164 @@ function SettingsPage({ user, onUserUpdate, onBack }) {
       setSaving(false);
     }
   };
+
+  
+const savePhotoToUser = (photoUrl, publicId = "") => {
+  const savedUser = JSON.parse(
+    localStorage.getItem("bookeasy_user") || "{}"
+  );
+
+  const updatedUser = {
+    ...savedUser,
+    ...user,
+    profilePhoto: photoUrl,
+    profilePhotoPublicId: publicId,
+  };
+
+  localStorage.setItem(
+    "bookeasy_user",
+    JSON.stringify(updatedUser)
+  );
+
+  onUserUpdate(updatedUser);
+};
+
+const handlePhotoUpload = async (event) => {
+  const file = event.target.files?.[0];
+
+  // Allow selecting the same file again later.
+  event.target.value = "";
+
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    setPhotoError("Please select an image file.");
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    setPhotoError("Image size must be 5 MB or less.");
+    return;
+  }
+
+  const token = localStorage.getItem("bookeasy_token");
+
+  if (!token) {
+    setPhotoError("Session expired. Please log in again.");
+    window.location.replace("/business/login");
+    return;
+  }
+
+  try {
+    setUploadingPhoto(true);
+    setPhotoMessage("");
+    setPhotoError("");
+
+    const formData = new FormData();
+    formData.append("profilePhoto", file);
+
+    const response = await fetch(
+      `${API}/business/profile/photo`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        data.message || "Failed to upload business photo."
+      );
+    }
+
+    const photoUrl =
+      data.user?.profilePhoto ||
+      data.profilePhoto ||
+      "";
+
+    if (!photoUrl) {
+      throw new Error(
+        "Upload response did not contain the photo URL."
+      );
+    }
+
+    const publicId =
+      data.user?.profilePhotoPublicId ||
+      data.profilePhotoPublicId ||
+      user?.profilePhotoPublicId ||
+      "";
+
+    setProfilePhoto(photoUrl);
+    savePhotoToUser(photoUrl, publicId);
+    setPhotoMessage("Business photo updated successfully.");
+  } catch (error) {
+    console.error("Business photo upload error:", error);
+    setPhotoError(
+      error.message || "Unable to upload business photo."
+    );
+  } finally {
+    setUploadingPhoto(false);
+  }
+};
+
+const handleRemovePhoto = async () => {
+  if (!profilePhoto || uploadingPhoto) return;
+
+  const confirmed = window.confirm(
+    "Are you sure you want to remove your business photo?"
+  );
+
+  if (!confirmed) return;
+
+  const token = localStorage.getItem("bookeasy_token");
+
+  if (!token) {
+    setPhotoError("Session expired. Please log in again.");
+    window.location.replace("/business/login");
+    return;
+  }
+
+  try {
+    setUploadingPhoto(true);
+    setPhotoMessage("");
+    setPhotoError("");
+
+    const response = await fetch(
+      `${API}/business/profile/photo`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        data.message || "Failed to remove business photo."
+      );
+    }
+
+    setProfilePhoto("");
+    savePhotoToUser("", "");
+    setPhotoMessage("Business photo removed successfully.");
+  } catch (error) {
+    console.error("Business photo removal error:", error);
+    setPhotoError(
+      error.message || "Unable to remove business photo."
+    );
+  } finally {
+    setUploadingPhoto(false);
+  }
+};
+
 
   const copyBookingLink = async () => {
     const bookingLink = `${window.location.origin}/book/${user.businessSlug}`;
@@ -754,18 +945,38 @@ const copyQRBookingLink = async () => {
 
               <label>
                 Business type
-                <select
-                  name="businessType"
-                  value={form.businessType}
-                  onChange={handleChange}
-                >
-                  <option value="salon">Salon</option>
-                  <option value="barber">Barber</option>
-                  <option value="tutor">Tutor</option>
-                  <option value="gym">Gym</option>
-                  <option value="repair">Repair</option>
-                  <option value="other">Other</option>
-                </select>
+<select
+  name="businessType"
+  value={form.businessType}
+  onChange={handleChange}
+>
+<option value="salon">Salon</option>
+  <option value="barber">Barber</option>
+  <option value="tutor">Tutor</option>
+  <option value="gym">Gym</option>
+  <option value="repair shop">Repair Shop</option>
+  <option value="hospital">Hospital</option>
+  <option value="dental clinic">Dental Clinic</option>
+  <option value="doctor / clinic">Doctor / Clinic</option>
+  <option value="physiotherapy">Physiotherapy</option>
+  <option value="spa & wellness">Spa & Wellness</option>
+  <option value="yoga & meditation">Yoga & Meditation</option>
+  <option value="pet clinic / veterinary">Pet Clinic / Veterinary</option>
+  <option value="car & bike service">Car & Bike Service</option>
+  <option value="photography studio">Photography Studio</option>
+  <option value="coaching classes">Coaching Classes</option>
+  <option value="makeup artist">Makeup Artist</option>
+  <option value="tailor">Tailor</option>
+  <option value="plumber">Plumber</option>
+  <option value="electrician">Electrician</option>
+  <option value="computer repair">Computer Repair</option>
+  <option value="consultant">Consultant</option>
+  <option value="driving school">Driving School</option>
+  <option value="diagnostic lab">Diagnostic Lab</option>
+  <option value="nutritionist / dietitian">Nutritionist / Dietitian</option>
+  <option value="laundry & dry cleaning">Laundry & Dry Cleaning</option>
+  <option value="other">Other</option>
+   </select>
               </label>
 
               <label>
@@ -789,6 +1000,133 @@ const copyQRBookingLink = async () => {
               </label>
             </div>
           </section>
+
+          
+{/* BUSINESS PROFILE PHOTO */}
+
+<section className="settings-card">
+  <div className="settings-card-header">
+    <div>
+      <p className="step-number">BUSINESS PROFILE PHOTO</p>
+      <h3>Your business image</h3>
+      <p className="muted">
+        Upload a photo to represent your business.
+        JPG, PNG, and WebP images up to 5 MB.
+      </p>
+    </div>
+  </div>
+
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "20px",
+      flexWrap: "wrap",
+      marginTop: "16px",
+    }}
+  >
+    <div
+      style={{
+        width: "120px",
+        height: "120px",
+        borderRadius: "16px",
+        overflow: "hidden",
+        border: "1px solid #e5e7eb",
+        background: "#f3f4f6",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      {profilePhoto ? (
+        <img
+          src={profilePhoto}
+          alt="Business profile"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
+      ) : (
+        <Store size={42} color="#9ca3af" />
+      )}
+    </div>
+
+    <div style={{ flex: "1 1 220px" }}>
+      <p style={{ fontWeight: 600, marginTop: 0 }}>
+        {profilePhoto
+          ? "Business photo uploaded"
+          : "No business photo yet"}
+      </p>
+
+      <p className="muted">
+        {profilePhoto
+          ? "You can change or remove your current photo."
+          : "Choose a clear image of your business or logo."}
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          gap: "10px",
+          flexWrap: "wrap",
+          marginTop: "12px",
+        }}
+      >
+        <label
+          className="primary"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: uploadingPhoto ? "wait" : "pointer",
+            opacity: uploadingPhoto ? 0.6 : 1,
+          }}
+        >
+          {uploadingPhoto
+            ? "Please wait..."
+            : profilePhoto
+              ? "Change Photo"
+              : "Upload Photo"}
+
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handlePhotoUpload}
+            disabled={uploadingPhoto}
+            style={{ display: "none" }}
+          />
+        </label>
+
+        {profilePhoto && (
+          <button
+            className="secondary"
+            type="button"
+            onClick={handleRemovePhoto}
+            disabled={uploadingPhoto}
+          >
+            Remove Photo
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+
+  {photoMessage && (
+    <div className="success settings-alert" role="status">
+      {photoMessage}
+    </div>
+  )}
+
+  {photoError && (
+    <div className="error settings-alert" role="alert">
+      {photoError}
+    </div>
+  )}
+</section>
+
 
           {/* WORKING HOURS */}
 
@@ -1090,6 +1428,9 @@ const [showNotifications, setShowNotifications] = useState(false);
   const [bookings, setBookings] =
     useState([]);
 
+  const [bookingDateFilter, setBookingDateFilter] =
+  useState("");
+
   const [reschedulingBooking, setReschedulingBooking] =
   useState(null);
 
@@ -1136,6 +1477,43 @@ const [rescheduleLoading, setRescheduleLoading] =
   // ===============================
   // START EDIT SERVICE
   // ===============================
+
+  const [profilePhoto, setProfilePhoto] = useState(
+  user?.profilePhoto || ""
+);
+
+useEffect(() => {
+  const loadBusinessPhoto = async () => {
+    try {
+      const data = await api("/business/profile/me");
+
+      const photo =
+        data.profilePhoto ||
+        data.user?.profilePhoto ||
+        "";
+
+      setProfilePhoto(photo);
+
+      // Refresh the cached website user data too.
+      const savedUser = JSON.parse(
+        localStorage.getItem("bookeasy_user") || "{}"
+      );
+
+      localStorage.setItem(
+        "bookeasy_user",
+        JSON.stringify({
+          ...savedUser,
+          profilePhoto: photo,
+        })
+      );
+    } catch (error) {
+      console.error("Unable to load business photo:", error);
+    }
+  };
+
+  loadBusinessPhoto();
+}, []);
+
 
   const startEditService = (service) => {
     setEditingService(service._id);
@@ -1521,6 +1899,72 @@ const markAllNotificationsRead = async () => {
     }
   };
 
+  
+  // ===============================
+  // BOOKING SORTING AND DATE FILTER
+  // ===============================
+
+  const getAppointmentDateKey = (bookingDate) => {
+    if (!bookingDate) return "";
+
+    const date = new Date(bookingDate);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+
+    const values = {};
+
+    parts.forEach((part) => {
+      if (part.type !== "literal") {
+        values[part.type] = part.value;
+      }
+    });
+
+    return `${values.year}-${values.month}-${values.day}`;
+  };
+
+  // Most recently created bookings first
+  const sortedBookings = [...bookings].sort((a, b) => {
+    const dateA = new Date(
+      a.createdAt || a.bookingDate || 0
+    ).getTime();
+
+    const dateB = new Date(
+      b.createdAt || b.bookingDate || 0
+    ).getTime();
+
+    return dateB - dateA;
+  });
+
+  // All dates on which appointments are scheduled
+  const appointmentDateOptions = [
+    ...new Set(
+      bookings
+        .map((booking) =>
+          getAppointmentDateKey(booking.bookingDate)
+        )
+        .filter(Boolean)
+    ),
+  ].sort();
+
+  // Apply the selected appointment date
+  const filteredBookings = sortedBookings.filter((booking) => {
+    if (!bookingDateFilter) return true;
+
+    return (
+      getAppointmentDateKey(booking.bookingDate) ===
+      bookingDateFilter
+    );
+  });
+
 
   // ===============================
 // RESCHEDULE BOOKING
@@ -1677,10 +2121,40 @@ const rescheduleBooking = async () => {
           </span>
         </div>
 
-        <div className="header-right">
-  <span>
-    {user.businessName}
-  </span>
+<div className="header-right">
+  {profilePhoto ? (
+    <img
+      src={profilePhoto}
+      alt={`${user.businessName || "Business"} profile`}
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+      }}
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: "50%",
+        objectFit: "cover",
+        border: "2px solid #e5e7eb",
+      }}
+    />
+  ) : (
+    <div
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#f3f4f6",
+      }}
+    >
+      <Store size={22} />
+    </div>
+  )}
+
+  <span>{user.businessName}</span>
+  
 
   <div className="notification-wrapper">
   <button
@@ -2150,8 +2624,50 @@ const rescheduleBooking = async () => {
               <CalendarDays />
             </div>
 
-            <div className="booking-list">
-              {bookings.map(
+            <div className="booking-filter-row">
+  <label className="booking-filter-control">
+    <CalendarDays size={17} />
+
+    <span>Appointment date</span>
+
+    <input
+      type="date"
+      value={bookingDateFilter}
+      onChange={(e) =>
+        setBookingDateFilter(e.target.value)
+      }
+    />
+  </label>
+
+  <button
+    type="button"
+    className="outline"
+    onClick={() => setBookingDateFilter("")}
+    disabled={!bookingDateFilter}
+  >
+    All bookings
+  </button>
+</div>
+
+<p className="booking-count">
+  {bookingDateFilter
+    ? `Bookings on ${new Date(
+        `${bookingDateFilter}T12:00:00`
+      ).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })}`
+    : "All bookings — newest first"}
+
+  {" · "}
+
+  {filteredBookings.length} booking
+  {filteredBookings.length === 1 ? "" : "s"}
+</p>
+
+<div className="booking-list">
+  {filteredBookings.map(
                 (booking) => (
                   <div
                     className="booking"
@@ -2276,12 +2792,13 @@ const rescheduleBooking = async () => {
                 )
               )}
 
-              {!bookings.length &&
-                !loading && (
-                  <p className="empty">
-                    No bookings yet.
-                  </p>
-                )}
+              {filteredBookings.length === 0 && !loading && (
+  <p className="empty">
+    {bookingDateFilter
+      ? "No bookings found for this date."
+      : "No bookings yet."}
+  </p>
+)}
             </div>
           </section>
         </div>
@@ -2476,27 +2993,36 @@ function App() {
   />
 
   {/* Business Login */}
-  <Route
-    path="/business/login"
-    element={
-      user ? (
-        <Navigate to="/dashboard" />
-      ) : (
-        <Auth
-          onLogin={setUser}
-          initialMode="login"
-        />
-      )
-    }
-  />
+
+{/* Login for Business Owners and Admin */}
+<Route
+  path="/business/login"
+  element={
+    user ? (
+      <Navigate
+        to={user.role === "ADMIN" ? "/admin" : "/dashboard"}
+        replace
+      />
+    ) : (
+      <Auth
+        onLogin={setUser}
+        initialMode="login"
+      />
+    )
+  }
+/>
+
 
   {/* Business Register */}
   <Route
     path="/business/register"
     element={
       user ? (
-        <Navigate to="/dashboard" />
-      ) : (
+  <Navigate
+    to={user.role === "ADMIN" ? "/admin" : "/dashboard"}
+    replace
+  />
+) : (
         <Auth
           onLogin={setUser}
           initialMode="register"
@@ -2506,19 +3032,21 @@ function App() {
   />
 
   {/* Business Dashboard */}
-  <Route
-    path="/dashboard"
-    element={
-      user ? (
-        <Dashboard
-          user={user}
-          logout={logout}
-        />
-      ) : (
-        <Navigate to="/business/login" />
-      )
-    }
-  />
+
+{/* Business Dashboard */}
+<Route
+  path="/dashboard"
+  element={
+    !user ? (
+      <Navigate to="/business/login" replace />
+    ) : user.role === "ADMIN" ? (
+      <Navigate to="/admin" replace />
+    ) : (
+      <Dashboard user={user} logout={logout} />
+    )
+  }
+/>
+
 
   {/* Customer booking status */}
   <Route
@@ -2568,11 +3096,25 @@ function App() {
     }
   />
 
-  {/* Unknown route */}
-  <Route
-    path="*"
-    element={<Navigate to="/" />}
-  />
+  {/* Admin Panel */}
+<Route
+  path="/admin"
+  element={
+    user?.role === "ADMIN" ? (
+      <AdminPanel user={user} logout={logout} />
+    ) : user && user.role !== "ADMIN" ? (
+      <Navigate to="/dashboard" replace />
+    ) : (
+      <Navigate to="/business/login" replace />
+    )
+  }
+/>
+
+{/* Unknown route */}
+<Route
+  path="*"
+  element={<Navigate to="/" replace />}
+/>
 
 </Routes>
     </BrowserRouter>

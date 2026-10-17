@@ -22,7 +22,25 @@ const categories = [
   "gym",
   "repair shop",
   "hospital",
-  "beauty parlour",
+  "dental clinic",
+  "doctor / clinic",
+  "physiotherapy",
+  "spa & wellness",
+  "yoga & meditation",
+  "pet clinic / veterinary",
+  "car & bike service",
+  "photography studio",
+  "coaching classes",
+  "makeup artist",
+  "tailor",
+  "plumber",
+  "electrician",
+  "computer repair",
+  "consultant",
+  "driving school",
+  "diagnostic lab",
+  "nutritionist / dietitian",
+  "laundry & dry cleaning",
   "other",
 ];
 
@@ -116,6 +134,34 @@ export default function BusinessRegister() {
       setLoading(false);
     }
   };
+
+  const formatCategory = (category: string) => {
+  const labels: Record<string, string> = {
+    "repair shop": "Repair Shop",
+    "dental clinic": "Dental Clinic",
+    "doctor / clinic": "Doctor / Clinic",
+    "spa & wellness": "Spa & Wellness",
+    "yoga & meditation": "Yoga & Meditation",
+    "pet clinic / veterinary": "Pet Clinic / Veterinary",
+    "car & bike service": "Car & Bike Service",
+    "photography studio": "Photography Studio",
+    "coaching classes": "Coaching Classes",
+    "computer repair": "Computer Repair",
+    "driving school": "Driving School",
+    "diagnostic lab": "Diagnostic Lab",
+    "nutritionist / dietitian": "Nutritionist / Dietitian",
+    "laundry & dry cleaning": "Laundry & Dry Cleaning",
+  };
+
+  if (labels[category]) {
+    return labels[category];
+  }
+
+  return category
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
 
   return (
     <KeyboardAvoidingView

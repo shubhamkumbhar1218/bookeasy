@@ -18,6 +18,7 @@ import API_URL from "../../api";
 
 type Booking = {
   _id: string;
+  createdAt?: string;
   customerName: string;
   customerPhone: string;
   bookingDate: string;
@@ -31,6 +32,10 @@ type Booking = {
 
 export default function BusinessBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  // Appointment date filter
+const [filterDate, setFilterDate] = useState<Date | null>(null);
+const [showFilterDatePicker, setShowFilterDatePicker] =
+  useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -111,6 +116,63 @@ export default function BusinessBookings() {
   useEffect(() => {
     loadBookings();
   }, []);
+
+  // ================================
+// SORT BOOKINGS AND FILTER BY DATE
+// ================================
+
+const getDateKey = (dateString: string) => {
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const values: Record<string, string> = {};
+
+  parts.forEach((part) => {
+    if (part.type !== "literal") {
+      values[part.type] = part.value;
+    }
+  });
+
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+const selectedDateKey = filterDate
+  ? [
+      filterDate.getFullYear(),
+      String(filterDate.getMonth() + 1).padStart(2, "0"),
+      String(filterDate.getDate()).padStart(2, "0"),
+    ].join("-")
+  : "";
+
+const sortedBookings = [...bookings].sort((a, b) => {
+  const dateA = new Date(
+    a.createdAt || a.bookingDate || 0
+  ).getTime();
+
+  const dateB = new Date(
+    b.createdAt || b.bookingDate || 0
+  ).getTime();
+
+  return dateB - dateA;
+});
+
+const filteredBookings = sortedBookings.filter((booking) => {
+  if (!selectedDateKey) {
+    return true;
+  }
+
+  return getDateKey(booking.bookingDate) === selectedDateKey;
+});
 
   // ================================
   // REFRESH
@@ -409,8 +471,8 @@ export default function BusinessBookings() {
           </Text>
 
           <Text style={styles.headerSubtitle}>
-            {bookings.length} appointment
-            {bookings.length !== 1 ? "s" : ""}
+            {filteredBookings.length} appointment
+            {filteredBookings.length !== 1 ? "s" : ""}
           </Text>
         </View>
 
@@ -424,6 +486,7 @@ export default function BusinessBookings() {
 
       {/* BOOKINGS */}
 
+      
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -433,22 +496,94 @@ export default function BusinessBookings() {
           />
         }
       >
-        {bookings.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>
-              📅
+        {/* DATE FILTER */}
+        <View style={styles.filterCard}>
+          <Text style={styles.filterTitle}>
+            Filter appointments by date
+          </Text>
+
+          <TouchableOpacity
+            style={styles.filterDateButton}
+            onPress={() => setShowFilterDatePicker(true)}
+          >
+            <Text style={styles.filterDateText}>
+              📅{" "}
+              {filterDate
+                ? filterDate.toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : "Select appointment date"}
             </Text>
 
+            <Text style={styles.filterDateArrow}>▼</Text>
+          </TouchableOpacity>
+
+          <View style={styles.filterBottomRow}>
+            <Text style={styles.filterCount}>
+              {filteredBookings.length} appointment
+              {filteredBookings.length !== 1 ? "s" : ""}
+              {filterDate
+                ? " on selected date"
+                : " · newest first"}
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.allBookingsButton,
+                !filterDate &&
+                  styles.allBookingsButtonDisabled,
+              ]}
+              onPress={() => {
+                setFilterDate(null);
+                setShowFilterDatePicker(false);
+              }}
+              disabled={!filterDate}
+            >
+              <Text style={styles.allBookingsText}>
+                All bookings
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* APPOINTMENT DATE PICKER */}
+        {showFilterDatePicker && (
+          <DateTimePicker
+            value={filterDate || new Date()}
+            mode="date"
+            onChange={(event, selectedDate) => {
+              setShowFilterDatePicker(false);
+
+              if (event.type === "set" && selectedDate) {
+                setFilterDate(selectedDate);
+              }
+            }}
+          />
+        )}
+
+        {/* FILTERED BOOKINGS */}
+        
+        {/* FILTERED BOOKINGS */}
+        {filteredBookings.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>📅</Text>
+
             <Text style={styles.emptyTitle}>
-              No bookings yet
+              {filterDate
+                ? "No bookings for this date"
+                : "No bookings yet"}
             </Text>
 
             <Text style={styles.emptyText}>
-              Customer appointments will appear here.
+              {filterDate
+                ? "Try another date or select All bookings."
+                : "Customer appointments will appear here."}
             </Text>
           </View>
         ) : (
-          bookings.map((booking) => {
+          filteredBookings.map((booking) => {
             const statusStyle =
               getStatusStyle(booking.status);
 
@@ -458,28 +593,19 @@ export default function BusinessBookings() {
                 style={styles.bookingCard}
               >
                 {/* CUSTOMER */}
-
                 <View style={styles.bookingTop}>
                   <View style={styles.customerIcon}>
-                    <Text
-                      style={
-                        styles.customerIconText
-                      }
-                    >
+                    <Text style={styles.customerIconText}>
                       👤
                     </Text>
                   </View>
 
                   <View style={styles.customerInfo}>
-                    <Text
-                      style={styles.customerName}
-                    >
+                    <Text style={styles.customerName}>
                       {booking.customerName}
                     </Text>
 
-                    <Text
-                      style={styles.customerPhone}
-                    >
+                    <Text style={styles.customerPhone}>
                       📞 {booking.customerPhone}
                     </Text>
                   </View>
@@ -496,10 +622,7 @@ export default function BusinessBookings() {
                     <Text
                       style={[
                         styles.statusText,
-                        {
-                          color:
-                            statusStyle.color,
-                        },
+                        { color: statusStyle.color },
                       ]}
                     >
                       {booking.status}
@@ -507,59 +630,45 @@ export default function BusinessBookings() {
                   </View>
                 </View>
 
-                {/* DIVIDER */}
-
                 <View style={styles.divider} />
 
                 {/* SERVICE */}
-
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>
                     🛠️ Service
                   </Text>
 
                   <Text style={styles.infoValue}>
-                    {booking.serviceId?.name ||
-                      "Service"}
+                    {booking.serviceId?.name || "Service"}
                   </Text>
                 </View>
 
                 {/* DATE */}
-
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>
                     📅 Date
                   </Text>
 
                   <Text style={styles.infoValue}>
-                    {formatDate(
-                      booking.bookingDate
-                    )}
+                    {formatDate(booking.bookingDate)}
                   </Text>
                 </View>
 
                 {/* TIME */}
-
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>
                     🕐 Time
                   </Text>
 
                   <Text style={styles.infoValue}>
-                    {formatTime(
-                      booking.bookingDate
-                    )}
+                    {formatTime(booking.bookingDate)}
                   </Text>
                 </View>
 
                 {/* PRICE */}
-
-                {booking.serviceId?.price !==
-                  undefined && (
+                {booking.serviceId?.price !== undefined && (
                   <View style={styles.infoRow}>
-                    <Text
-                      style={styles.infoLabel}
-                    >
+                    <Text style={styles.infoLabel}>
                       💰 Price
                     </Text>
 
@@ -570,26 +679,16 @@ export default function BusinessBookings() {
                 )}
 
                 {/* PENDING ACTIONS */}
-
                 {booking.status === "pending" && (
                   <View style={styles.actions}>
                     <TouchableOpacity
-                      style={
-                        styles.confirmButton
-                      }
+                      style={styles.confirmButton}
                       onPress={() =>
-                        confirmAction(
-                          booking,
-                          "confirm"
-                        )
+                        confirmAction(booking, "confirm")
                       }
-                      disabled={
-                        actionLoading !== null
-                      }
+                      disabled={actionLoading !== null}
                     >
-                      <Text
-                        style={styles.confirmText}
-                      >
+                      <Text style={styles.confirmText}>
                         {actionLoading ===
                         `${booking._id}-confirm`
                           ? "..."
@@ -598,22 +697,13 @@ export default function BusinessBookings() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={
-                        styles.cancelButton
-                      }
+                      style={styles.cancelButton}
                       onPress={() =>
-                        confirmAction(
-                          booking,
-                          "cancel"
-                        )
+                        confirmAction(booking, "cancel")
                       }
-                      disabled={
-                        actionLoading !== null
-                      }
+                      disabled={actionLoading !== null}
                     >
-                      <Text
-                        style={styles.cancelText}
-                      >
+                      <Text style={styles.cancelText}>
                         {actionLoading ===
                         `${booking._id}-cancel`
                           ? "..."
@@ -624,48 +714,26 @@ export default function BusinessBookings() {
                 )}
 
                 {/* CONFIRMED ACTIONS */}
-
                 {booking.status === "confirmed" && (
                   <>
                     <TouchableOpacity
-                      style={
-                        styles.rescheduleButton
-                      }
-                      onPress={() =>
-                        openReschedule(booking)
-                      }
-                      disabled={
-                        actionLoading !== null
-                      }
+                      style={styles.rescheduleButton}
+                      onPress={() => openReschedule(booking)}
+                      disabled={actionLoading !== null}
                     >
-                      <Text
-                        style={
-                          styles.rescheduleText
-                        }
-                      >
+                      <Text style={styles.rescheduleText}>
                         📅 Reschedule
                       </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={
-                        styles.completeButton
-                      }
+                      style={styles.completeButton}
                       onPress={() =>
-                        confirmAction(
-                          booking,
-                          "complete"
-                        )
+                        confirmAction(booking, "complete")
                       }
-                      disabled={
-                        actionLoading !== null
-                      }
+                      disabled={actionLoading !== null}
                     >
-                      <Text
-                        style={
-                          styles.completeText
-                        }
-                      >
+                      <Text style={styles.completeText}>
                         {actionLoading ===
                         `${booking._id}-complete`
                           ? "Updating..."
@@ -679,6 +747,7 @@ export default function BusinessBookings() {
           })
         )}
       </ScrollView>
+
 
       {/* ================================ */}
       {/* RESCHEDULE MODAL */}
@@ -1225,5 +1294,81 @@ const styles = StyleSheet.create({
   modalSaveText: {
     color: "#ffffff",
     fontWeight: "800",
+  },
+
+    // ==================================
+  // BOOKING DATE FILTER
+  // ==================================
+
+  filterCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 15,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+
+  filterTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 12,
+  },
+
+  filterDateButton: {
+    minHeight: 46,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  filterDateText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+
+  filterDateArrow: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginLeft: 8,
+  },
+
+  filterBottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 12,
+  },
+
+  filterCount: {
+    flex: 1,
+    fontSize: 12,
+    color: "#6b7280",
+  },
+
+  allBookingsButton: {
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 9,
+  },
+
+  allBookingsButtonDisabled: {
+    opacity: 0.5,
+  },
+
+  allBookingsText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#2563eb",
   },
 });

@@ -4,11 +4,11 @@
     "slug": "bookeasy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/bookeasy-logo.png",
     "scheme": "bookeasy",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/bookeasy-logo.png"
     },
     "android": {
       "package": "com.bookeasy.app",

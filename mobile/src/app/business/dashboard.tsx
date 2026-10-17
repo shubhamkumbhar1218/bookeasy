@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BackHandler } from "react-native";
 import {
   ActivityIndicator,
@@ -7,12 +7,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  Image,
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { registerPushTokenWithBackend } from "../../services/notifications";
 import API_URL from "../../api";
 
 type User = {
@@ -22,6 +23,7 @@ type User = {
   businessName: string;
   businessSlug: string;
   businessType: string;
+  profilePhoto?: string;
 };
 
 export default function BusinessDashboard() {
@@ -29,29 +31,89 @@ export default function BusinessDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadDashboard = async () => {
-    try {
-      const token = await AsyncStorage.getItem("bookeasy_token");
-      const userData = await AsyncStorage.getItem("bookeasy_user");
 
-      if (!token || !userData) {
+const loadDashboard = useCallback(async () => {
+  try {
+    const token = await AsyncStorage.getItem("bookeasy_token");
+    const userData = await AsyncStorage.getItem("bookeasy_user");
+
+    if (!token || !userData) {
+      router.replace("/business/login");
+      return;
+    }
+
+    // Display cached data immediately while fetching fresh data.
+    const parsedUser = JSON.parse(userData);
+    setUser(parsedUser);
+
+    try {
+      // Fetch the latest business profile from MongoDB via Render.
+      const response = await fetch(
+        `${API_URL}/business/profile/me`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const profileData = await response.json();
+
+      if (response.status === 401) {
+        await AsyncStorage.multiRemove([
+          "bookeasy_token",
+          "bookeasy_user",
+          "bookeasy_role",
+        ]);
         router.replace("/business/login");
         return;
       }
 
-      const parsedUser = JSON.parse(userData);
-      setUser(parsedUser);
-    } catch (error) {
-      console.log("Dashboard error:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+      if (!response.ok) {
+        throw new Error(
+          profileData.message || "Unable to refresh business profile."
+        );
+      }
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
+      // The backend GET endpoint returns the user directly.
+      const updatedUser = {
+        ...parsedUser,
+        ...profileData,
+        id: parsedUser.id || profileData.id || profileData._id,
+        profilePhoto:
+          typeof profileData.profilePhoto === "string"
+            ? profileData.profilePhoto
+            : parsedUser.profilePhoto || "",
+      };
+
+      // Update both the dashboard and local cache.
+      setUser(updatedUser);
+
+      await AsyncStorage.setItem(
+        "bookeasy_user",
+        JSON.stringify(updatedUser)
+      );
+    } catch (profileError) {
+      // Keep cached data visible if the network request fails.
+      console.log("Business profile refresh error:", profileError);
+    }
+
+    void registerPushTokenWithBackend("business");
+  } catch (error) {
+    console.log("Dashboard error:", error);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+}, []);
+
+
+useFocusEffect(
+  useCallback(() => {
+    void loadDashboard();
+  }, [loadDashboard])
+);
 
   useEffect(() => {
   const backAction = () => {
@@ -125,32 +187,48 @@ export default function BusinessDashboard() {
         {/* HEADER */}
         {/* ========================= */}
 
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.greeting}>
-              Welcome back 👋
-            </Text>
 
-            <Text style={styles.businessName}>
-              {user?.businessName || "Your Business"}
-            </Text>
+<View style={styles.header}>
+  <View style={styles.headerText}>
+    <Text style={styles.greeting}>
+      Welcome back 👋
+    </Text>
 
-            <Text style={styles.businessType}>
-              {user?.businessType || "Business"}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.notificationButton}
-            onPress={() =>
-              router.push("/business/notifications")
-            }
-          >
-            <Text style={styles.notificationIcon}>
-              🔔
-            </Text>
-          </TouchableOpacity>
+    <View style={styles.businessIdentity}>
+      {user?.profilePhoto ? (
+        <Image
+          source={{ uri: user.profilePhoto }}
+          style={styles.headerBusinessPhoto}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.headerPhotoPlaceholder}>
+          <Text style={styles.headerPhotoIcon}>🏪</Text>
         </View>
+      )}
+
+      <View style={styles.businessInfo}>
+        <Text style={styles.businessName} numberOfLines={2}>
+          {user?.businessName || "Your Business"}
+        </Text>
+
+        <Text style={styles.businessType}>
+          {user?.businessType || "Business"}
+        </Text>
+      </View>
+    </View>
+  </View>
+
+  <TouchableOpacity
+    style={styles.notificationButton}
+    onPress={() => router.push("/business/notifications")}
+    activeOpacity={0.75}
+    accessibilityLabel="Open notifications"
+  >
+    <Text style={styles.notificationIcon}>🔔</Text>
+  </TouchableOpacity>
+</View>
+
 
         {/* ========================= */}
         {/* WELCOME CARD */}
@@ -232,26 +310,21 @@ export default function BusinessDashboard() {
 
           {/* Reports */}
 
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() =>
-              router.push("/business/reports")
-            }
-          >
-            <View style={styles.actionIconBox}>
-              <Text style={styles.actionIcon}>
-                📊
-              </Text>
-            </View>
+{/* Reports */}
+<TouchableOpacity
+  style={styles.actionCard}
+  onPress={() => router.push("/business/reports")}
+>
+  <View style={styles.actionIconBox}>
+    <Text style={styles.actionIcon}>📈</Text>
+  </View>
 
-            <Text style={styles.actionTitle}>
-              Reports
-            </Text>
+  <Text style={styles.actionTitle}>Reports</Text>
 
-            <Text style={styles.actionDescription}>
-              View business analytics
-            </Text>
-          </TouchableOpacity>
+  <Text style={styles.actionDescription}>
+    View business performance
+  </Text>
+</TouchableOpacity>
 
           {/* Notifications */}
 
@@ -352,7 +425,7 @@ export default function BusinessDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#F7F6F0",
   },
 
   content: {
@@ -364,77 +437,122 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#F7F6F0",
   },
 
   loadingText: {
     marginTop: 12,
-    color: "#6b7280",
+    color: "#64766A",
     fontSize: 14,
   },
-
-  /* ========================= */
-  /* HEADER */
-  /* ========================= */
 
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#2563eb",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
+    backgroundColor: "#E9F0E8",
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: "#D8E3D7",
+    elevation: 2,
+    shadowColor: "#243B35",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
   },
 
   headerText: {
     flex: 1,
+    minWidth: 0,
   },
 
   greeting: {
-    color: "#dbeafe",
-    fontSize: 14,
-    marginBottom: 5,
+    color: "#64766A",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 14,
+  },
+
+  businessIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+
+  businessInfo: {
+    flex: 1,
+    minWidth: 0,
   },
 
   businessName: {
-    color: "#ffffff",
-    fontSize: 23,
+    color: "#243B35",
+    fontSize: 20,
     fontWeight: "800",
   },
 
   businessType: {
-    color: "#dbeafe",
+    color: "#64766A",
     fontSize: 13,
     marginTop: 5,
     textTransform: "capitalize",
   },
 
+  headerBusinessPhoto: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: "#F7F5EF",
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    marginRight: 13,
+  },
+
+  headerPhotoPlaceholder: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: "#F7F5EF",
+    borderWidth: 2,
+    borderColor: "#D2DED0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 13,
+  },
+
+  headerPhotoIcon: {
+    fontSize: 28,
+  },
+
   notificationButton: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
+    borderRadius: 17,
+    backgroundColor: "#2F4F43",
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 12,
+    marginLeft: 10,
+    borderWidth: 1,
+    borderColor: "#49675A",
+    elevation: 3,
+    shadowColor: "#243B35",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
 
   notificationIcon: {
     fontSize: 22,
   },
 
-  /* ========================= */
-  /* WELCOME CARD */
-  /* ========================= */
-
   welcomeCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 18,
     padding: 18,
     marginBottom: 25,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#E5E7DF",
     flexDirection: "row",
     alignItems: "center",
   },
@@ -443,7 +561,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 15,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#E9F0E8",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 14,
@@ -460,30 +578,22 @@ const styles = StyleSheet.create({
   welcomeTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#111827",
+    color: "#243B35",
   },
 
   welcomeDescription: {
     fontSize: 12,
-    color: "#6b7280",
+    color: "#64766A",
     lineHeight: 18,
     marginTop: 5,
   },
 
-  /* ========================= */
-  /* SECTION */
-  /* ========================= */
-
   sectionTitle: {
     fontSize: 19,
     fontWeight: "800",
-    color: "#111827",
+    color: "#243B35",
     marginBottom: 14,
   },
-
-  /* ========================= */
-  /* ACTION GRID */
-  /* ========================= */
 
   actionGrid: {
     flexDirection: "row",
@@ -494,19 +604,24 @@ const styles = StyleSheet.create({
 
   actionCard: {
     width: "48%",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#E5E7DF",
+    elevation: 1,
+    shadowColor: "#243B35",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
   },
 
   actionIconBox: {
     width: 44,
     height: 44,
-    borderRadius: 12,
-    backgroundColor: "#eff6ff",
+    borderRadius: 14,
+    backgroundColor: "#E9F0E8",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 11,
@@ -519,23 +634,19 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: "#243B35",
   },
 
   actionDescription: {
     fontSize: 12,
-    color: "#6b7280",
+    color: "#64766A",
     marginTop: 4,
     lineHeight: 17,
   },
 
-  /* ========================= */
-  /* REPORTS BANNER */
-  /* ========================= */
-
   reportsBanner: {
-    backgroundColor: "#111827",
-    borderRadius: 17,
+    backgroundColor: "#243B35",
+    borderRadius: 20,
     padding: 17,
     marginTop: 8,
     marginBottom: 25,
@@ -546,8 +657,8 @@ const styles = StyleSheet.create({
   reportsBannerIcon: {
     width: 46,
     height: 46,
-    borderRadius: 13,
-    backgroundColor: "#1f2937",
+    borderRadius: 14,
+    backgroundColor: "#365448",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 13,
@@ -562,38 +673,36 @@ const styles = StyleSheet.create({
   },
 
   reportsBannerTitle: {
-    color: "#ffffff",
+    color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "800",
   },
 
   reportsBannerDescription: {
-    color: "#d1d5db",
+    color: "#D7E2D9",
     fontSize: 12,
     lineHeight: 17,
     marginTop: 4,
   },
 
   reportsArrow: {
-    color: "#ffffff",
+    color: "#FFFFFF",
     fontSize: 24,
     marginLeft: 10,
   },
 
-  /* ========================= */
-  /* LOGOUT */
-  /* ========================= */
-
   logoutButton: {
     height: 50,
-    borderRadius: 12,
-    backgroundColor: "#fee2e2",
+    borderRadius: 14,
+    backgroundColor: "#FCE9E6",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F4D3CE",
   },
 
   logoutText: {
-    color: "#dc2626",
+    color: "#B7463A",
     fontSize: 15,
     fontWeight: "800",
   },

@@ -74,19 +74,38 @@ profilePhotoPublicId: {
 
 
 
-    businessType: {
-      type: String,
-      enum: [
-        "salon",
-        "barber",
-        "tutor",
-        "gym",
-        "repair shop",
-        "hospital",
-        "other",
-      ],
-      default: "other",
-    },
+businessType: {
+  type: String,
+  enum: [
+    "salon",
+    "barber",
+    "tutor",
+    "gym",
+    "repair shop",
+    "hospital",
+    "dental clinic",
+    "doctor / clinic",
+    "physiotherapy",
+    "spa & wellness",
+    "yoga & meditation",
+    "pet clinic / veterinary",
+    "car & bike service",
+    "photography studio",
+    "coaching classes",
+    "makeup artist",
+    "tailor",
+    "plumber",
+    "electrician",
+    "computer repair",
+    "consultant",
+    "driving school",
+    "diagnostic lab",
+    "nutritionist / dietitian",
+    "laundry & dry cleaning",
+    "other",
+  ],
+  default: "other",
+},
 
     phone: {
       type: String,

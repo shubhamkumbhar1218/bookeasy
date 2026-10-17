@@ -2397,3 +2397,57 @@ select {
     width: 100%;
   }
 }
+
+
+/* Booking date filter */
+.booking-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0 8px;
+}
+
+.booking-filter-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.booking-filter-control input {
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  min-height: 40px;
+}
+
+.booking-count {
+  color: #6b7280;
+  font-size: 13px;
+  margin: 8px 0 14px;
+}
+
+@media (max-width: 520px) {
+  .booking-filter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .booking-filter-control {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .booking-filter-control input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
