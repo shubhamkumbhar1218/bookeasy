@@ -15,6 +15,7 @@ import { router, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { registerPushTokenWithBackend } from "../../services/notifications";
 import API_URL from "../../api";
+import subscription from "./subscription";
 
 type User = {
   id: string;
@@ -327,6 +328,23 @@ useFocusEffect(
 </TouchableOpacity>
 
           {/* Notifications */}
+
+          {/* Subscription */}
+<TouchableOpacity
+  style={styles.actionCard}
+  onPress={() => router.push("/business/subscription" as any)}
+  activeOpacity={0.8}
+>
+  <View style={styles.actionIconBox}>
+    <Text style={styles.actionIcon}>👑</Text>
+  </View>
+
+  <Text style={styles.actionTitle}>Subscription</Text>
+
+  <Text style={styles.actionDescription}>
+    View your plan and booking limits
+  </Text>
+</TouchableOpacity>
 
           <TouchableOpacity
             style={styles.actionCard}

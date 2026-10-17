@@ -55,6 +55,16 @@ export default function AdminPanel({ user, logout }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [updatingId, setUpdatingId] = useState("");
+  
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [subscriptionSearch, setSubscriptionSearch] = useState("");
+  const [subscriptionPlanFilter, setSubscriptionPlanFilter] = useState("");
+  const [subscriptionStatusFilter, setSubscriptionStatusFilter] = useState("");
+  const [planDrafts, setPlanDrafts] = useState({});
+  const [statusDrafts, setStatusDrafts] = useState({});
+  const [updatingSubscriptionId, setUpdatingSubscriptionId] = useState("");
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [subscriptionPlanCounts, setSubscriptionPlanCounts] = useState([]);
 
   const loadData = useCallback(async (searchText = search) => {
     try {
@@ -78,9 +88,71 @@ export default function AdminPanel({ user, logout }) {
     }
   }, [search]);
 
+  
+  const loadSubscriptions = useCallback(async () => {
+    try {
+      setSubscriptionLoading(true);
+      setError("");
+
+      const query = new URLSearchParams();
+      if (subscriptionSearch.trim()) {
+        query.set("search", subscriptionSearch.trim());
+      }
+      if (subscriptionPlanFilter) {
+        query.set("plan", subscriptionPlanFilter);
+      }
+      if (subscriptionStatusFilter) {
+        query.set("status", subscriptionStatusFilter);
+      }
+
+      const data = await adminApi(
+        `/admin/subscriptions?${query.toString()}`
+      );
+
+      const businesses = data.businesses || [];
+      setSubscriptionPlanCounts(data.plans || []);
+
+      setSubscriptions(businesses);
+
+      setPlanDrafts((previous) => {
+        const next = { ...previous };
+        businesses.forEach((business) => {
+          if (next[business._id] === undefined) {
+            next[business._id] = business.plan || "FREE";
+          }
+        });
+        return next;
+      });
+
+      setStatusDrafts((previous) => {
+        const next = { ...previous };
+        businesses.forEach((business) => {
+          if (next[business._id] === undefined) {
+            next[business._id] =
+              business.subscriptionStatus || "ACTIVE";
+          }
+        });
+        return next;
+      });
+    } catch (err) {
+      setError(err.message || "Unable to load subscriptions");
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  }, [
+    subscriptionSearch,
+    subscriptionPlanFilter,
+    subscriptionStatusFilter,
+  ]);
+
+
   useEffect(() => {
-    loadData("");
-  }, []);
+  loadData("");
+}, []);
+
+useEffect(() => {
+  loadSubscriptions();
+}, [loadSubscriptions]);
 
   const toggleOwner = async (owner) => {
     const nextActive = owner.isActive === false;
@@ -116,6 +188,46 @@ export default function AdminPanel({ user, logout }) {
       setUpdatingId("");
     }
   };
+
+  
+  const updateSubscription = async (business) => {
+    const plan = planDrafts[business._id] || business.plan || "FREE";
+    const subscriptionStatus =
+      plan === "FREE"
+        ? "ACTIVE"
+        : statusDrafts[business._id] || "ACTIVE";
+
+    const confirmed = window.confirm(
+      `Assign ${plan} to ${business.businessName || business.name}?\n\n` +
+      "This is a manual admin assignment. It does not process a payment."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setUpdatingSubscriptionId(business._id);
+      setError("");
+      setMessage("");
+
+      const result = await adminApi(
+        `/admin/subscriptions/${business._id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ plan, subscriptionStatus }),
+        }
+      );
+
+      setMessage(result.message || "Subscription updated successfully.");
+
+      // Refresh the subscription list from the server.
+      await loadSubscriptions();
+    } catch (err) {
+      setError(err.message || "Unable to update subscription");
+    } finally {
+      setUpdatingSubscriptionId("");
+    }
+  };
+
 
   const cardStyle = {
     background: "#fff",
@@ -460,6 +572,286 @@ export default function AdminPanel({ user, logout }) {
             Showing up to 500 matching business owners, newest registrations first.
           </p>
         </section>
+
+        
+  <section style={{ ...cardStyle, marginTop: 24 }}>
+    <h2 style={{ marginTop: 0 }}>Subscription Management</h2>
+    <p style={{ color: "#64748b", marginTop: -6 }}>
+      Review plans and manually manage subscription access.
+      Plan changes do not collect payments.
+    </p>
+
+
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+        gap: 12,
+        marginBottom: 20,
+      }}
+    >
+      {subscriptionPlanCounts.map((plan) => (
+        <div
+          key={plan.id}
+          style={{
+            border: "1px solid #e5e7eb",
+            borderRadius: 12,
+            padding: 14,
+            background: "#f8fafc",
+          }}
+        >
+          <div style={{ color: "#64748b", fontSize: 13 }}>
+            {plan.name}
+          </div>
+
+          <strong style={{ fontSize: 20 }}>
+            {plan.price === 0 ? "₹0" : `₹${plan.price}/month`}
+          </strong>
+
+          <div
+            style={{
+              fontSize: 12,
+              color: "#64748b",
+              marginTop: 6,
+            }}
+          >
+            {plan.count} business{plan.count === 1 ? "" : "es"}
+          </div>
+        </div>
+      ))}
+    </div>
+
+
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        loadSubscriptions();
+      }}
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 18,
+      }}
+    >
+      <input
+        value={subscriptionSearch}
+        onChange={(event) => setSubscriptionSearch(event.target.value)}
+        placeholder="Search business, owner, email..."
+        style={{
+          flex: "1 1 220px",
+          minWidth: 0,
+          padding: 11,
+          border: "1px solid #d1d5db",
+          borderRadius: 8,
+        }}
+      />
+
+      <select
+        value={subscriptionPlanFilter}
+        onChange={(event) => setSubscriptionPlanFilter(event.target.value)}
+        style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }}
+      >
+        <option value="">All plans</option>
+        <option value="FREE">Free</option>
+        <option value="STARTER">Starter</option>
+        <option value="BUSINESS">Business</option>
+        <option value="PRO">Pro</option>
+      </select>
+
+      <select
+        value={subscriptionStatusFilter}
+        onChange={(event) => setSubscriptionStatusFilter(event.target.value)}
+        style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }}
+      >
+        <option value="">All subscription statuses</option>
+        <option value="ACTIVE">Active</option>
+        <option value="CANCELLED">Cancelled</option>
+        <option value="EXPIRED">Expired</option>
+        <option value="PAST_DUE">Past due</option>
+      </select>
+
+      <button
+        type="submit"
+        disabled={subscriptionLoading}
+        style={{
+          padding: "10px 15px",
+          background: "#2563eb",
+          color: "#fff",
+          border: 0,
+          borderRadius: 8,
+          cursor: "pointer",
+        }}
+      >
+        Search
+      </button>
+    </form>
+
+    {subscriptionLoading ? (
+      <p>Loading subscriptions...</p>
+    ) : subscriptions.length === 0 ? (
+      <p style={{ color: "#64748b" }}>No matching subscriptions found.</p>
+    ) : (
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            minWidth: 1000,
+            textAlign: "left",
+          }}
+        >
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              {[
+                "Business / Owner",
+                "Email",
+                "Current Plan",
+                "Subscription Status",
+                "Start Date",
+                "Expiry Date",
+                "Change Plan",
+                "Action",
+              ].map((heading) => (
+                <th
+                  key={heading}
+                  style={{
+                    padding: 12,
+                    borderBottom: "1px solid #e5e7eb",
+                    fontSize: 12,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {subscriptions.map((business) => {
+              const selectedPlan =
+                planDrafts[business._id] || business.plan || "FREE";
+              const selectedStatus =
+                statusDrafts[business._id] ||
+                business.subscriptionStatus ||
+                "ACTIVE";
+              const isUpdating =
+                updatingSubscriptionId === business._id;
+
+              return (
+                <tr key={business._id}>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
+                    <strong>{business.businessName || "Unnamed business"}</strong>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      {business.name} · {business.businessSlug || ""}
+                    </div>
+                  </td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
+                    {business.email}
+                  </td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
+                    <strong>{business.plan || "FREE"}</strong>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      {business.planDetails?.price === 0
+                        ? "Free"
+                        : `₹${business.planDetails?.price ?? "—"}/month`}
+                    </div>
+                  </td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
+                    {business.subscriptionStatus || "ACTIVE"}
+                  </td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
+                    {business.subscriptionStartDate
+                      ? new Date(business.subscriptionStartDate).toLocaleDateString("en-IN")
+                      : "—"}
+                  </td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
+                    {business.subscriptionEndDate
+                      ? new Date(business.subscriptionEndDate).toLocaleDateString("en-IN")
+                      : "—"}
+                  </td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
+                    <select
+                      value={selectedPlan}
+                      onChange={(event) => {
+                        const nextPlan = event.target.value;
+                        setPlanDrafts((previous) => ({
+                          ...previous,
+                          [business._id]: nextPlan,
+                        }));
+                        if (nextPlan === "FREE") {
+                          setStatusDrafts((previous) => ({
+                            ...previous,
+                            [business._id]: "ACTIVE",
+                          }));
+                        }
+                      }}
+                      style={{
+                        padding: 8,
+                        border: "1px solid #d1d5db",
+                        borderRadius: 7,
+                      }}
+                    >
+                      <option value="FREE">Free</option>
+                      <option value="STARTER">Starter</option>
+                      <option value="BUSINESS">Business</option>
+                      <option value="PRO">Pro</option>
+                    </select>
+
+                    {selectedPlan !== "FREE" && (
+                      <select
+                        value={selectedStatus}
+                        onChange={(event) =>
+                          setStatusDrafts((previous) => ({
+                            ...previous,
+                            [business._id]: event.target.value,
+                          }))
+                        }
+                        style={{
+                          display: "block",
+                          marginTop: 6,
+                          padding: 8,
+                          border: "1px solid #d1d5db",
+                          borderRadius: 7,
+                        }}
+                      >
+                        <option value="ACTIVE">Active</option>
+                        <option value="CANCELLED">Cancelled</option>
+                        <option value="EXPIRED">Expired</option>
+                        <option value="PAST_DUE">Past due</option>
+                      </select>
+                    )}
+                  </td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
+                    <button
+                      disabled={isUpdating}
+                      onClick={() => updateSubscription(business)}
+                      style={{
+                        padding: "9px 11px",
+                        border: 0,
+                        borderRadius: 7,
+                        background: "#2563eb",
+                        color: "#fff",
+                        cursor: isUpdating ? "wait" : "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {isUpdating ? "Updating..." : "Save Plan"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+    <p style={{ fontSize: 12, color: "#64748b", marginBottom: 0 }}>
+      Only businesses matching the selected filters are shown. The backend
+      returns up to 500 records.
+    </p>
+  </section>
+
       </main>
     </div>
   );

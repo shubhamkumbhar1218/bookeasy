@@ -319,4 +319,220 @@ router.get("/business-booking-stats", async (req, res) => {
 });
 
 
+const ADMIN_SUBSCRIPTION_PLANS = {
+  FREE: { name: "Free", price: 0, bookingLimit: 30 },
+  STARTER: { name: "Starter", price: 199, bookingLimit: null },
+  BUSINESS: { name: "Business", price: 499, bookingLimit: null },
+  PRO: { name: "Pro", price: 999, bookingLimit: null },
+};
+
+// GET /api/admin/subscriptions
+// View subscription records and plan counts.
+router.get("/subscriptions", async (req, res) => {
+  try {
+    const { plan, status, search = "" } = req.query;
+
+    const filter = { role: "BUSINESS" };
+
+    if (plan) {
+      if (!Object.hasOwn(ADMIN_SUBSCRIPTION_PLANS, String(plan))) {
+        return res.status(400).json({ message: "Invalid subscription plan." });
+      }
+      filter.plan = String(plan);
+    }
+
+    if (status) {
+      const allowedStatuses = [
+        "ACTIVE",
+        "CANCELLED",
+        "EXPIRED",
+        "PAST_DUE",
+      ];
+
+      if (!allowedStatuses.includes(String(status))) {
+        return res.status(400).json({ message: "Invalid subscription status." });
+      }
+      filter.subscriptionStatus = String(status);
+    }
+
+    const searchText = String(search).trim();
+
+    if (searchText) {
+      const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(escaped, "i");
+
+      filter.$or = [
+        { name: regex },
+        { email: regex },
+        { businessName: regex },
+        { businessSlug: regex },
+      ];
+    }
+
+    const [businesses, totalBusinesses, planCounts, statusCounts] =
+      await Promise.all([
+        User.find(filter)
+          .select(
+            "name email businessName businessSlug businessType plan subscriptionStatus subscriptionStartDate subscriptionEndDate subscriptionPaymentId isActive createdAt"
+          )
+          .sort({ createdAt: -1 })
+          .limit(500)
+          .lean(),
+
+        User.countDocuments({ role: "BUSINESS" }),
+
+        User.aggregate([
+          { $match: { role: "BUSINESS" } },
+          {
+            $group: {
+              _id: { $ifNull: ["$plan", "FREE"] },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+
+        User.aggregate([
+          { $match: { role: "BUSINESS" } },
+          {
+            $group: {
+              _id: { $ifNull: ["$subscriptionStatus", "ACTIVE"] },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+      ]);
+
+    const countsByPlan = Object.fromEntries(
+      planCounts.map((item) => [item._id, item.count])
+    );
+
+    const countsByStatus = Object.fromEntries(
+      statusCounts.map((item) => [item._id, item.count])
+    );
+
+    res.json({
+      totalBusinesses,
+      returnedBusinesses: businesses.length,
+      plans: Object.entries(ADMIN_SUBSCRIPTION_PLANS).map(([id, details]) => ({
+        id,
+        ...details,
+        count: countsByPlan[id] || 0,
+      })),
+      statusCounts: countsByStatus,
+      businesses: businesses.map((business) => ({
+        ...business,
+        plan: business.plan || "FREE",
+        subscriptionStatus: business.subscriptionStatus || "ACTIVE",
+        planDetails:
+          ADMIN_SUBSCRIPTION_PLANS[business.plan || "FREE"] ||
+          ADMIN_SUBSCRIPTION_PLANS.FREE,
+      })),
+    });
+  } catch (error) {
+    console.error("Admin subscriptions error:", error);
+    res.status(500).json({ message: "Unable to load subscriptions." });
+  }
+});
+
+// PATCH /api/admin/subscriptions/:id
+// Manually assign a plan. This does not process or verify a payment.
+router.patch("/subscriptions/:id", async (req, res) => {
+  try {
+    const { plan, subscriptionStatus } = req.body;
+
+    if (
+      typeof plan !== "string" ||
+      !Object.hasOwn(ADMIN_SUBSCRIPTION_PLANS, plan)
+    ) {
+      return res.status(400).json({ message: "Select a valid subscription plan." });
+    }
+
+    const allowedStatuses = [
+      "ACTIVE",
+      "CANCELLED",
+      "EXPIRED",
+      "PAST_DUE",
+    ];
+
+    if (
+      subscriptionStatus !== undefined &&
+      !allowedStatuses.includes(subscriptionStatus)
+    ) {
+      return res.status(400).json({ message: "Invalid subscription status." });
+    }
+
+    if (plan === "FREE" && subscriptionStatus && subscriptionStatus !== "ACTIVE") {
+      return res.status(400).json({
+        message: "The Free plan must use ACTIVE status in this version.",
+      });
+    }
+
+    const owner = await User.findOne({
+      _id: req.params.id,
+      role: "BUSINESS",
+    });
+
+    if (!owner) {
+      return res.status(404).json({ message: "Business owner not found." });
+    }
+
+    const previousPlan = owner.plan || "FREE";
+    const now = new Date();
+
+    owner.plan = plan;
+
+    if (plan === "FREE") {
+      owner.subscriptionStatus = "ACTIVE";
+      owner.subscriptionStartDate = null;
+      owner.subscriptionEndDate = null;
+      owner.subscriptionPaymentId = "";
+    } else {
+      // Manual admin assignment: grants plan access for one month.
+      // This is not evidence that the business has paid.
+      owner.subscriptionStatus = subscriptionStatus || "ACTIVE";
+
+      if (previousPlan !== plan || !owner.subscriptionStartDate) {
+        owner.subscriptionStartDate = now;
+        owner.subscriptionEndDate = new Date(now);
+        owner.subscriptionEndDate.setMonth(
+          owner.subscriptionEndDate.getMonth() + 1
+        );
+      } else if (subscriptionStatus !== undefined) {
+        owner.subscriptionStatus = subscriptionStatus;
+      }
+    }
+
+    await owner.save();
+
+    res.json({
+      message: `Subscription updated to ${plan}.`,
+      paymentProcessed: false,
+      business: {
+        id: owner._id,
+        name: owner.name,
+        email: owner.email,
+        businessName: owner.businessName,
+        plan: owner.plan,
+        subscriptionStatus: owner.subscriptionStatus,
+        subscriptionStartDate: owner.subscriptionStartDate,
+        subscriptionEndDate: owner.subscriptionEndDate,
+      },
+    });
+  } catch (error) {
+    console.error("Admin subscription update error:", error);
+
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid business owner ID." });
+    }
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ message: error.message });
+    }
+
+    res.status(500).json({ message: "Unable to update subscription." });
+  }
+});
+
+
+
 export default router;

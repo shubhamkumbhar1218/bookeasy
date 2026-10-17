@@ -5,6 +5,9 @@ import authMiddleware from "../middleware/authMiddleware.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import { normalizePhone } from "../utils/normalizePhone.js";
+import PLANS from "../config/plans.js";
+import { requireFeature } from "../middleware/requireFeature.js";
+
 
 import {
   sendPushForNotification,
@@ -283,6 +286,106 @@ router.post("/public", async (req, res) => {
         message: "Service not found",
       });
     }
+
+    
+    // -----------------------------------------------
+    // BUSINESS PLAN AND MONTHLY BOOKING LIMIT
+    // -----------------------------------------------
+
+    const business = await User.findById(businessId);
+
+    if (!business) {
+      return res.status(404).json({
+        message: "Business not found",
+      });
+    }
+
+    if (
+      business.role !== "BUSINESS" ||
+      business.accountStatus !== "ACTIVE" ||
+      business.isActive === false
+    ) {
+      return res.status(403).json({
+        message: "This business is not accepting bookings",
+      });
+    }
+
+    let effectivePlan = business.plan || "FREE";
+
+    const subscriptionExpired =
+      business.subscriptionEndDate &&
+      new Date(business.subscriptionEndDate) <= new Date();
+
+    if (
+      effectivePlan !== "FREE" &&
+      (
+        business.subscriptionStatus !== "ACTIVE" ||
+        subscriptionExpired
+      )
+    ) {
+      effectivePlan = "FREE";
+    }
+
+    const plan = PLANS[effectivePlan];
+
+    if (!plan) {
+      return res.status(500).json({
+        message: "Invalid business subscription plan",
+      });
+    }
+
+    // Free plan monthly booking limit
+    if (plan.bookingLimit !== null) {
+      // Get the current calendar month in India.
+      const now = new Date();
+
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "numeric",
+      }).formatToParts(now);
+
+      const year = Number(
+        parts.find((part) => part.type === "year").value
+      );
+
+      const month = Number(
+        parts.find((part) => part.type === "month").value
+      );
+
+      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+      const monthStart = new Date(
+        Date.UTC(year, month - 1, 1) - IST_OFFSET_MS
+      );
+
+      const nextMonthStart = new Date(
+        Date.UTC(year, month, 1) - IST_OFFSET_MS
+      );
+
+      // Count all bookings created this month,
+      // including cancelled bookings.
+      const bookingsUsed = await Booking.countDocuments({
+        businessId,
+        createdAt: {
+          $gte: monthStart,
+          $lt: nextMonthStart,
+        },
+      });
+
+      if (bookingsUsed >= plan.bookingLimit) {
+        return res.status(403).json({
+          code: "BOOKING_LIMIT_REACHED",
+          message:
+            "Your Free plan monthly booking limit has been reached. Upgrade your plan to accept more bookings.",
+          currentPlan: effectivePlan,
+          bookingLimit: plan.bookingLimit,
+          bookingsUsed,
+          resetsAt: nextMonthStart,
+        });
+      }
+    }
+
 
     // --------------------------------------------------
     // BOOKING DATE
@@ -713,6 +816,29 @@ router.get(
             booking.status === "completed"
         ).length;
 
+      
+      const noShowBookings =
+        periodBookings.filter(
+          (booking) => booking.status === "no_show"
+        ).length;
+
+      const eligibleNoShowBookings =
+        periodBookings.filter(
+          (booking) =>
+            ["completed", "no_show"].includes(booking.status)
+        ).length;
+
+      const noShowRate =
+        eligibleNoShowBookings > 0
+          ? Number(
+              (
+                (noShowBookings / eligibleNoShowBookings) *
+                100
+              ).toFixed(1)
+            )
+          : 0;
+
+
       const periodRevenue =
         periodBookings
           .filter(
@@ -896,6 +1022,10 @@ router.get(
         confirmedBookings,
         completedBookings,
         cancelledBookings,
+        
+        noShowBookings,
+        noShowRate,
+
 
         // Today
         todayBookings: todayBookingCount,
@@ -1389,7 +1519,6 @@ await sendPushForNotification(cancelledNotification);
 });
 
 
-//Complete booking
 // Complete booking
 router.patch("/:id/complete", authMiddleware, async (req, res) => {
   try {
@@ -1443,4 +1572,75 @@ await sendPushForNotification(
     });
   }
 });
+
+
+
+/**
+ * Mark an appointment as a no-show.
+ * Only active, eligible paid subscribers can use this feature.
+ */
+router.patch(
+  "/:id/no-show",
+  authMiddleware,
+  requireFeature("automated_reminders"),
+  async (req, res) => {
+    try {
+      const booking = await Booking.findById(req.params.id);
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Booking not found.",
+        });
+      }
+
+      if (
+        booking.businessId.toString() !==
+        req.user.id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not allowed to modify this booking.",
+        });
+      }
+
+      if (
+        booking.status !== "pending" &&
+        booking.status !== "confirmed"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Only pending or confirmed appointments can be marked as no-show.",
+        });
+      }
+
+      if (new Date(booking.bookingDate) > new Date()) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "An appointment cannot be marked as no-show before its scheduled time.",
+        });
+      }
+
+      booking.status = "no_show";
+      await booking.save();
+
+      return res.json({
+        success: true,
+        message: "Appointment marked as no-show.",
+        booking,
+      });
+    } catch (error) {
+      console.error("Mark no-show error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to mark appointment as no-show.",
+      });
+    }
+  }
+);
+
+
 export default router;

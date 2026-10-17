@@ -15,6 +15,7 @@ import WelcomePage from "./pages/WelcomePage";
 import ResetPassword from "./pages/ResetPassword";
 import BusinessReports from "./pages/BusinessReports";
 import AdminPanel from "./pages/AdminPanel";
+import Subscription from "./pages/Subscription";
 
 import {
   CalendarDays,
@@ -33,6 +34,7 @@ import {
   ArrowLeft,
   Bell,
   BarChart3,
+  Crown,
 } from "lucide-react";
 
 import "./style.css";
@@ -2301,6 +2303,17 @@ const rescheduleBooking = async () => {
       Reports & Analytics
     </button>
 
+<button
+  className="outline"
+  type="button"
+  onClick={() => {
+    window.location.href = "/subscription";
+  }}
+>
+  <Crown size={17} />
+  Subscription
+</button>
+
     <button
       className="outline"
       type="button"
@@ -3095,6 +3108,19 @@ function App() {
       )
     }
   />
+
+  
+
+    <Route
+  path="/subscription"
+  element={
+    user && user.role !== "ADMIN" ? (
+      <Subscription user={user} />
+    ) : (
+      <Navigate to="/business/login" replace />
+    )
+  }
+/>
 
   {/* Admin Panel */}
 <Route

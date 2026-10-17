@@ -5,6 +5,8 @@ import Review from "../models/Review.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import multer from "multer";
 import cloudinary from "../config/cloudinary.js";
+import Booking from "../models/Booking.js";
+import PLANS from "../config/plans.js";
 
 const router = express.Router();
 
@@ -540,6 +542,143 @@ router.delete(
     }
   }
 );
+
+
+ // ======================================================
+ // GET CURRENT SUBSCRIPTION AND MONTHLY BOOKING USAGE
+ // GET /api/business/subscription/me
+ // ======================================================
+
+router.get(
+  "/subscription/me",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const user = await User.findById(req.user.id)
+        .select(
+          "role accountStatus isActive plan subscriptionStatus subscriptionStartDate subscriptionEndDate"
+        );
+
+      if (!user) {
+        return res.status(404).json({
+          message: "User not found",
+        });
+      }
+
+      if (user.role !== "BUSINESS") {
+        return res.status(403).json({
+          message: "Business account required",
+        });
+      }
+
+      let effectivePlan = user.plan || "FREE";
+
+      const now = new Date();
+
+      const isPaidPlan = effectivePlan !== "FREE";
+
+      const subscriptionExpired =
+        user.subscriptionEndDate &&
+        new Date(user.subscriptionEndDate) <= now;
+
+      if (
+        isPaidPlan &&
+        (
+          user.subscriptionStatus !== "ACTIVE" ||
+          subscriptionExpired
+        )
+      ) {
+        effectivePlan = "FREE";
+      }
+
+      const plan = PLANS[effectivePlan];
+
+      if (!plan) {
+        return res.status(500).json({
+          message: "Invalid subscription plan",
+        });
+      }
+
+      // Current calendar month in India
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "numeric",
+      }).formatToParts(now);
+
+      const year = Number(
+        parts.find((part) => part.type === "year").value
+      );
+
+      const month = Number(
+        parts.find((part) => part.type === "month").value
+      );
+
+      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+      const monthStart = new Date(
+        Date.UTC(year, month - 1, 1) - IST_OFFSET_MS
+      );
+
+      const nextMonthStart = new Date(
+        Date.UTC(year, month, 1) - IST_OFFSET_MS
+      );
+
+      const bookingsUsed = await Booking.countDocuments({
+        businessId: user._id,
+        createdAt: {
+          $gte: monthStart,
+          $lt: nextMonthStart,
+        },
+      });
+
+      const bookingLimit = plan.bookingLimit;
+
+      return res.json({
+        plan: effectivePlan,
+        planName: plan.name,
+        price: plan.price,
+        subscriptionStatus:
+          effectivePlan === "FREE"
+            ? "ACTIVE"
+            : user.subscriptionStatus,
+        subscriptionStartDate: user.subscriptionStartDate,
+        subscriptionEndDate: user.subscriptionEndDate,
+        usage: {
+          bookingsUsed,
+          bookingLimit,
+          unlimited: bookingLimit === null,
+          remaining:
+            bookingLimit === null
+              ? null
+              : Math.max(0, bookingLimit - bookingsUsed),
+          monthStartsAt: monthStart,
+          resetsAt: nextMonthStart,
+        },
+        features: plan.features,
+        availablePlans: Object.entries(PLANS).map(
+          ([key, value]) => ({
+            id: key,
+            name: value.name,
+            price: value.price,
+            bookingLimit: value.bookingLimit,
+            features: value.features,
+          })
+        ),
+      });
+    } catch (error) {
+      console.error(
+        "Get subscription details error:",
+        error
+      );
+
+      return res.status(500).json({
+        message: "Unable to load subscription details",
+      });
+    }
+  }
+);
+
 
 // ======================================================
 // PUBLIC BUSINESS INFORMATION

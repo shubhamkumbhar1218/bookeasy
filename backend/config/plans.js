@@ -1,4 +1,3 @@
-
 const PLANS = {
 FREE: {
   name: "Free",

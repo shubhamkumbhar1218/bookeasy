@@ -154,6 +154,74 @@ businessType: {
     closed: { type: Boolean, default: true },
   },
 },
+
+
+  // SUBSCRIPTION PLAN
+plan: {
+  type: String,
+  enum: ["FREE", "STARTER", "BUSINESS", "PRO"],
+  default: "FREE",
+},
+
+// SUBSCRIPTION STATUS
+subscriptionStatus: {
+  type: String,
+  enum: ["ACTIVE", "CANCELLED", "EXPIRED", "PAST_DUE"],
+  default: "ACTIVE",
+},
+
+// BILLING PERIOD
+subscriptionStartDate: {
+  type: Date,
+  default: null,
+},
+
+subscriptionEndDate: {
+  type: Date,
+  default: null,
+},
+
+// PAYMENT PROVIDER REFERENCE
+subscriptionPaymentId: {
+  type: String,
+  default: "",
+},
+
+// Cashfree recurring subscription reference
+cashfreeSubscriptionId: {
+  type: String,
+  default: "",
+  index: true,
+},
+
+// Cashfree's latest subscription status
+cashfreeSubscriptionStatus: {
+  type: String,
+  default: "",
+},
+
+// Automatic renewal tracking
+subscriptionBillingMode: {
+  type: String,
+  enum: ["MANUAL", "AUTOMATIC"],
+  default: "MANUAL",
+},
+
+subscriptionNextBillingDate: {
+  type: Date,
+  default: null,
+},
+
+subscriptionLastPaymentAt: {
+  type: Date,
+  default: null,
+},
+
+subscriptionLastPaymentId: {
+  type: String,
+  default: "",
+},
+
   },
   {
     timestamps: true,

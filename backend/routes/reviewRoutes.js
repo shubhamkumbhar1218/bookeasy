@@ -1,10 +1,41 @@
 import express from "express";
-
+import User from "../models/User.js";
+import PLANS from "../config/plans.js";
 import mongoose from "mongoose";
 import Review from "../models/Review.js";
 import Booking from "../models/Booking.js";
+import Service from "../models/Service.js";
 
 const router = express.Router();
+
+
+async function hasReviewAccess(businessId) {
+  const owner = await User.findById(businessId).select(
+    "role accountStatus isActive plan subscriptionStatus subscriptionEndDate"
+  );
+
+  if (
+    !owner ||
+    owner.role !== "BUSINESS" ||
+    owner.accountStatus !== "ACTIVE" ||
+    owner.isActive === false
+  ) {
+    return false;
+  }
+
+  const plan = PLANS[String(owner.plan || "FREE").toUpperCase()];
+
+  if (!plan?.features?.includes("reviews")) {
+    return false;
+  }
+
+  return (
+    owner.subscriptionStatus === "ACTIVE" &&
+    owner.subscriptionEndDate instanceof Date &&
+    !Number.isNaN(owner.subscriptionEndDate.getTime()) &&
+    owner.subscriptionEndDate.getTime() > Date.now()
+  );
+}
 
 
 // ======================================================
@@ -60,6 +91,18 @@ router.post("/", async (req, res) => {
         message: "Booking not found.",
       });
     }
+
+    const reviewAccess = await hasReviewAccess(
+  booking.businessId
+);
+
+if (!reviewAccess) {
+  return res.status(403).json({
+    message:
+      "Reviews are available on eligible paid plans. Please contact the business or upgrade its plan.",
+    upgradeRequired: true,
+  });
+}
 
     // --------------------------------------------------
     // Only completed bookings can be reviewed
@@ -224,6 +267,28 @@ router.get(
       // Validate service ID
       // --------------------------------------------------
 
+      const service = await Service.findById(serviceId)
+  .select("businessId");
+
+if (!service) {
+  return res.status(404).json({
+    message: "Service not found.",
+  });
+}
+
+const reviewAccess = await hasReviewAccess(
+  service.businessId
+);
+
+if (!reviewAccess) {
+  return res.json({
+    reviews: [],
+    totalReviews: 0,
+    averageRating: 0,
+  });
+}
+
+
       if (!mongoose.Types.ObjectId.isValid(serviceId)) {
         return res.status(400).json({
           message: "Invalid service ID.",
@@ -312,10 +377,29 @@ router.get(
       );
 
       if (!booking) {
-        return res.status(404).json({
-          message: "Booking not found.",
-        });
-      }
+  return res.status(404).json({
+    message: "Booking not found.",
+  });
+}
+
+// VERIFY CUSTOMER PHONE HERE
+const bookingPhone = String(
+  booking.customerPhone || ""
+).trim();
+
+const requestedPhone = String(
+  req.query.phone || ""
+).trim();
+
+if (
+  !bookingPhone ||
+  !requestedPhone ||
+  bookingPhone !== requestedPhone
+) {
+  return res.status(403).json({
+    message: "You are not allowed to view this review status.",
+  });
+}
 
       // --------------------------------------------------
       // Find existing review
@@ -330,13 +414,13 @@ router.get(
       // Verify customer phone
       // --------------------------------------------------
 
-      const bookingPhone = String(
-        booking.customerPhone || ""
-      ).trim();
+      // const bookingPhone = String(
+      //   booking.customerPhone || ""
+      // ).trim();
 
-      const requestedPhone = String(
-        phone || ""
-      ).trim();
+      // const requestedPhone = String(
+      //   phone || ""
+      // ).trim();
 
       const phoneMatches =
         bookingPhone !== "" &&

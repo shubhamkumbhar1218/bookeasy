@@ -13,6 +13,10 @@ import notificationRoutes from "./routes/notifications.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import pushTokenRoutes from "./routes/pushToken.js";
 import adminRoutes from "./routes/admin.js";
+import paymentRoutes from "./routes/payments.js";
+import {
+  startAppointmentExpiryScheduler,
+} from "./utils/appointmentExpiryScheduler.js";
 import {
   startAppointmentReminderScheduler,
 } from "./utils/appointmentReminderScheduler.js";
@@ -30,6 +34,9 @@ const PORT = process.env.PORT || 5000;
 app.use(
   express.json({
     limit: "100kb",
+    verify: (req, res, buffer) => {
+      req.rawBody = buffer.toString("utf8");
+    },
   })
 );
 
@@ -75,6 +82,8 @@ app.use("/api/notifications", notificationRoutes);
 
 app.use("/api/reviews", reviewRoutes);
 
+app.use("/api/payments", paymentRoutes);
+
 app.use(
   "/api/push-tokens",
   pushTokenRoutes
@@ -114,25 +123,6 @@ app.use((req, res) => {
   });
 });
 
-// ========================================
-// MONGODB + SERVER
-// ========================================
-
-// mongoose
-//   .connect(process.env.MONGO_URI)
-//   .then(() => {
-//     console.log("MongoDB connected");
-
-//     startAppointmentReminderScheduler();
-
-//     app.listen(PORT, "0.0.0.0", () => {
-//       console.log(`BookEasy server running on port ${PORT}`);
-//     });
-//   })
-//   .catch((error) => {
-//     console.error("MongoDB connection error:", error);
-//   });
-
 
 mongoose
   .connect(process.env.MONGO_URI)
@@ -144,6 +134,7 @@ mongoose
     );
 
     startAppointmentReminderScheduler();
+    startAppointmentExpiryScheduler();
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`BookEasy server running on port ${PORT}`);

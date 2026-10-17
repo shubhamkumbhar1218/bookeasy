@@ -48,6 +48,42 @@ type BusinessBookingStat = {
   cancelled: number;
 };
 
+
+type SubscriptionPlan = "FREE" | "STARTER" | "BUSINESS" | "PRO";
+
+type SubscriptionStatus =
+  | "ACTIVE"
+  | "CANCELLED"
+  | "EXPIRED"
+  | "PAST_DUE";
+
+type SubscriptionBusiness = {
+  _id: string;
+  name: string;
+  email: string;
+  businessName: string;
+  businessSlug?: string;
+  businessType?: string;
+  plan: SubscriptionPlan;
+  subscriptionStatus: SubscriptionStatus;
+  subscriptionStartDate?: string;
+  subscriptionEndDate?: string;
+  isActive?: boolean;
+  planDetails?: {
+    price?: number;
+    bookingLimit?: number;
+  };
+};
+
+type SubscriptionPlanCount = {
+  id: SubscriptionPlan;
+  name: string;
+  price: number;
+  bookingLimit: number;
+  count: number;
+};
+
+
 type BookingPeriod =
   | "today"
   | "thisMonth"
@@ -87,6 +123,33 @@ export default function AdminPanel() {
   const [appliedEndDate, setAppliedEndDate] = useState("");
   const [totalBookings, setTotalBookings] = useState(0);
   const [bookingLoading, setBookingLoading] = useState(false);
+  
+const [subscriptions, setSubscriptions] = useState<
+  SubscriptionBusiness[]
+>([]);
+
+const [subscriptionPlans, setSubscriptionPlans] = useState<
+  SubscriptionPlanCount[]
+>([]);
+
+const [subscriptionSearch, setSubscriptionSearch] = useState("");
+const [subscriptionPlanFilter, setSubscriptionPlanFilter] =
+  useState<SubscriptionPlan | "">("");
+const [subscriptionStatusFilter, setSubscriptionStatusFilter] =
+  useState<SubscriptionStatus | "">("");
+
+const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+const [updatingSubscriptionId, setUpdatingSubscriptionId] =
+  useState<string | null>(null);
+
+const [planDrafts, setPlanDrafts] = useState<
+  Record<string, SubscriptionPlan>
+>({});
+
+const [statusDrafts, setStatusDrafts] = useState<
+  Record<string, SubscriptionStatus>
+>({});
+
 
   const loadAdminData = useCallback(async () => {
     try {
@@ -240,11 +303,114 @@ export default function AdminPanel() {
     appliedEndDate,
   ]);
 
+  
+  const loadSubscriptions = useCallback(
+    async (filters?: {
+      search?: string;
+      plan?: SubscriptionPlan | "";
+      status?: SubscriptionStatus | "";
+    }) => {
+      try {
+        setSubscriptionLoading(true);
+
+        const token = await AsyncStorage.getItem("bookeasy_token");
+
+        if (!token) {
+          await AsyncStorage.multiRemove([
+            "bookeasy_token",
+            "bookeasy_user",
+            "bookeasy_role",
+          ]);
+          router.replace("/business/login");
+          return;
+        }
+
+        const query = new URLSearchParams();
+
+        if (filters?.search?.trim()) {
+          query.set("search", filters.search.trim());
+        }
+        if (filters?.plan) query.set("plan", filters.plan);
+        if (filters?.status) query.set("status", filters.status);
+
+        const response = await fetch(
+          `${API_URL}/admin/subscriptions?${query.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (response.status === 401) {
+          await AsyncStorage.multiRemove([
+            "bookeasy_token",
+            "bookeasy_user",
+            "bookeasy_role",
+          ]);
+          router.replace("/business/login");
+          return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(
+            data.message || "Unable to load subscriptions."
+          );
+        }
+
+        const businesses: SubscriptionBusiness[] =
+          data.businesses || [];
+
+        setSubscriptions(businesses);
+        setSubscriptionPlans(data.plans || []);
+
+        setPlanDrafts((previous) => {
+          const next = { ...previous };
+          businesses.forEach((business) => {
+            next[business._id] = business.plan || "FREE";
+          });
+          return next;
+        });
+
+        setStatusDrafts((previous) => {
+          const next = { ...previous };
+          businesses.forEach((business) => {
+            next[business._id] =
+              business.subscriptionStatus || "ACTIVE";
+          });
+          return next;
+        });
+      } catch (error) {
+        Alert.alert(
+          "Subscription error",
+          error instanceof Error
+            ? error.message
+            : "Unable to load subscriptions."
+        );
+      } finally {
+        setSubscriptionLoading(false);
+      }
+    },
+    []
+  );
+
+
   useFocusEffect(
     useCallback(() => {
       loadAdminData();
     }, [loadAdminData])
   );
+
+  
+  useFocusEffect(
+    useCallback(() => {
+      loadSubscriptions();
+    }, [loadSubscriptions])
+  );
+
 
   const applyCustomDates = () => {
     const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -365,6 +531,99 @@ export default function AdminPanel() {
     );
   };
 
+  
+  const updateSubscription = (business: SubscriptionBusiness) => {
+    const plan = planDrafts[business._id] || business.plan || "FREE";
+    const subscriptionStatus: SubscriptionStatus =
+      plan === "FREE"
+        ? "ACTIVE"
+        : statusDrafts[business._id] || "ACTIVE";
+
+    Alert.alert(
+      "Confirm plan change",
+      `Assign ${plan} to ${
+        business.businessName || business.name
+      }?\n\nThis is a manual admin assignment. No payment will be collected.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Save Plan",
+          onPress: async () => {
+            try {
+              setUpdatingSubscriptionId(business._id);
+
+              const token = await AsyncStorage.getItem("bookeasy_token");
+
+              if (!token) {
+                await AsyncStorage.multiRemove([
+                  "bookeasy_token",
+                  "bookeasy_user",
+                  "bookeasy_role",
+                ]);
+                router.replace("/business/login");
+                return;
+              }
+
+              const response = await fetch(
+                `${API_URL}/admin/subscriptions/${business._id}`,
+                {
+                  method: "PATCH",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    plan,
+                    subscriptionStatus,
+                  }),
+                }
+              );
+
+              if (response.status === 401) {
+                await AsyncStorage.multiRemove([
+                  "bookeasy_token",
+                  "bookeasy_user",
+                  "bookeasy_role",
+                ]);
+                router.replace("/business/login");
+                return;
+              }
+
+              const data = await response.json().catch(() => ({}));
+
+              if (!response.ok) {
+                throw new Error(
+                  data.message || "Unable to update subscription."
+                );
+              }
+
+              Alert.alert(
+                "Success",
+                data.message || "Subscription updated successfully."
+              );
+
+              await loadSubscriptions({
+                search: subscriptionSearch,
+                plan: subscriptionPlanFilter,
+                status: subscriptionStatusFilter,
+              });
+            } catch (error) {
+              Alert.alert(
+                "Update failed",
+                error instanceof Error
+                  ? error.message
+                  : "Unable to update subscription."
+              );
+            } finally {
+              setUpdatingSubscriptionId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+
   const logout = async () => {
     await AsyncStorage.multiRemove([
       "bookeasy_token",
@@ -441,6 +700,309 @@ export default function AdminPanel() {
       </View>
     );
   };
+
+  
+  const renderSubscriptions = () => {
+    const planOptions: SubscriptionPlan[] = [
+      "FREE",
+      "STARTER",
+      "BUSINESS",
+      "PRO",
+    ];
+
+    const statusOptions: SubscriptionStatus[] = [
+      "ACTIVE",
+      "CANCELLED",
+      "EXPIRED",
+      "PAST_DUE",
+    ];
+
+    const formatDate = (date?: string) =>
+      date ? new Date(date).toLocaleDateString("en-IN") : "—";
+
+    return (
+      <View style={styles.subscriptionSection}>
+        <Text style={styles.sectionTitle}>Subscription Management</Text>
+        <Text style={styles.subtitle}>
+          View business plans and manually manage subscription access.
+          Plan changes do not process payments.
+        </Text>
+
+        <View style={styles.subscriptionPlanGrid}>
+          {subscriptionPlans.map((plan) => (
+            <View key={plan.id} style={styles.subscriptionPlanCard}>
+              <Text style={styles.subscriptionPlanName}>{plan.name}</Text>
+              <Text style={styles.subscriptionPlanPrice}>
+                {plan.price === 0 ? "₹0" : `₹${plan.price}/mo`}
+              </Text>
+              <Text style={styles.ownerDetail}>
+                {plan.count} business{plan.count === 1 ? "" : "es"}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <TextInput
+          style={styles.searchInput}
+          value={subscriptionSearch}
+          onChangeText={setSubscriptionSearch}
+          placeholder="Search business, owner or email..."
+          placeholderTextColor="#9ca3af"
+          autoCapitalize="none"
+          returnKeyType="search"
+          onSubmitEditing={() =>
+            loadSubscriptions({
+              search: subscriptionSearch,
+              plan: subscriptionPlanFilter,
+              status: subscriptionStatusFilter,
+            })
+          }
+        />
+
+        <Text style={styles.filterLabel}>Filter by plan</Text>
+        <View style={styles.periodButtons}>
+          {(["", "FREE", "STARTER", "BUSINESS", "PRO"] as const).map(
+            (plan) => (
+              <TouchableOpacity
+                key={plan || "ALL_PLANS"}
+                style={[
+                  styles.periodButton,
+                  subscriptionPlanFilter === plan &&
+                    styles.selectedPeriodButton,
+                ]}
+                onPress={() => setSubscriptionPlanFilter(plan)}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    subscriptionPlanFilter === plan &&
+                      styles.selectedPeriodButtonText,
+                  ]}
+                >
+                  {plan || "All"}
+                </Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
+
+        <Text style={styles.filterLabel}>Filter by status</Text>
+        <View style={styles.periodButtons}>
+          {(["", ...statusOptions] as const).map((status) => (
+            <TouchableOpacity
+              key={status || "ALL_STATUSES"}
+              style={[
+                styles.periodButton,
+                subscriptionStatusFilter === status &&
+                  styles.selectedPeriodButton,
+              ]}
+              onPress={() => setSubscriptionStatusFilter(status)}
+            >
+              <Text
+                style={[
+                  styles.periodButtonText,
+                  subscriptionStatusFilter === status &&
+                    styles.selectedPeriodButtonText,
+                ]}
+              >
+                {status || "All"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          style={styles.searchButton}
+          disabled={subscriptionLoading}
+          onPress={() =>
+            loadSubscriptions({
+              search: subscriptionSearch,
+              plan: subscriptionPlanFilter,
+              status: subscriptionStatusFilter,
+            })
+          }
+        >
+          <Text style={styles.searchButtonText}>
+            {subscriptionLoading ? "Loading..." : "Search Subscriptions"}
+          </Text>
+        </TouchableOpacity>
+
+        {subscriptionLoading ? (
+          <ActivityIndicator
+            style={{ marginTop: 20 }}
+            size="large"
+            color="#2563eb"
+          />
+        ) : subscriptions.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyTitle}>No subscriptions found</Text>
+            <Text style={styles.emptyText}>
+              Try changing the search or filters.
+            </Text>
+          </View>
+        ) : (
+          subscriptions.map((business) => {
+            const selectedPlan =
+              planDrafts[business._id] || business.plan || "FREE";
+
+            const selectedStatus =
+              statusDrafts[business._id] ||
+              business.subscriptionStatus ||
+              "ACTIVE";
+
+            const updating =
+              updatingSubscriptionId === business._id;
+
+            return (
+              <View
+                key={business._id}
+                style={styles.subscriptionBusinessCard}
+              >
+                <Text style={styles.businessName}>
+                  {business.businessName || "Unnamed Business"}
+                </Text>
+
+                <Text style={styles.ownerDetail}>{business.name}</Text>
+                <Text style={styles.ownerDetail}>{business.email}</Text>
+
+                <View style={styles.subscriptionInfoRow}>
+                  <Text style={styles.subscriptionInfoLabel}>
+                    Current plan
+                  </Text>
+                  <Text style={styles.subscriptionInfoValue}>
+                    {business.plan || "FREE"}
+                    {" · "}
+                    {business.planDetails?.price === 0
+                      ? "₹0"
+                      : `₹${business.planDetails?.price ?? "—"}/month`}
+                  </Text>
+                </View>
+
+                <View style={styles.subscriptionInfoRow}>
+                  <Text style={styles.subscriptionInfoLabel}>
+                    Status
+                  </Text>
+                  <Text style={styles.subscriptionInfoValue}>
+                    {business.subscriptionStatus || "ACTIVE"}
+                  </Text>
+                </View>
+
+                <View style={styles.subscriptionInfoRow}>
+                  <Text style={styles.subscriptionInfoLabel}>
+                    Start date
+                  </Text>
+                  <Text style={styles.subscriptionInfoValue}>
+                    {formatDate(business.subscriptionStartDate)}
+                  </Text>
+                </View>
+
+                <View style={styles.subscriptionInfoRow}>
+                  <Text style={styles.subscriptionInfoLabel}>
+                    Expiry date
+                  </Text>
+                  <Text style={styles.subscriptionInfoValue}>
+                    {formatDate(business.subscriptionEndDate)}
+                  </Text>
+                </View>
+
+                <Text style={styles.filterLabel}>Assign plan</Text>
+                <View style={styles.periodButtons}>
+                  {planOptions.map((plan) => (
+                    <TouchableOpacity
+                      key={plan}
+                      style={[
+                        styles.periodButton,
+                        selectedPlan === plan &&
+                          styles.selectedPeriodButton,
+                      ]}
+                      onPress={() => {
+                        setPlanDrafts((previous) => ({
+                          ...previous,
+                          [business._id]: plan,
+                        }));
+
+                        if (plan === "FREE") {
+                          setStatusDrafts((previous) => ({
+                            ...previous,
+                            [business._id]: "ACTIVE",
+                          }));
+                        }
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.periodButtonText,
+                          selectedPlan === plan &&
+                            styles.selectedPeriodButtonText,
+                        ]}
+                      >
+                        {plan}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {selectedPlan !== "FREE" && (
+                  <>
+                    <Text style={styles.filterLabel}>
+                      Subscription status
+                    </Text>
+                    <View style={styles.periodButtons}>
+                      {statusOptions.map((status) => (
+                        <TouchableOpacity
+                          key={status}
+                          style={[
+                            styles.periodButton,
+                            selectedStatus === status &&
+                              styles.selectedPeriodButton,
+                          ]}
+                          onPress={() =>
+                            setStatusDrafts((previous) => ({
+                              ...previous,
+                              [business._id]: status,
+                            }))
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.periodButtonText,
+                              selectedStatus === status &&
+                                styles.selectedPeriodButtonText,
+                            ]}
+                          >
+                            {status}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                <TouchableOpacity
+                  style={[
+                    styles.statusButton,
+                    styles.subscriptionSaveButton,
+                    updating && styles.disabledButton,
+                  ]}
+                  disabled={updating}
+                  onPress={() => updateSubscription(business)}
+                >
+                  {updating ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Text style={styles.statusButtonText}>
+                      Save Plan
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            );
+          })
+        )}
+      </View>
+    );
+  };
+
 
   const renderBookingStats = () => (
     <View style={styles.bookingSection}>
@@ -618,6 +1180,8 @@ export default function AdminPanel() {
             </View>
 
             {renderBookingStats()}
+
+            {renderSubscriptions()}
 
             <Text style={styles.sectionTitle}>Business Owners</Text>
 
@@ -949,4 +1513,79 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 8,
   },
+
+  
+  subscriptionSection: {
+    marginBottom: 28,
+    backgroundColor: "#ffffff",
+    borderRadius: 15,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  subscriptionPlanGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 18,
+  },
+  subscriptionPlanCard: {
+    flexGrow: 1,
+    flexBasis: "40%",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 12,
+  },
+  subscriptionPlanName: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  subscriptionPlanPrice: {
+    color: "#0f172a",
+    fontSize: 19,
+    fontWeight: "900",
+    marginVertical: 6,
+  },
+  subscriptionBusinessCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 13,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+  },
+  subscriptionInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 10,
+  },
+  subscriptionInfoLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    flex: 1,
+  },
+  subscriptionInfoValue: {
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: "700",
+    flex: 1,
+    textAlign: "right",
+  },
+  filterLabel: {
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 14,
+    marginBottom: 7,
+  },
+  subscriptionSaveButton: {
+    backgroundColor: "#2563eb",
+  },
+
 });

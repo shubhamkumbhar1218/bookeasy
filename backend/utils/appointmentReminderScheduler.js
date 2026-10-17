@@ -1,6 +1,8 @@
 
 import Booking from "../models/Booking.js";
 import Notification from "../models/Notification.js";
+import User from "../models/User.js";
+import PLANS from "../config/plans.js";
 import { sendPushForNotification } from "./sendPushNotification.js";
 
 const CHECK_INTERVAL_MS = 60 * 1000;
@@ -8,6 +10,7 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * ONE_HOUR_MS;
 
 let isRunning = false;
+let schedulerStarted = false;
 
 function formatAppointmentDate(date) {
   return new Date(date).toLocaleString("en-IN", {
@@ -17,6 +20,55 @@ function formatAppointmentDate(date) {
   });
 }
 
+/**
+ * Only active Business/Pro subscriptions with the
+ * automated_reminders feature can receive these reminders.
+ */
+async function getEligibleBusinessIds(now = new Date()) {
+  const users = await User.find({
+    role: "BUSINESS",
+    accountStatus: "ACTIVE",
+    isActive: { $ne: false },
+    plan: { $in: ["BUSINESS", "PRO"] },
+    subscriptionStatus: "ACTIVE",
+    subscriptionEndDate: { $gt: now },
+  }).select("_id plan");
+
+  return users
+    .filter((user) => {
+      const plan = PLANS[user.plan];
+
+      return (
+        Array.isArray(plan?.features) &&
+        plan.features.includes("automated_reminders")
+      );
+    })
+    .map((user) => user._id);
+}
+
+async function isBusinessEligible(businessId) {
+  const now = new Date();
+
+  const user = await User.findOne({
+    _id: businessId,
+    role: "BUSINESS",
+    accountStatus: "ACTIVE",
+    isActive: { $ne: false },
+    plan: { $in: ["BUSINESS", "PRO"] },
+    subscriptionStatus: "ACTIVE",
+    subscriptionEndDate: { $gt: now },
+  }).select("_id plan");
+
+  if (!user) return false;
+
+  const plan = PLANS[user.plan];
+
+  return (
+    Array.isArray(plan?.features) &&
+    plan.features.includes("automated_reminders")
+  );
+}
+
 async function sendReminder(booking, reminderType) {
   const is24Hour = reminderType === "24h";
 
@@ -24,8 +76,12 @@ async function sendReminder(booking, reminderType) {
     ? "reminder24hSentAt"
     : "reminder1hSentAt";
 
-  // Atomically claim this reminder so overlapping scheduler
-  // runs cannot send it twice.
+  // Recheck the owner's current subscription before claiming.
+  if (!(await isBusinessEligible(booking.businessId))) {
+    return;
+  }
+
+  // Atomically claim the reminder to avoid duplicate sends.
   const claimedBooking = await Booking.findOneAndUpdate(
     {
       _id: booking._id,
@@ -74,7 +130,7 @@ async function sendReminder(booking, reminderType) {
       `BookEasy: ${reminderType} reminder sent for booking ${claimedBooking._id}`
     );
   } catch (error) {
-    // Allow a retry if creating/sending the reminder failed.
+    // Allow the scheduler to retry if sending fails.
     await Booking.updateOne(
       { _id: claimedBooking._id },
       { $set: { [trackingField]: null } }
@@ -89,6 +145,7 @@ async function sendReminder(booking, reminderType) {
 
 async function checkAppointmentReminders() {
   if (isRunning) return;
+
   isRunning = true;
 
   try {
@@ -98,10 +155,15 @@ async function checkAppointmentReminders() {
       now.getTime() + TWENTY_FOUR_HOURS_MS
     );
 
-    // Only future appointments that are still active.
-    // The scheduler catches up after a restart, but skips a
-    // late 24-hour reminder once the appointment is within 1 hour.
+    // Do not even query reminder bookings for ineligible owners.
+    const eligibleBusinessIds = await getEligibleBusinessIds(now);
+
+    if (eligibleBusinessIds.length === 0) {
+      return;
+    }
+
     const bookings = await Booking.find({
+      businessId: { $in: eligibleBusinessIds },
       status: { $in: ["pending", "confirmed"] },
       bookingDate: {
         $gt: now,
@@ -112,7 +174,7 @@ async function checkAppointmentReminders() {
         { reminder1hSentAt: null },
       ],
     }).select(
-      "_id customerPhone bookingDate status reminder24hSentAt reminder1hSentAt"
+      "_id businessId customerPhone bookingDate status reminder24hSentAt reminder1hSentAt"
     );
 
     for (const booking of bookings) {
@@ -143,10 +205,14 @@ async function checkAppointmentReminders() {
 }
 
 export function startAppointmentReminderScheduler() {
+  if (schedulerStarted) return;
+
+  schedulerStarted = true;
+
   console.log("BookEasy: appointment reminder scheduler started");
 
-  // Check once at startup and then every minute.
   void checkAppointmentReminders();
+
   setInterval(() => {
     void checkAppointmentReminders();
   }, CHECK_INTERVAL_MS);
