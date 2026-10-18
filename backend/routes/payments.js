@@ -1362,8 +1362,10 @@ router.post("/create-subscription", authMiddleware, async (req, res) => {
             plan_note: `BookEasy ${plan} monthly subscription`,
           },
           subscription_meta: {
-            return_url: `${backendUrl}/api/payments/subscription-return`,
-          },
+  return_url: `${backendUrl}/api/payments/subscription-return?subscription_id=${encodeURIComponent(
+    subscriptionId
+  )}`,
+},
           subscription_tags: {
             bookeasy_user_id: String(user._id),
             bookeasy_plan: plan,
@@ -1426,31 +1428,47 @@ router.post("/create-subscription", authMiddleware, async (req, res) => {
 // CASHFREE RETURN URL
 // ============================================================
 
+
 function handleSubscriptionReturn(req, res) {
   try {
     const frontendUrl = getFrontendUrl();
 
+    // Prefer the ID BookEasy placed in the return URL.
+    // Fall back to Cashfree's form/query fields if available.
     const subscriptionId =
-      req.body?.subscription_id ||
-      req.body?.subscriptionId ||
       req.query?.subscription_id ||
       req.query?.subscriptionId ||
+      req.body?.subscription_id ||
+      req.body?.subscriptionId ||
       "";
 
-    const target = new URL(`${frontendUrl}/payment/return`);
-
-    if (
-      typeof subscriptionId === "string" &&
-      /^[a-zA-Z0-9_. -]{1,250}$/.test(subscriptionId)
-    ) {
-      target.searchParams.set("subscription_id", subscriptionId);
-    }
+    const target = new URL("/payment/return", frontendUrl);
 
     target.searchParams.set("billing_mode", "automatic");
 
+    if (
+      typeof subscriptionId === "string" &&
+      /^[a-zA-Z0-9_-]{1,250}$/.test(subscriptionId)
+    ) {
+      target.searchParams.set("subscription_id", subscriptionId);
+    } else {
+      console.warn(
+        "Cashfree returned without a valid BookEasy subscription ID."
+      );
+    }
+
+    console.log("BookEasy subscription return:", {
+      hasSubscriptionId:
+        typeof subscriptionId === "string" &&
+        /^[a-zA-Z0-9_-]{1,250}$/.test(subscriptionId),
+    });
+
     return res.redirect(303, target.toString());
   } catch (error) {
-    console.error("Cashfree subscription return error:", error.message);
+    console.error(
+      "Cashfree subscription return error:",
+      error.message
+    );
 
     return res.status(500).send(
       "Unable to return to BookEasy. Open BookEasy and check your subscription."
@@ -1465,6 +1483,7 @@ router.post(
   express.urlencoded({ extended: false }),
   handleSubscriptionReturn
 );
+
 
 // ============================================================
 // AUTOMATIC MONTHLY SUBSCRIPTION: VERIFY AND ACTIVATE
