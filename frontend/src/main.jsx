@@ -16,6 +16,7 @@ import ResetPassword from "./pages/ResetPassword";
 import BusinessReports from "./pages/BusinessReports";
 import AdminPanel from "./pages/AdminPanel";
 import Subscription from "./pages/Subscription";
+import PaymentReturn from "./pages/PaymentReturn";
 
 import {
   CalendarDays,
@@ -3134,6 +3135,11 @@ function App() {
       <Navigate to="/business/login" replace />
     )
   }
+/>
+
+<Route
+  path="/payment/return"
+  element={<PaymentReturn />}
 />
 
 {/* Unknown route */}
