@@ -60,27 +60,18 @@ export default function PaymentReturn() {
           data.message || "Unable to verify your subscription right now."
         );
       }
-
-    //   if (
-    //     data.authorizationStatus === "ACTIVE" &&
-    //     data.subscriptionStatus === "ACTIVE"
-    //   ) {
-    //     setStatus("AUTHORIZED");
-    //     setMessage(
-    //       "Your recurring payment authorization is active. This does not confirm that a subscription payment has been collected or that your paid plan is active."
-    //     );
-    //   } 
+      
     
     if (
   data.authorizationStatus === "ACTIVE" &&
   data.subscriptionStatus === "ACTIVE"
 ) {
-  if (data.planActivated === true) {
-    setStatus("AUTHORIZED");
-    setMessage(
-      "Your BUSINESS subscription is active. Refresh your dashboard to see your updated plan."
-    );
-  } else {
+if (data.planActivated === true) {
+  setStatus("AUTHORIZED");
+  setMessage(
+    "Your BookEasy paid plan is active. Open your dashboard to confirm your updated plan."
+  );
+} else {
     setStatus("PENDING");
     setMessage(
       "UPI authorization is successful, but BookEasy has not yet confirmed plan activation. Please check again shortly."
