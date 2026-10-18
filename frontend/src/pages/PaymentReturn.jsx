@@ -141,25 +141,35 @@ export default function PaymentReturn() {
 
         {status === "VERIFYING" && <p>Please wait...</p>}
 
-        {(status === "ERROR" ||
-          status === "PENDING" ||
-          status === "NO_REFERENCE") && (
-          <button
-            type="button"
-            onClick={verifySubscription}
-            style={{
-              padding: "11px 16px",
-              marginTop: 8,
-              border: 0,
-              borderRadius: 8,
-              background: "#2563eb",
-              color: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            Check again
-          </button>
-        )}
+      
+{(status === "ERROR" || status === "PENDING") && (
+  <button
+    type="button"
+    onClick={verifySubscription}
+    disabled={status === "VERIFYING"}
+    style={{
+      padding: "11px 16px",
+      marginTop: 8,
+      border: 0,
+      borderRadius: 8,
+      background: "#2563eb",
+      color: "#fff",
+      cursor: "pointer",
+      opacity: status === "VERIFYING" ? 0.6 : 1,
+    }}
+  >
+    {status === "VERIFYING" ? "Checking..." : "Check again"}
+  </button>
+)}
+
+{status === "NO_REFERENCE" && (
+  <p style={{ marginTop: 16, color: "#64748b", lineHeight: 1.6 }}>
+    This page has no subscription reference to verify. Open your subscription
+    plans and check your subscription status there. Return here after
+    Cashfree redirects you with a subscription reference.
+  </p>
+)}
+
 
         <p style={{ marginTop: 24 }}>
           <Link to="/subscription">View subscription plans</Link>
