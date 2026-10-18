@@ -557,41 +557,89 @@ router.post(
   }
 );
 
-// Cashfree posts form data to the return URL.
-// Redirect the browser back to the frontend; status must still be verified.
+// // Cashfree posts form data to the return URL.
+// // Redirect the browser back to the frontend; status must still be verified.
+// router.post(
+//   "/subscription-return",
+//   express.urlencoded({ extended: false }),
+//   (req, res) => {
+//     try {
+//       const frontendUrl = getFrontendUrl();
+
+//       const subscriptionId =
+//         req.body?.subscription_id ||
+//         req.body?.subscriptionId ||
+//         "";
+
+//       const target = new URL(`${frontendUrl}/payment/return`);
+
+//       if (
+//         typeof subscriptionId === "string" &&
+//         /^[a-zA-Z0-9_. -]{1,250}$/.test(subscriptionId)
+//       ) {
+//         target.searchParams.set("subscription_id", subscriptionId);
+//       }
+
+//       target.searchParams.set("billing_mode", "automatic");
+
+//       return res.redirect(303, target.toString());
+//     } catch (error) {
+//       console.error("Cashfree subscription return error:", error.message);
+
+//       return res.status(500).send(
+//         "Unable to return to BookEasy. Please open BookEasy and check your subscription status."
+//       );
+//     }
+//   }
+// );
+
+
+
+/* Handle Cashfree's browser return using GET and POST. */
+const handleSubscriptionReturn = (req, res) => {
+  try {
+    const frontendUrl = getFrontendUrl();
+
+    const subscriptionId =
+      req.body?.subscription_id ||
+      req.body?.subscriptionId ||
+      req.query?.subscription_id ||
+      req.query?.subscriptionId ||
+      "";
+
+    const target = new URL(`${frontendUrl}/payment/return`);
+
+    if (
+      typeof subscriptionId === "string" &&
+      /^[a-zA-Z0-9_. -]{1,250}$/.test(subscriptionId)
+    ) {
+      target.searchParams.set("subscription_id", subscriptionId);
+    }
+
+    target.searchParams.set("billing_mode", "automatic");
+
+    return res.redirect(303, target.toString());
+  } catch (error) {
+    console.error(
+      "Cashfree subscription return error:",
+      error.message
+    );
+
+    return res.status(500).send(
+      "Unable to return to BookEasy. Please open BookEasy and check your subscription status."
+    );
+  }
+};
+
+router.get("/subscription-return", handleSubscriptionReturn);
+
 router.post(
   "/subscription-return",
   express.urlencoded({ extended: false }),
-  (req, res) => {
-    try {
-      const frontendUrl = getFrontendUrl();
-
-      const subscriptionId =
-        req.body?.subscription_id ||
-        req.body?.subscriptionId ||
-        "";
-
-      const target = new URL(`${frontendUrl}/payment/return`);
-
-      if (
-        typeof subscriptionId === "string" &&
-        /^[a-zA-Z0-9_. -]{1,250}$/.test(subscriptionId)
-      ) {
-        target.searchParams.set("subscription_id", subscriptionId);
-      }
-
-      target.searchParams.set("billing_mode", "automatic");
-
-      return res.redirect(303, target.toString());
-    } catch (error) {
-      console.error("Cashfree subscription return error:", error.message);
-
-      return res.status(500).send(
-        "Unable to return to BookEasy. Please open BookEasy and check your subscription status."
-      );
-    }
-  }
+  handleSubscriptionReturn
 );
+
+
 
 // Fetch subscription status directly from Cashfree.
 // This endpoint checks authorization status but does not by itself
