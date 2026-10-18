@@ -1,11 +1,10 @@
-
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 const API = (
   import.meta.env.VITE_API_URL ||
   "https://bookeasy-backend-ori1.onrender.com/api"
-).replace(/\/$/, "");
+).replace(/\/+$/, "");
 
 export default function PaymentReturn() {
   const [searchParams] = useSearchParams();
@@ -62,15 +61,33 @@ export default function PaymentReturn() {
         );
       }
 
-      if (
-        data.authorizationStatus === "ACTIVE" &&
-        data.subscriptionStatus === "ACTIVE"
-      ) {
-        setStatus("AUTHORIZED");
-        setMessage(
-          "Your recurring payment authorization is active. This does not confirm that a subscription payment has been collected or that your paid plan is active."
-        );
-      } else if (
+    //   if (
+    //     data.authorizationStatus === "ACTIVE" &&
+    //     data.subscriptionStatus === "ACTIVE"
+    //   ) {
+    //     setStatus("AUTHORIZED");
+    //     setMessage(
+    //       "Your recurring payment authorization is active. This does not confirm that a subscription payment has been collected or that your paid plan is active."
+    //     );
+    //   } 
+    
+    if (
+  data.authorizationStatus === "ACTIVE" &&
+  data.subscriptionStatus === "ACTIVE"
+) {
+  if (data.planActivated === true) {
+    setStatus("AUTHORIZED");
+    setMessage(
+      "Your BUSINESS subscription is active. Refresh your dashboard to see your updated plan."
+    );
+  } else {
+    setStatus("PENDING");
+    setMessage(
+      "UPI authorization is successful, but BookEasy has not yet confirmed plan activation. Please check again shortly."
+    );
+  }
+}
+    else if (
         data.authorizationStatus === "FAILURE" ||
         data.authorizationStatus === "FAILED"
       ) {

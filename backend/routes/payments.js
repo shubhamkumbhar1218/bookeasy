@@ -641,9 +641,8 @@ router.post(
 
 
 
-// Fetch subscription status directly from Cashfree.
-// This endpoint checks authorization status but does not by itself
 // prove that a monthly charge has succeeded.
+
 router.post(
   "/verify-subscription",
   authMiddleware,
@@ -671,6 +670,7 @@ router.post(
         });
       }
 
+      // Only verify subscriptions belonging to the logged-in user.
       const localSubscription = await Subscription.findOne({
         subscriptionId,
         userId,
@@ -679,68 +679,155 @@ router.post(
       if (!localSubscription) {
         return res.status(404).json({
           success: false,
-          message: "Subscription not found.",
+          message: "Subscription not found for this account.",
         });
       }
 
-      const cashfreeSubscription = await cashfreeSubscriptionRequest(
-        `/subscriptions/${encodeURIComponent(subscriptionId)}`
-      );
+      // Always retrieve the latest status directly from Cashfree.
+      const cashfreeSubscription =
+        await cashfreeSubscriptionRequest(
+          `/subscriptions/${encodeURIComponent(subscriptionId)}`
+        );
 
-      const authorizationStatus =
+      const authorizationStatus = String(
         cashfreeSubscription.authorization_details
-          ?.authorization_status || "PENDING";
+          ?.authorization_status || "PENDING"
+      ).toUpperCase();
 
-      const cashfreeStatus =
-        cashfreeSubscription.subscription_status || "";
+      const cashfreeStatus = String(
+        cashfreeSubscription.subscription_status || ""
+      ).toUpperCase();
 
-      localSubscription.cashfreeSubscriptionId =
-        cashfreeSubscription.subscription_id || subscriptionId;
+      // Confirm the returned Cashfree ID matches our stored attempt.
+      const returnedSubscriptionId =
+        cashfreeSubscription.subscription_id;
 
-      if (authorizationStatus === "ACTIVE") {
-        localSubscription.status = "ACTIVE";
-      } else if (
-        authorizationStatus === "FAILURE" ||
-        authorizationStatus === "FAILED"
+      if (
+        returnedSubscriptionId &&
+        returnedSubscriptionId !== subscriptionId
       ) {
-        localSubscription.status = "FAILED";
-      } else if (
-        /CANCEL/i.test(cashfreeStatus)
-      ) {
-        localSubscription.status = "CANCELLED";
-      } else if (
-        /EXPIRE|COMPLETED/i.test(cashfreeStatus)
-      ) {
-        localSubscription.status = "EXPIRED";
-      } else {
-        localSubscription.status = "PENDING";
+        return res.status(400).json({
+          success: false,
+          message: "Cashfree subscription ID mismatch.",
+        });
       }
 
-      await localSubscription.save();
+      const user = await User.findOne({
+        _id: userId,
+        role: "BUSINESS",
+      });
 
-      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Business account not found.",
+        });
+      }
 
-      if (user) {
-        user.cashfreeSubscriptionId =
-          localSubscription.cashfreeSubscriptionId;
-        user.cashfreeSubscriptionStatus =
-          cashfreeStatus || authorizationStatus;
-        user.subscriptionBillingMode = "AUTOMATIC";
-        await user.save();
+      if (
+        user.accountStatus !== "ACTIVE" ||
+        user.isActive === false
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Your business account is not active.",
+        });
+      }
+
+      // Activate only when Cashfree confirms both statuses.
+      const isAuthorized =
+        authorizationStatus === "ACTIVE";
+
+      const isSubscriptionActive =
+        cashfreeStatus === "ACTIVE";
+
+      let planActivated = false;
+
+      if (isAuthorized && isSubscriptionActive) {
+        const now = new Date();
+
+        // Save the subscription and plan together.
+        const session = await mongoose.startSession();
+
+        try {
+          await session.withTransaction(async () => {
+            const latestSubscription =
+              await Subscription.findOne({
+                _id: localSubscription._id,
+                userId,
+              }).session(session);
+
+            if (!latestSubscription) {
+              throw new Error(
+                "Subscription record no longer exists."
+              );
+            }
+
+            const latestUser = await User.findOne({
+              _id: userId,
+              role: "BUSINESS",
+              accountStatus: "ACTIVE",
+              isActive: { $ne: false },
+            }).session(session);
+
+            if (!latestUser) {
+              throw new Error(
+                "Business account is not active."
+              );
+            }
+
+            latestSubscription.cashfreeSubscriptionId =
+              returnedSubscriptionId || subscriptionId;
+            latestSubscription.status = "ACTIVE";
+
+            await latestSubscription.save({ session });
+
+            latestUser.plan = latestSubscription.plan;
+            latestUser.subscriptionStatus = "ACTIVE";
+            latestUser.cashfreeSubscriptionId =
+              returnedSubscriptionId || subscriptionId;
+            latestUser.cashfreeSubscriptionStatus =
+              cashfreeStatus;
+            latestUser.subscriptionBillingMode = "AUTOMATIC";
+
+            // Do not mark the ₹499 recurring payment as collected.
+            await latestUser.save({ session });
+          });
+
+          planActivated = true;
+        } finally {
+          await session.endSession();
+        }
+      } else if (
+        authorizationStatus === "FAILED" ||
+        authorizationStatus === "FAILURE"
+      ) {
+        localSubscription.status = "FAILED";
+        await localSubscription.save();
+      } else if (/CANCEL/i.test(cashfreeStatus)) {
+        localSubscription.status = "CANCELLED";
+        await localSubscription.save();
+      } else if (/EXPIRE|COMPLETED/i.test(cashfreeStatus)) {
+        localSubscription.status = "EXPIRED";
+        await localSubscription.save();
+      } else {
+        localSubscription.status = "PENDING";
+        await localSubscription.save();
       }
 
       return res.json({
         success: true,
         subscriptionId,
         plan: localSubscription.plan,
-        subscriptionStatus: localSubscription.status,
+        subscriptionStatus: planActivated
+          ? "ACTIVE"
+          : localSubscription.status,
         authorizationStatus,
         cashfreeSubscriptionStatus: cashfreeStatus,
-        planActivated: false,
-        message:
-          authorizationStatus === "ACTIVE"
-            ? "Recurring authorization is active. A confirmed payment is still required before activating paid access."
-            : "Subscription status retrieved. Complete or check authorization in Cashfree.",
+        planActivated,
+        message: planActivated
+          ? `${localSubscription.plan} plan activated successfully.`
+          : "Subscription is not yet confirmed active by Cashfree. Please check again.",
       });
     } catch (error) {
       console.error(
@@ -752,7 +839,8 @@ router.post(
         success: false,
         message:
           error.details?.message ||
-          "Could not verify the subscription right now. Please try again.",
+          error.message ||
+          "Could not verify the subscription right now.",
       });
     }
   }
