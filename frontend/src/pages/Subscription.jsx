@@ -11,7 +11,8 @@ import {
 import { useNavigate } from "react-router-dom";
 
 const API = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+  import.meta.env.VITE_API_URL ||
+  "https://bookeasy-backend-ori1.onrender.com/api"
 ).replace(/\/$/, "");
 
 const featureLabels = {
@@ -330,11 +331,6 @@ if (checkoutResult?.redirect) {
   console.log("Cashfree requested a redirect.");
 }
 
-
-    //   await cashfree.checkout({
-    //     subsSessionId: sessionId,
-    //     redirectTarget: "_self",
-    //   });
     } catch (err) {
       console.error("CHECKOUT FAILED:", err);
       setCheckoutError(
