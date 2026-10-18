@@ -17,88 +17,172 @@ export default function PaymentReturn() {
     "Checking your subscription status with Cashfree..."
   );
 
-  async function verifySubscription() {
-    const token = localStorage.getItem("bookeasy_token");
+  const [checking, setChecking] = useState(false);
 
-    if (!token) {
-      setStatus("LOGIN_REQUIRED");
-      setMessage("Please log in to check your subscription status.");
-      return;
-    }
 
-    if (!subscriptionId) {
-      setStatus("NO_REFERENCE");
-      setMessage(
-        "Cashfree did not return a subscription reference. Open your subscription page to check the status."
-      );
-      return;
-    }
+  
+async function verifySubscription() {
+  const token = localStorage.getItem("bookeasy_token");
 
-    setStatus("VERIFYING");
-    setMessage("Checking your subscription status with Cashfree...");
+  if (!token) {
+    setStatus("LOGIN_REQUIRED");
+    setMessage("Please log in to check your subscription status.");
+    return;
+  }
 
-    try {
-      const response = await fetch(`${API}/payments/verify-subscription`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ subscriptionId }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (response.status === 401) {
-        setStatus("LOGIN_REQUIRED");
-        setMessage("Your session has expired. Please log in again.");
-        return;
-      }
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message || "Unable to verify your subscription right now."
-        );
-      }
-      
-    
-    if (
-  data.authorizationStatus === "ACTIVE" &&
-  data.subscriptionStatus === "ACTIVE"
-) {
-if (data.planActivated === true) {
-  setStatus("AUTHORIZED");
-  setMessage(
-    "Your BookEasy paid plan is active. Open your dashboard to confirm your updated plan."
-  );
-} else {
-    setStatus("PENDING");
+  if (!subscriptionId) {
+    setStatus("NO_REFERENCE");
     setMessage(
-      "UPI authorization is successful, but BookEasy has not yet confirmed plan activation. Please check again shortly."
+      "Cashfree did not return a subscription reference. Open your subscription page to check the status."
     );
+    return;
+  }
+
+  setChecking(true);
+  setStatus("VERIFYING");
+  setMessage("Checking your subscription status with Cashfree...");
+
+  try {
+    const response = await fetch(`${API}/payments/verify-subscription`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ subscriptionId }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (response.status === 401) {
+      setStatus("LOGIN_REQUIRED");
+      setMessage("Your session has expired. Please log in again.");
+      return;
+    }
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.message || "Unable to verify your subscription right now."
+      );
+    }
+
+    if (
+      data.authorizationStatus === "ACTIVE" &&
+      data.subscriptionStatus === "ACTIVE" &&
+      data.planActivated === true
+    ) {
+      setStatus("AUTHORIZED");
+      setMessage(
+        "Your BookEasy paid plan is active. Open your dashboard to confirm your updated plan."
+      );
+    } else if (
+      data.authorizationStatus === "FAILURE" ||
+      data.authorizationStatus === "FAILED"
+    ) {
+      setStatus("FAILED");
+      setMessage(
+        "Cashfree reports that subscription authorization failed. Please check the authorization process before trying again."
+      );
+    } else {
+      setStatus("PENDING");
+      setMessage(
+        "Your subscription has not yet been confirmed as active. Please check again shortly."
+      );
+    }
+  } catch (error) {
+    setStatus("ERROR");
+    setMessage(
+      error.message || "Could not verify the subscription. Please try again."
+    );
+  } finally {
+    setChecking(false);
   }
 }
-    else if (
-        data.authorizationStatus === "FAILURE" ||
-        data.authorizationStatus === "FAILED"
-      ) {
-        setStatus("FAILED");
-        setMessage(
-          "Cashfree reports that subscription authorization failed. Please check the authorization process before trying again."
-        );
-      } else {
-        setStatus("PENDING");
-        setMessage(
-          "Your subscription is not yet confirmed as authorized. You can check again shortly or return to your subscription page."
-        );
-      }
-    } catch (error) {
-      setStatus("ERROR");
-      setMessage(
-        error.message || "Could not verify the subscription. Please try again."
-      );
-    }
-  }
+
+
+
+//   async function verifySubscription() {
+//     const token = localStorage.getItem("bookeasy_token");
+
+//     if (!token) {
+//       setStatus("LOGIN_REQUIRED");
+//       setMessage("Please log in to check your subscription status.");
+//       return;
+//     }
+
+//     if (!subscriptionId) {
+//       setStatus("NO_REFERENCE");
+//       setMessage(
+//         "Cashfree did not return a subscription reference. Open your subscription page to check the status."
+//       );
+//       return;
+//     }
+
+//     setStatus("VERIFYING");
+//     setMessage("Checking your subscription status with Cashfree...");
+
+//     try {
+//       const response = await fetch(`${API}/payments/verify-subscription`, {
+//         method: "POST",
+//         headers: {
+//           Authorization: `Bearer ${token}`,
+//           "Content-Type": "application/json",
+//         },
+//         body: JSON.stringify({ subscriptionId }),
+//       });
+
+//       const data = await response.json().catch(() => ({}));
+
+//       if (response.status === 401) {
+//         setStatus("LOGIN_REQUIRED");
+//         setMessage("Your session has expired. Please log in again.");
+//         return;
+//       }
+
+//       if (!response.ok || !data.success) {
+//         throw new Error(
+//           data.message || "Unable to verify your subscription right now."
+//         );
+//       }
+
+    
+//     if (
+//   data.authorizationStatus === "ACTIVE" &&
+//   data.subscriptionStatus === "ACTIVE"
+// ) {
+// if (data.planActivated === true) {
+//   setStatus("AUTHORIZED");
+//   setMessage(
+//     "Your BookEasy paid plan is active. Open your dashboard to confirm your updated plan."
+//   );
+// } else {
+//     setStatus("PENDING");
+//     setMessage(
+//       "UPI authorization is successful, but BookEasy has not yet confirmed plan activation. Please check again shortly."
+//     );
+//   }
+// }
+//     else if (
+//         data.authorizationStatus === "FAILURE" ||
+//         data.authorizationStatus === "FAILED"
+//       ) {
+//         setStatus("FAILED");
+//         setMessage(
+//           "Cashfree reports that subscription authorization failed. Please check the authorization process before trying again."
+//         );
+//       } else {
+//         setStatus("PENDING");
+//         setMessage(
+//           "Your subscription is not yet confirmed as authorized. You can check again shortly or return to your subscription page."
+//         );
+//       }
+//     } catch (error) {
+//       setStatus("ERROR");
+//       setMessage(
+//         error.message || "Could not verify the subscription. Please try again."
+//       );
+//     }
+//   }
 
   useEffect(() => {
     verifySubscription();
@@ -150,11 +234,13 @@ if (data.planActivated === true) {
         {status === "VERIFYING" && <p>Please wait...</p>}
 
       
-{(status === "ERROR" || status === "PENDING") && (
+{(status === "ERROR" ||
+  status === "PENDING" ||
+  status === "NO_REFERENCE") && (
   <button
     type="button"
     onClick={verifySubscription}
-    disabled={status === "VERIFYING"}
+    disabled={checking}
     style={{
       padding: "11px 16px",
       marginTop: 8,
@@ -162,13 +248,14 @@ if (data.planActivated === true) {
       borderRadius: 8,
       background: "#2563eb",
       color: "#fff",
-      cursor: "pointer",
-      opacity: status === "VERIFYING" ? 0.6 : 1,
+      cursor: checking ? "not-allowed" : "pointer",
+      opacity: checking ? 0.6 : 1,
     }}
   >
-    {status === "VERIFYING" ? "Checking..." : "Check again"}
+    {checking ? "Checking..." : "Check Again"}
   </button>
 )}
+
 
 {status === "NO_REFERENCE" && (
   <p style={{ marginTop: 16, color: "#64748b", lineHeight: 1.6 }}>
