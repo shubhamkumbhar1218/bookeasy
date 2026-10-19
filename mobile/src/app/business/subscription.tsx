@@ -584,7 +584,10 @@ CFPaymentGatewayService.setCallback({
           Find the right plan for your business.
         </Text>
 
-        {data.availablePlans?.map((plan) => {
+        {/* {data.availablePlans?.map((plan) => { */}
+        {data.availablePlans
+  ?.filter((plan) => plan.id.toUpperCase() !== "PRO")
+  .map((plan) => {
           const isCurrent = plan.id === data.plan;
 
           return (
