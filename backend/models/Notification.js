@@ -28,9 +28,22 @@ const notificationSchema = new mongoose.Schema(
         "appointment_reminder_24h",
         "appointment_reminder_1h",
 
+        "booking_usage_41",
+"booking_limit_reached",
+"subscription_expiry_3d",
+"subscription_expiry_1d",
+"subscription_expired",
+
       ],
       required: true,
     },
+
+    dedupeKey: {
+  type: String,
+  default: undefined,
+  unique: true,
+  sparse: true,
+},
 
     title: {
       type: String,

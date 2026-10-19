@@ -18,6 +18,9 @@ import {
   startAppointmentExpiryScheduler,
 } from "./utils/appointmentExpiryScheduler.js";
 import {
+  startSubscriptionReminderScheduler,
+} from "./utils/subscriptionReminderScheduler.js";
+import {
   startAppointmentReminderScheduler,
 } from "./utils/appointmentReminderScheduler.js";
 
@@ -133,8 +136,9 @@ mongoose
       mongoose.connection.name
     );
 
-    startAppointmentReminderScheduler();
-    startAppointmentExpiryScheduler();
+startAppointmentReminderScheduler();
+startSubscriptionReminderScheduler();
+startAppointmentExpiryScheduler();
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`BookEasy server running on port ${PORT}`);
