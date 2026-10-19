@@ -555,10 +555,13 @@ router.get(
   async (req, res) => {
     try {
       const user = await User.findById(req.user.id)
-        .select(
-          "role accountStatus isActive plan subscriptionStatus subscriptionStartDate subscriptionEndDate"
-        );
-
+       .select(
+  "role accountStatus isActive plan subscriptionStatus " +
+  "subscriptionStartDate subscriptionEndDate " +
+  "subscriptionBillingMode subscriptionNextBillingDate " +
+  "subscriptionLastPaymentAt subscriptionLastPaymentId " +
+  "cashfreeSubscriptionStatus"
+);
       if (!user) {
         return res.status(404).json({
           message: "User not found",
@@ -581,15 +584,22 @@ router.get(
         user.subscriptionEndDate &&
         new Date(user.subscriptionEndDate) <= now;
 
-      if (
-        isPaidPlan &&
-        (
-          user.subscriptionStatus !== "ACTIVE" ||
-          subscriptionExpired
-        )
-      ) {
-        effectivePlan = "FREE";
-      }
+const hasUnexpiredPeriod =
+  user.subscriptionEndDate &&
+  new Date(user.subscriptionEndDate) > now;
+
+if (
+  isPaidPlan &&
+  (
+    subscriptionExpired ||
+    (
+      user.subscriptionStatus !== "ACTIVE" &&
+      !hasUnexpiredPeriod
+    )
+  )
+) {
+  effectivePlan = "FREE";
+}
 
       const plan = PLANS[effectivePlan];
 
@@ -639,11 +649,25 @@ router.get(
         planName: plan.name,
         price: plan.price,
         subscriptionStatus:
-          effectivePlan === "FREE"
-            ? "ACTIVE"
-            : user.subscriptionStatus,
+  isPaidPlan && subscriptionExpired
+    ? "EXPIRED"
+    : effectivePlan === "FREE"
+      ? "ACTIVE"
+      : user.subscriptionStatus,
         subscriptionStartDate: user.subscriptionStartDate,
         subscriptionEndDate: user.subscriptionEndDate,
+        subscriptionBillingMode:
+  user.subscriptionBillingMode || "MANUAL",
+
+subscriptionNextBillingDate:
+  user.subscriptionNextBillingDate ||
+  user.subscriptionEndDate,
+
+subscriptionLastPaymentAt:
+  user.subscriptionLastPaymentAt || null,
+
+cashfreeSubscriptionStatus:
+  user.cashfreeSubscriptionStatus || null,
         usage: {
           bookingsUsed,
           bookingLimit,

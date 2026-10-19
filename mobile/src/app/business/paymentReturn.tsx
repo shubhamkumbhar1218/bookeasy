@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -12,26 +12,23 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CheckCircle2, CircleAlert, RefreshCw } from "lucide-react-native";
-
-const API_URL = (
-  process.env.EXPO_PUBLIC_API_URL ||
-  "https://bookeasy-backend-ori1.onrender.com/api"
-).replace(/\/+$/, "");
+import API_URL from "../../api";
 
 type VerificationResult = {
   success?: boolean;
   message?: string;
-  status?: string;
   plan?: string;
   planActivated?: boolean;
   authorizationStatus?: string;
   subscriptionStatus?: string;
+  cashfreeSubscriptionStatus?: string;
 };
 
 type ScreenStatus = "loading" | "active" | "pending" | "failed";
 
 export default function PaymentReturnScreen() {
   const router = useRouter();
+
   const params = useLocalSearchParams<{
     subscription_id?: string | string[];
     subscriptionId?: string | string[];
@@ -48,7 +45,11 @@ export default function PaymentReturnScreen() {
   const [plan, setPlan] = useState("");
   const [checking, setChecking] = useState(false);
 
+  // Prevent overlapping verification requests.
+  const requestInProgress = useRef(false);
+
   const verifySubscription = useCallback(async () => {
+    console.log("PAYMENT RETURN: verifySubscription called");
     if (!subscriptionId) {
       setScreenStatus("failed");
       setMessage(
@@ -57,11 +58,15 @@ export default function PaymentReturnScreen() {
       return;
     }
 
-    if (checking) return;
+    if (requestInProgress.current) return;
 
+    requestInProgress.current = true;
     setChecking(true);
     setScreenStatus("loading");
     setMessage("Verifying your subscription with Cashfree...");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     try {
       const token = await AsyncStorage.getItem("bookeasy_token");
@@ -69,11 +74,12 @@ export default function PaymentReturnScreen() {
       if (!token) {
         setScreenStatus("failed");
         setMessage(
-          "Your business login session was not found. Please sign in again, then return to the subscription page to verify your payment."
+          "Your login session was not found. Sign in again, then return to the subscription page."
         );
         return;
       }
 
+      console.log("VERIFY: sending request", `${API_URL}/payments/verify-subscription`);
       const response = await fetch(
         `${API_URL}/payments/verify-subscription`,
         {
@@ -83,14 +89,25 @@ export default function PaymentReturnScreen() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ subscriptionId }),
+          signal: controller.signal,
         }
       );
+      console.log("VERIFY: response received", response.status);
 
-      const data: VerificationResult = await response.json();
+      const data = (await response.json()) as VerificationResult;
+      console.log("VERIFY: response data", JSON.stringify(data));
 
-      if (!response.ok) {
+      if (!response.ok || data.success === false) {
+        if (response.status === 401) {
+          setScreenStatus("failed");
+          setMessage(
+            data.message || "Your session has expired. Please sign in again."
+          );
+          return;
+        }
+
         throw new Error(
-          data.message || "Unable to verify the subscription."
+          data.message || `Verification failed (HTTP ${response.status}).`
         );
       }
 
@@ -98,74 +115,114 @@ export default function PaymentReturnScreen() {
         setPlan(data.plan);
       }
 
-      if (data.planActivated === true) {
+      // Only the backend can confirm plan activation.
+if (
+  data.authorizationStatus === "ACTIVE" &&
+  data.subscriptionStatus === "ACTIVE" &&
+  data.planActivated === true
+) {
         setScreenStatus("active");
+        await AsyncStorage.removeItem(
+    "bookeasy_pending_subscription_id"
+  );
         setMessage(
           data.message ||
-            "Your subscription is active. You can continue to your business dashboard."
+            "Your subscription is active. You can continue to your dashboard."
         );
 
-        // Update the locally cached user plan when the API supplies it.
+        // Refresh the cached user plan.
         const cachedUser = await AsyncStorage.getItem("bookeasy_user");
 
-        if (cachedUser && data.plan) {
+        if (cachedUser) {
           try {
             const user = JSON.parse(cachedUser);
+
             await AsyncStorage.setItem(
               "bookeasy_user",
               JSON.stringify({
                 ...user,
-                plan: data.plan,
+                plan: data.plan || user.plan,
                 subscriptionStatus: "ACTIVE",
               })
             );
-          } catch {
-            // The server remains the source of truth.
+          } catch (cacheError) {
+            console.warn(
+              "Could not update cached subscription details:",
+              cacheError
+            );
           }
         }
-      } else {
-        const status = String(
-          data.subscriptionStatus || data.status || ""
-        ).toUpperCase();
 
-        if (
-          status.includes("CANCEL") ||
-          status.includes("EXPIRED") ||
-          status.includes("FAILED")
-        ) {
-          setScreenStatus("failed");
-          setMessage(
-            data.message ||
-              "The subscription could not be activated. Please check its status or try again."
-          );
-        } else {
-          setScreenStatus("pending");
-          setMessage(
-            data.message ||
-              "Your subscription is still being verified. Please check again in a moment."
-          );
-        }
+        return;
+      }
+
+      const authorizationStatus = String(
+        data.authorizationStatus || ""
+      ).toUpperCase();
+
+      const subscriptionStatus = String(
+        data.subscriptionStatus || ""
+      ).toUpperCase();
+
+      const cashfreeStatus = String(
+        data.cashfreeSubscriptionStatus || ""
+      ).toUpperCase();
+
+      const isFailed =
+        ["FAILED", "FAILURE"].includes(authorizationStatus) ||
+        ["FAILED", "CANCELLED", "CUSTOMER_CANCELLED", "EXPIRED", "COMPLETED", "ON_HOLD"].includes(
+          subscriptionStatus
+        ) ||
+        ["CANCELLED", "CUSTOMER_CANCELLED", "EXPIRED", "COMPLETED", "ON_HOLD"].includes(
+          cashfreeStatus
+        );
+
+      if (isFailed) {
+        setScreenStatus("failed");
+        setMessage(
+          data.message ||
+            "The subscription is not active. Check the subscription status before trying again."
+        );
+      } else {
+        setScreenStatus("pending");
+        setMessage(
+          data.message ||
+            "Cashfree has not confirmed authorization yet. Please wait briefly and check again."
+        );
       }
     } catch (error) {
       setScreenStatus("pending");
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "A network error occurred while verifying your subscription."
-      );
+
+      if (error instanceof Error && error.name === "AbortError") {
+        setMessage(
+          "Verification took too long. Your payment status has not been confirmed by this screen. Check again shortly."
+        );
+      } else {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "A network error occurred while verifying your subscription."
+        );
+      }
     } finally {
+      clearTimeout(timeoutId);
+      requestInProgress.current = false;
       setChecking(false);
     }
-  }, [subscriptionId, checking]);
+  }, [subscriptionId]);
 
   useEffect(() => {
-    verifySubscription();
-    // Verify once when this screen opens. Manual retry uses the same function.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscriptionId]);
+    void verifySubscription();
+  }, [verifySubscription]);
 
   const isActive = screenStatus === "active";
   const isFailed = screenStatus === "failed";
+
+  console.log("PAYMENT RETURN SCREEN RENDERED", {
+  subscriptionId,
+  screenStatus,
+  checking,
+});
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -228,33 +285,32 @@ export default function PaymentReturnScreen() {
             </Text>
           </View>
 
-          {!isActive && (
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                (checking || screenStatus === "loading") &&
-                  styles.disabledButton,
-              ]}
-              onPress={verifySubscription}
-              disabled={checking || screenStatus === "loading"}
-              activeOpacity={0.8}
-            >
-              {checking ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <>
-                  <RefreshCw size={18} color="#ffffff" />
-                  <Text style={styles.primaryButtonText}>
-                    Check again
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
+          
+{screenStatus !== "active" && (
+  <TouchableOpacity
+    style={[
+      styles.primaryButton,
+      checking && styles.disabledButton,
+    ]}
+    onPress={() => void verifySubscription()}
+    disabled={checking}
+    activeOpacity={0.8}
+  >
+    {checking ? (
+      <ActivityIndicator color="#ffffff" />
+    ) : (
+      <>
+        <RefreshCw size={18} color="#ffffff" />
+        <Text style={styles.primaryButtonText}>Check again</Text>
+      </>
+    )}
+  </TouchableOpacity>
+)}
+
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => router.replace("/business" as any)}
+            onPress={() => router.replace("/business/dashboard" as any)}
             activeOpacity={0.8}
           >
             <Text style={styles.secondaryButtonText}>
@@ -263,9 +319,9 @@ export default function PaymentReturnScreen() {
           </TouchableOpacity>
 
           <Text style={styles.note}>
-            Your plan is activated only when the backend confirms it.
-            A UPI mandate authorization alone does not confirm that a
-            recurring subscription fee has been collected.
+            Your plan becomes active when the backend confirms subscription
+            authorization. This verification does not confirm that a recurring
+            subscription charge has been collected.
           </Text>
         </View>
       </ScrollView>

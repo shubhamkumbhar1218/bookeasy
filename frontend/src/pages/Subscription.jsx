@@ -640,11 +640,35 @@ if (checkoutResult?.redirect) {
               <h3 style={{ margin: "8px 0" }}>
                 {formatDate(subscription.subscriptionStartDate)}
               </h3>
-              <p style={styles.muted}>
-                {subscription.subscriptionEndDate
-                  ? `Ends ${formatDate(subscription.subscriptionEndDate)}`
-                  : "No end date recorded"}
-              </p>
+
+<p style={styles.muted}>
+  {subscription.subscriptionEndDate
+    ? `Expires ${formatDate(subscription.subscriptionEndDate)}`
+    : "No expiry date recorded"}
+</p>
+
+<p style={styles.muted}>
+  Billing:{" "}
+  {subscription.subscriptionBillingMode === "AUTOMATIC"
+    ? "Automatic monthly renewal"
+    : "Manual payment"}
+</p>
+
+{subscription.subscriptionBillingMode === "AUTOMATIC" &&
+  subscription.subscriptionNextBillingDate && (
+    <p style={styles.muted}>
+      Next billing date:{" "}
+      {formatDate(subscription.subscriptionNextBillingDate)}
+    </p>
+  )}
+
+{subscription.subscriptionLastPaymentAt && (
+  <p style={styles.muted}>
+    Last successful payment:{" "}
+    {formatDate(subscription.subscriptionLastPaymentAt)}
+  </p>
+)}
+
             </div>
           </div>
 

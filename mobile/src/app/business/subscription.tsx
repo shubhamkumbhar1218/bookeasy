@@ -1,8 +1,9 @@
+import { useCallback, useEffect, useState } from "react";
 
-import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -35,6 +36,12 @@ type SubscriptionData = {
   planName: string;
   price: number;
   subscriptionStatus: string;
+  subscriptionStartDate?: string | null;
+subscriptionEndDate?: string | null;
+subscriptionBillingMode?: string;
+subscriptionNextBillingDate?: string | null;
+subscriptionLastPaymentAt?: string | null;
+cashfreeSubscriptionStatus?: string | null;
   usage: {
     bookingsUsed: number;
     bookingLimit: number | null;
@@ -69,11 +76,77 @@ const featureLabels: Record<string, string> = {
   advanced_automation: "Advanced automation",
 };
 
+
+
+function formatSubscriptionDate(value?: string | null) {
+  if (!value) return "Not recorded";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
+}
+
+
 export default function BusinessSubscription() {
   const [data, setData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
+
+  const PENDING_SUBSCRIPTION_KEY = "bookeasy_pending_subscription_id";
+
+useEffect(() => {
+  let previousState = AppState.currentState;
+  let navigating = false;
+
+  const subscription = AppState.addEventListener(
+    "change",
+    async (nextState) => {
+      const returnedToApp =
+        previousState.match(/inactive|background/) &&
+        nextState === "active";
+
+      previousState = nextState;
+
+      if (!returnedToApp || navigating) return;
+
+      try {
+        const pendingId = await AsyncStorage.getItem(
+          PENDING_SUBSCRIPTION_KEY
+        );
+
+        if (!pendingId) return;
+
+        navigating = true;
+
+        console.log(
+          "PAYMENT RETURN RECOVERED:",
+          pendingId
+        );
+
+        router.replace({
+          pathname: "/business/paymentReturn",
+          params: { subscription_id: pendingId },
+        });
+      } catch (error) {
+        navigating = false;
+        console.log("Payment return recovery error:", error);
+      }
+    }
+  );
+
+  return () => subscription.remove();
+}, []);
+
 
   const loadSubscription = useCallback(async () => {
     try {
@@ -191,24 +264,49 @@ export default function BusinessSubscription() {
       result.subscriptionId,
       environment
     );
+await AsyncStorage.setItem(
+  "bookeasy_pending_subscription_id",
+  result.subscriptionId
+);
 
-    CFPaymentGatewayService.setCallback({
-      onVerify: () => {
-        router.replace({
-          pathname: "/business/paymentReturn",
-          params: {
-            subscription_id: result.subscriptionId,
-          },
-        });
-      },
-      onError: (error: import("react-native-cashfree-pg-sdk").CFErrorResponse) => {
-        setUpgradingPlan(null);
-        Alert.alert(
-          "Checkout not completed",
-          error.getMessage() || "Please try again."
-        );
+console.log(
+  "PENDING SUBSCRIPTION SAVED:",
+  await AsyncStorage.getItem("bookeasy_pending_subscription_id")
+);
+
+CFPaymentGatewayService.setCallback({
+  onVerify: (verifyResult: any) => {
+    console.log("CASHFREE onVerify CALLBACK FIRED", {
+      subscriptionId: result.subscriptionId,
+      verifyResult,
+    });
+
+    setUpgradingPlan(null);
+
+    router.replace({
+      pathname: "/business/paymentReturn",
+      params: {
+        subscription_id: result.subscriptionId,
       },
     });
+  },
+
+  onError: (
+    error: import("react-native-cashfree-pg-sdk").CFErrorResponse
+  ) => {
+    console.log("CASHFREE onError CALLBACK FIRED", {
+      subscriptionId: result.subscriptionId,
+      message: error.getMessage(),
+    });
+
+    setUpgradingPlan(null);
+
+    Alert.alert(
+      "Checkout not completed",
+      error.getMessage() || "Please try again."
+    );
+  },
+});
 
     CFPaymentGatewayService.doSubscriptionPayment(session);
   } catch (error) {
@@ -341,6 +439,54 @@ export default function BusinessSubscription() {
           </View>
 
           <View style={styles.divider} />
+
+          
+<View style={{ marginBottom: 16 }}>
+  <Text style={styles.usageTitle}>Plan started</Text>
+  <Text style={styles.resetText}>
+    {formatSubscriptionDate(data.subscriptionStartDate)}
+  </Text>
+
+  <Text style={[styles.usageTitle, { marginTop: 12 }]}>
+    Plan expiry
+  </Text>
+  <Text style={styles.resetText}>
+    {formatSubscriptionDate(data.subscriptionEndDate)}
+  </Text>
+
+  <Text style={[styles.usageTitle, { marginTop: 12 }]}>
+    Billing
+  </Text>
+  <Text style={styles.resetText}>
+    {data.subscriptionBillingMode === "AUTOMATIC"
+      ? "Automatic monthly renewal"
+      : "Manual payment"}
+  </Text>
+
+  {data.subscriptionBillingMode === "AUTOMATIC" &&
+  data.subscriptionNextBillingDate ? (
+    <>
+      <Text style={[styles.usageTitle, { marginTop: 12 }]}>
+        Next billing date
+      </Text>
+      <Text style={styles.resetText}>
+        {formatSubscriptionDate(data.subscriptionNextBillingDate)}
+      </Text>
+    </>
+  ) : null}
+
+  {data.subscriptionLastPaymentAt ? (
+    <>
+      <Text style={[styles.usageTitle, { marginTop: 12 }]}>
+        Last successful payment
+      </Text>
+      <Text style={styles.resetText}>
+        {formatSubscriptionDate(data.subscriptionLastPaymentAt)}
+      </Text>
+    </>
+  ) : null}
+</View>
+
 
           <Text style={styles.usageTitle}>Monthly booking usage</Text>
           <Text style={styles.usageCount}>
