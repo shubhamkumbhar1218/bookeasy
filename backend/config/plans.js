@@ -2,7 +2,7 @@ const PLANS = {
 FREE: {
   name: "Free",
   price: 0,
-  bookingLimit: 100,
+  bookingLimit: 50,
   features: [
     "booking_link",
     "basic_bookings",

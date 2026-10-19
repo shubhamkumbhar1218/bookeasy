@@ -316,15 +316,12 @@ router.post("/public", async (req, res) => {
       business.subscriptionEndDate &&
       new Date(business.subscriptionEndDate) <= new Date();
 
-    if (
-      effectivePlan !== "FREE" &&
-      (
-        business.subscriptionStatus !== "ACTIVE" ||
-        subscriptionExpired
-      )
-    ) {
-      effectivePlan = "FREE";
-    }
+if (
+  effectivePlan !== "FREE" &&
+  subscriptionExpired
+) {
+  effectivePlan = "FREE";
+}
 
     const plan = PLANS[effectivePlan];
 

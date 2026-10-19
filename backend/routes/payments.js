@@ -833,26 +833,28 @@ latestUser.subscriptionNextBillingDate =
 });
 
 // ============================================================
-// CASHFREE WEBHOOK
+// CASHFREE WEBHOOK — IDEMPOTENT, TRANSACTIONAL PROCESSING
 // ============================================================
 
 router.post("/webhook", async (req, res) => {
+  const signature = req.headers["x-webhook-signature"];
+  const timestamp = req.headers["x-webhook-timestamp"];
+
+  // 1. Verify the exact raw request body before trusting the event.
+  if (
+    typeof signature !== "string" ||
+    typeof timestamp !== "string" ||
+    typeof req.rawBody !== "string"
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing webhook signature information.",
+    });
+  }
+
+  let event;
+
   try {
-    const signature = req.headers["x-webhook-signature"];
-    const timestamp = req.headers["x-webhook-timestamp"];
-
-    if (
-      typeof signature !== "string" ||
-      typeof timestamp !== "string" ||
-      typeof req.rawBody !== "string"
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing webhook signature information.",
-      });
-    }
-
-    // Cashfree SDK verifies the signature against the exact raw body.
     const verified = cashfree.PGVerifyWebhookSignature(
       signature,
       req.rawBody,
@@ -866,7 +868,17 @@ router.post("/webhook", async (req, res) => {
       });
     }
 
-    const event = JSON.parse(req.rawBody);
+    event = JSON.parse(req.rawBody);
+  } catch (error) {
+    console.error("Cashfree webhook verification failed:", error.message);
+
+    return res.status(401).json({
+      success: false,
+      message: "Webhook verification failed.",
+    });
+  }
+
+  try {
     const eventType = String(event.type || "").toUpperCase();
     const data = event.data || {};
 
@@ -876,15 +888,13 @@ router.post("/webhook", async (req, res) => {
         "SUBSCRIPTION_PAYMENT_FAILED",
       ].includes(eventType)
     ) {
-      // Other Cashfree events are not handled by this endpoint.
       return res.status(200).json({
         success: true,
         ignored: true,
       });
     }
 
-    // Subscription event fields can be nested. Accept only known
-    // subscription/payment ID locations, not a customer-supplied ID.
+    // 2. Extract identifiers from supported payload locations.
     const subscriptionId =
       data.subscription_details?.subscription_id ||
       data.subscription?.subscription_id ||
@@ -909,88 +919,40 @@ router.post("/webhook", async (req, res) => {
     if (
       typeof subscriptionId !== "string" ||
       !subscriptionId ||
-      !paymentId
+      !paymentId ||
+      paymentId.length > 200
     ) {
-      console.error("Cashfree subscription event missing identifiers", {
+      console.error("Cashfree webhook identifiers missing", {
         eventType,
         hasSubscriptionId: Boolean(subscriptionId),
         hasPaymentId: Boolean(paymentId),
       });
 
-      // A success event without identifiers must be retried/investigated.
       return res.status(400).json({
         success: false,
-        message: "Subscription payment identifiers are missing.",
+        message: "Subscription or payment identifier is missing.",
       });
     }
 
-const localSubscription = await Subscription.findOne({
-  $or: [
-    { subscriptionId },
-    { cashfreeSubscriptionId: subscriptionId },
-  ],
-});
+    const localSubscription = await Subscription.findOne({
+      $or: [
+        { subscriptionId },
+        { cashfreeSubscriptionId: subscriptionId },
+      ],
+    });
 
     if (!localSubscription) {
-      console.error("Cashfree event for unknown subscription", {
-        eventType,
-        subscriptionId,
-      });
-
-      return res.status(200).json({
-        success: true,
-        ignored: true,
-      });
-    }
-
-    const amountValue =
-      paymentDetails.payment_amount ??
-      paymentDetails.amount ??
-      data.payment_amount ??
-      data.amount;
-
-    if (
-      amountValue != null &&
-      Number(amountValue) !== Number(localSubscription.amount)
-    ) {
-      console.error("Cashfree subscription amount mismatch", {
-        subscriptionId,
-        expected: localSubscription.amount,
-        received: amountValue,
-      });
+      // Do not silently acknowledge an unknown payment subscription:
+      // investigate configuration/mapping errors in Cashfree's logs.
+      console.error("Unknown Cashfree subscription:", subscriptionId);
 
       return res.status(400).json({
         success: false,
-        message: "Subscription payment amount mismatch.",
+        message: "Subscription not found.",
       });
     }
 
-    const user = await User.findById(localSubscription.userId);
-
-    if (!user) {
-      return res.status(200).json({
-        success: true,
-        ignored: true,
-      });
-    }
-
-    if (eventType === "SUBSCRIPTION_PAYMENT_FAILED") {
-      localSubscription.status = "PAST_DUE";
-      await localSubscription.save();
-
-      user.subscriptionStatus = "PAST_DUE";
-      user.cashfreeSubscriptionStatus = "PAST_DUE";
-      await user.save();
-
-      console.warn("BookEasy subscription payment failed", {
-        subscriptionId,
-        paymentId,
-      });
-
-      return res.status(200).json({ success: true });
-    }
-
-    // A successful payment must have an explicit successful status.
+    // 3. Validate payment status, amount and currency.
     const paymentStatus = String(
       paymentDetails.payment_status ||
       paymentDetails.status ||
@@ -998,46 +960,238 @@ const localSubscription = await Subscription.findOne({
       ""
     ).toUpperCase();
 
-    if (
-      paymentStatus &&
-      !["SUCCESS", "PAID", "COMPLETED"].includes(paymentStatus)
-    ) {
-      return res.status(200).json({
-        success: true,
-        ignored: true,
+    if (eventType === "SUBSCRIPTION_PAYMENT_SUCCESS") {
+      if (!["SUCCESS", "PAID", "COMPLETED"].includes(paymentStatus)) {
+        console.error("Success event has unconfirmed payment status", {
+          subscriptionId,
+          paymentId,
+          paymentStatus: paymentStatus || "MISSING",
+        });
+
+        return res.status(400).json({
+          success: false,
+          message: "Successful payment status is not confirmed.",
+        });
+      }
+
+      const amountValue =
+        paymentDetails.payment_amount ??
+        paymentDetails.amount ??
+        data.payment_amount ??
+        data.amount;
+
+      if (
+        amountValue == null ||
+        !Number.isFinite(Number(amountValue)) ||
+        Number(amountValue) !== Number(localSubscription.amount)
+      ) {
+        console.error("Cashfree payment amount missing or mismatched", {
+          subscriptionId,
+          paymentId,
+        });
+
+        return res.status(400).json({
+          success: false,
+          message: "Payment amount could not be verified.",
+        });
+      }
+
+      const currency = String(
+        paymentDetails.payment_currency ||
+        paymentDetails.currency ||
+        data.payment_currency ||
+        data.currency ||
+        "INR"
+      ).toUpperCase();
+
+      if (currency !== localSubscription.currency) {
+        return res.status(400).json({
+          success: false,
+          message: "Payment currency mismatch.",
+        });
+      }
+    }
+
+    // Use Cashfree's payment timestamp where provided.
+    // Fall back to receipt time only when the event has no timestamp.
+    const rawPaymentTime =
+      paymentDetails.payment_time ||
+      paymentDetails.payment_completion_time ||
+      data.payment_time ||
+      event.event_time;
+
+    const parsedPaymentTime = rawPaymentTime
+      ? new Date(rawPaymentTime)
+      : new Date();
+
+    if (Number.isNaN(parsedPaymentTime.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment timestamp.",
       });
     }
 
-    // Unique orderId makes webhook retries idempotent using the existing
-    // Payment model's unique orderId index.
+    const paidAt = parsedPaymentTime;
+
+    // 4. Failed payments must never be recorded as paid.
+    // Preserve existing paid-through access until its period ends.
+    if (eventType === "SUBSCRIPTION_PAYMENT_FAILED") {
+      const session = await mongoose.startSession();
+
+      try {
+        await session.withTransaction(async () => {
+          const subscription = await Subscription.findById(
+            localSubscription._id
+          ).session(session);
+
+          if (!subscription) {
+            throw new Error("Subscription no longer exists.");
+          }
+
+          const now = new Date();
+          const paidThrough =
+            subscription.currentPeriodEnd &&
+            new Date(subscription.currentPeriodEnd);
+
+          if (!paidThrough || paidThrough <= now) {
+            subscription.status = "PAST_DUE";
+            await subscription.save({ session });
+
+            await User.updateOne(
+              { _id: subscription.userId },
+              {
+                $set: {
+                  subscriptionStatus: "PAST_DUE",
+                  cashfreeSubscriptionStatus: "PAST_DUE",
+                },
+              },
+              { session }
+            );
+          }
+
+          // A failed renewal does not move currentPeriodEnd.
+        });
+      } finally {
+        await session.endSession();
+      }
+
+      console.warn("BookEasy recurring payment failed", {
+        subscriptionId,
+        paymentId,
+      });
+
+      return res.status(200).json({ success: true });
+    }
+
+    // 5. Process payment and entitlement changes atomically.
+    // If any database write fails, MongoDB rolls back the transaction.
     const recurringOrderId = `be_subpay_${paymentId}`;
+    const session = await mongoose.startSession();
 
-    const existingPayment = await Payment.findOne({
-      orderId: recurringOrderId,
-    });
-
-    if (existingPayment) {
-      return res.status(200).json({
-        success: true,
-        duplicate: true,
-      });
-    }
-
-    const now = new Date();
+    let result = { duplicate: false };
 
     try {
-      await Payment.create({
-        userId: localSubscription.userId,
-        orderId: recurringOrderId,
-        plan: localSubscription.plan,
-        amount: localSubscription.amount,
-        currency: localSubscription.currency || "INR",
-        status: "PAID",
-        cfPaymentId: paymentId,
-        paidAt: now,
+      await session.withTransaction(async () => {
+        const existingPayment = await Payment.findOne({
+          orderId: recurringOrderId,
+        }).session(session);
+
+        if (existingPayment) {
+          // A payment record from an earlier version may exist without
+          // its subscription update. Do not blindly extend it again.
+          result = { duplicate: true };
+          return;
+        }
+
+        const subscription = await Subscription.findById(
+          localSubscription._id
+        ).session(session);
+
+        if (!subscription) {
+          throw new Error("Subscription no longer exists.");
+        }
+
+        const user = await User.findById(
+          subscription.userId
+        ).session(session);
+
+        if (!user) {
+          throw new Error("Subscription owner no longer exists.");
+        }
+
+        // Record the successful payment inside the same transaction.
+        await Payment.create(
+          [
+            {
+              userId: subscription.userId,
+              orderId: recurringOrderId,
+              plan: subscription.plan,
+              amount: subscription.amount,
+              currency: subscription.currency || "INR",
+              status: "PAID",
+              cfPaymentId: paymentId,
+              paidAt,
+            },
+          ],
+          { session }
+        );
+
+        const hadPreviousSuccessfulPayment =
+          Boolean(subscription.lastPaymentId);
+
+        if (!subscription.currentPeriodStart) {
+          subscription.currentPeriodStart = paidAt;
+        }
+
+        if (!subscription.currentPeriodEnd) {
+          subscription.currentPeriodEnd = addOneCalendarMonth(
+            subscription.currentPeriodStart
+          );
+        } else if (
+          hadPreviousSuccessfulPayment ||
+          paidAt >= subscription.currentPeriodEnd
+        ) {
+          // Extend once for a new successful renewal.
+          subscription.currentPeriodStart =
+            subscription.currentPeriodEnd;
+
+          subscription.currentPeriodEnd = addOneCalendarMonth(
+            subscription.currentPeriodEnd
+          );
+        }
+
+        subscription.lastPaymentId = paymentId;
+        subscription.lastPaymentAt = paidAt;
+        subscription.status = "ACTIVE";
+
+        await subscription.save({ session });
+
+        user.plan = subscription.plan;
+        user.subscriptionStatus = "ACTIVE";
+        user.subscriptionStartDate =
+          user.subscriptionStartDate ||
+          subscription.currentPeriodStart;
+        user.subscriptionEndDate = subscription.currentPeriodEnd;
+        user.subscriptionPaymentId = recurringOrderId;
+        user.cashfreeSubscriptionId =
+          subscription.cashfreeSubscriptionId;
+        user.cashfreeSubscriptionStatus = "ACTIVE";
+        user.subscriptionBillingMode = "AUTOMATIC";
+        user.subscriptionLastPaymentAt = paidAt;
+        user.subscriptionLastPaymentId = paymentId;
+        user.subscriptionNextBillingDate =
+          subscription.currentPeriodEnd;
+
+        await user.save({ session });
+
+        result = {
+          duplicate: false,
+          plan: subscription.plan,
+          subscriptionEndDate: subscription.currentPeriodEnd,
+        };
       });
     } catch (error) {
-      // Concurrent webhook retries can race on the unique orderId index.
+      // Concurrent deliveries may race on Payment.orderId's unique index.
       if (error.code === 11000) {
         return res.status(200).json({
           success: true,
@@ -1046,72 +1200,320 @@ const localSubscription = await Subscription.findOne({
       }
 
       throw error;
+    } finally {
+      await session.endSession();
     }
 
-    // The first successful charge covers the initial period that started
-    // during authorization. Later successful charges extend that period.
-    if (!localSubscription.currentPeriodStart) {
-      localSubscription.currentPeriodStart = now;
+    if (result.duplicate) {
+      return res.status(200).json({
+        success: true,
+        duplicate: true,
+      });
     }
-
-    if (!localSubscription.currentPeriodEnd) {
-      localSubscription.currentPeriodEnd = addOneCalendarMonth(
-        localSubscription.currentPeriodStart
-      );
-    } else if (localSubscription.lastPaymentId) {
-      localSubscription.currentPeriodStart =
-        localSubscription.currentPeriodEnd;
-
-      localSubscription.currentPeriodEnd = addOneCalendarMonth(
-        localSubscription.currentPeriodEnd
-      );
-    }
-
-    localSubscription.lastPaymentId = paymentId;
-    localSubscription.lastPaymentAt = now;
-    localSubscription.status = "ACTIVE";
-
-    await localSubscription.save();
-
-    user.plan = localSubscription.plan;
-    user.subscriptionStatus = "ACTIVE";
-    user.subscriptionStartDate =
-      user.subscriptionStartDate ||
-      localSubscription.currentPeriodStart;
-    user.subscriptionEndDate =
-      localSubscription.currentPeriodEnd;
-    user.subscriptionPaymentId = recurringOrderId;
-    user.cashfreeSubscriptionId =
-      localSubscription.cashfreeSubscriptionId;
-    user.cashfreeSubscriptionStatus = "ACTIVE";
-    user.subscriptionBillingMode = "AUTOMATIC";
-    user.subscriptionLastPaymentAt = now;
-    user.subscriptionLastPaymentId = paymentId;
-    user.subscriptionNextBillingDate =
-      localSubscription.currentPeriodEnd;
-
-    await user.save();
 
     console.log("BookEasy subscription payment processed", {
       subscriptionId,
       paymentId,
-      plan: localSubscription.plan,
-      subscriptionEndDate: localSubscription.currentPeriodEnd,
+      plan: result.plan,
+      subscriptionEndDate: result.subscriptionEndDate,
     });
 
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error(
-      "Cashfree subscription webhook error:",
-      error.details || error.message
+      "Cashfree subscription webhook processing failed:",
+      error.message
     );
 
+    // Non-2xx tells Cashfree that processing failed, allowing its
+    // configured retry policy to retry the delivery.
     return res.status(500).json({
       success: false,
       message: "Webhook processing failed.",
     });
   }
 });
+
+
+
+
+
+// router.post("/webhook", async (req, res) => {
+//   try {
+//     const signature = req.headers["x-webhook-signature"];
+//     const timestamp = req.headers["x-webhook-timestamp"];
+
+//     if (
+//       typeof signature !== "string" ||
+//       typeof timestamp !== "string" ||
+//       typeof req.rawBody !== "string"
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Missing webhook signature information.",
+//       });
+//     }
+
+//     // Cashfree SDK verifies the signature against the exact raw body.
+//     const verified = cashfree.PGVerifyWebhookSignature(
+//       signature,
+//       req.rawBody,
+//       timestamp
+//     );
+
+//     if (!verified) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Invalid webhook signature.",
+//       });
+//     }
+
+//     const event = JSON.parse(req.rawBody);
+//     const eventType = String(event.type || "").toUpperCase();
+//     const data = event.data || {};
+
+//     if (
+//       ![
+//         "SUBSCRIPTION_PAYMENT_SUCCESS",
+//         "SUBSCRIPTION_PAYMENT_FAILED",
+//       ].includes(eventType)
+//     ) {
+//       // Other Cashfree events are not handled by this endpoint.
+//       return res.status(200).json({
+//         success: true,
+//         ignored: true,
+//       });
+//     }
+
+//     // Subscription event fields can be nested. Accept only known
+//     // subscription/payment ID locations, not a customer-supplied ID.
+//     const subscriptionId =
+//       data.subscription_details?.subscription_id ||
+//       data.subscription?.subscription_id ||
+//       data.subscription_id ||
+//       data.subscription_details?.subscriptionId;
+
+//     const paymentDetails =
+//       data.payment_details ||
+//       data.payment ||
+//       data.subscription_payment ||
+//       {};
+
+//     const paymentId = String(
+//       paymentDetails.cf_payment_id ||
+//       paymentDetails.payment_id ||
+//       paymentDetails.paymentId ||
+//       data.cf_payment_id ||
+//       data.payment_id ||
+//       ""
+//     );
+
+//     if (
+//       typeof subscriptionId !== "string" ||
+//       !subscriptionId ||
+//       !paymentId
+//     ) {
+//       console.error("Cashfree subscription event missing identifiers", {
+//         eventType,
+//         hasSubscriptionId: Boolean(subscriptionId),
+//         hasPaymentId: Boolean(paymentId),
+//       });
+
+//       // A success event without identifiers must be retried/investigated.
+//       return res.status(400).json({
+//         success: false,
+//         message: "Subscription payment identifiers are missing.",
+//       });
+//     }
+
+// const localSubscription = await Subscription.findOne({
+//   $or: [
+//     { subscriptionId },
+//     { cashfreeSubscriptionId: subscriptionId },
+//   ],
+// });
+
+//     if (!localSubscription) {
+//       console.error("Cashfree event for unknown subscription", {
+//         eventType,
+//         subscriptionId,
+//       });
+
+//       return res.status(200).json({
+//         success: true,
+//         ignored: true,
+//       });
+//     }
+
+//     const amountValue =
+//       paymentDetails.payment_amount ??
+//       paymentDetails.amount ??
+//       data.payment_amount ??
+//       data.amount;
+
+//     if (
+//       amountValue != null &&
+//       Number(amountValue) !== Number(localSubscription.amount)
+//     ) {
+//       console.error("Cashfree subscription amount mismatch", {
+//         subscriptionId,
+//         expected: localSubscription.amount,
+//         received: amountValue,
+//       });
+
+//       return res.status(400).json({
+//         success: false,
+//         message: "Subscription payment amount mismatch.",
+//       });
+//     }
+
+//     const user = await User.findById(localSubscription.userId);
+
+//     if (!user) {
+//       return res.status(200).json({
+//         success: true,
+//         ignored: true,
+//       });
+//     }
+
+//     if (eventType === "SUBSCRIPTION_PAYMENT_FAILED") {
+//       localSubscription.status = "PAST_DUE";
+//       await localSubscription.save();
+
+//       user.subscriptionStatus = "PAST_DUE";
+//       user.cashfreeSubscriptionStatus = "PAST_DUE";
+//       await user.save();
+
+//       console.warn("BookEasy subscription payment failed", {
+//         subscriptionId,
+//         paymentId,
+//       });
+
+//       return res.status(200).json({ success: true });
+//     }
+
+//     // A successful payment must have an explicit successful status.
+//     const paymentStatus = String(
+//       paymentDetails.payment_status ||
+//       paymentDetails.status ||
+//       data.payment_status ||
+//       ""
+//     ).toUpperCase();
+
+//     if (
+//       paymentStatus &&
+//       !["SUCCESS", "PAID", "COMPLETED"].includes(paymentStatus)
+//     ) {
+//       return res.status(200).json({
+//         success: true,
+//         ignored: true,
+//       });
+//     }
+
+//     // Unique orderId makes webhook retries idempotent using the existing
+//     // Payment model's unique orderId index.
+//     const recurringOrderId = `be_subpay_${paymentId}`;
+
+//     const existingPayment = await Payment.findOne({
+//       orderId: recurringOrderId,
+//     });
+
+//     if (existingPayment) {
+//       return res.status(200).json({
+//         success: true,
+//         duplicate: true,
+//       });
+//     }
+
+//     const now = new Date();
+
+//     try {
+//       await Payment.create({
+//         userId: localSubscription.userId,
+//         orderId: recurringOrderId,
+//         plan: localSubscription.plan,
+//         amount: localSubscription.amount,
+//         currency: localSubscription.currency || "INR",
+//         status: "PAID",
+//         cfPaymentId: paymentId,
+//         paidAt: now,
+//       });
+//     } catch (error) {
+//       // Concurrent webhook retries can race on the unique orderId index.
+//       if (error.code === 11000) {
+//         return res.status(200).json({
+//           success: true,
+//           duplicate: true,
+//         });
+//       }
+
+//       throw error;
+//     }
+
+//     // The first successful charge covers the initial period that started
+//     // during authorization. Later successful charges extend that period.
+//     if (!localSubscription.currentPeriodStart) {
+//       localSubscription.currentPeriodStart = now;
+//     }
+
+//     if (!localSubscription.currentPeriodEnd) {
+//       localSubscription.currentPeriodEnd = addOneCalendarMonth(
+//         localSubscription.currentPeriodStart
+//       );
+//     } else if (localSubscription.lastPaymentId) {
+//       localSubscription.currentPeriodStart =
+//         localSubscription.currentPeriodEnd;
+
+//       localSubscription.currentPeriodEnd = addOneCalendarMonth(
+//         localSubscription.currentPeriodEnd
+//       );
+//     }
+
+//     localSubscription.lastPaymentId = paymentId;
+//     localSubscription.lastPaymentAt = now;
+//     localSubscription.status = "ACTIVE";
+
+//     await localSubscription.save();
+
+//     user.plan = localSubscription.plan;
+//     user.subscriptionStatus = "ACTIVE";
+//     user.subscriptionStartDate =
+//       user.subscriptionStartDate ||
+//       localSubscription.currentPeriodStart;
+//     user.subscriptionEndDate =
+//       localSubscription.currentPeriodEnd;
+//     user.subscriptionPaymentId = recurringOrderId;
+//     user.cashfreeSubscriptionId =
+//       localSubscription.cashfreeSubscriptionId;
+//     user.cashfreeSubscriptionStatus = "ACTIVE";
+//     user.subscriptionBillingMode = "AUTOMATIC";
+//     user.subscriptionLastPaymentAt = now;
+//     user.subscriptionLastPaymentId = paymentId;
+//     user.subscriptionNextBillingDate =
+//       localSubscription.currentPeriodEnd;
+
+//     await user.save();
+
+//     console.log("BookEasy subscription payment processed", {
+//       subscriptionId,
+//       paymentId,
+//       plan: localSubscription.plan,
+//       subscriptionEndDate: localSubscription.currentPeriodEnd,
+//     });
+
+//     return res.status(200).json({ success: true });
+//   } catch (error) {
+//     console.error(
+//       "Cashfree subscription webhook error:",
+//       error.details || error.message
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Webhook processing failed.",
+//     });
+//   }
+// });
 
 export default router;
 
