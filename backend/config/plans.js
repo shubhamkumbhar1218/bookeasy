@@ -1,19 +1,22 @@
+
 const PLANS = {
-FREE: {
-  name: "Free",
-  price: 0,
-  bookingLimit: 50,
-  features: [
-    "booking_link",
-    "basic_bookings",
-    "basic_dashboard",
-    "basic_notifications",
-  ],
-},
+  FREE: {
+    name: "Free",
+    price: 0,
+    yearlyPrice: 0,
+    bookingLimit: 50,
+    features: [
+      "booking_link",
+      "basic_bookings",
+      "basic_dashboard",
+      "basic_notifications",
+    ],
+  },
 
   STARTER: {
-    name: "Starter",
+    name: "Basic",
     price: 199,
+    yearlyPrice: 1990,
     bookingLimit: null,
     features: [
       "booking_link",
@@ -28,6 +31,7 @@ FREE: {
   BUSINESS: {
     name: "Business",
     price: 499,
+    yearlyPrice: 4990,
     bookingLimit: null,
     features: [
       "booking_link",
@@ -36,8 +40,8 @@ FREE: {
       "reviews",
       "analytics",
       "qr_code",
+      "pop-up notifications",
       "staff_management",
-      "whatsapp_automation",
       "automated_reminders",
       "advanced_analytics",
       "payment_features",
@@ -45,9 +49,12 @@ FREE: {
     ],
   },
 
+  // Keep PRO here for existing accounts if needed,
+  // but hide it from the customer-facing plan list.
   PRO: {
     name: "Pro",
     price: 999,
+    yearlyPrice: 9990,
     bookingLimit: null,
     features: [
       "booking_link",
@@ -56,6 +63,7 @@ FREE: {
       "reviews",
       "analytics",
       "qr_code",
+      "pop-up notifications",
       "staff_management",
       "whatsapp_automation",
       "automated_reminders",

@@ -774,16 +774,21 @@ if (checkoutResult?.redirect) {
             alignItems: "stretch",
           }}
         >
-          {(subscription.availablePlans || [])
-  .filter((plan) =>
-    ["FREE", "STARTER", "BUSINESS"].includes(plan.id)
-  )
-  .map((plan) => {
-            const isCurrent = plan.id === currentPlan;
-            const isProcessing = checkoutLoadingPlan === plan.id;
-            const anyCheckoutRunning = checkoutLoadingPlan !== "";
 
-            return (
+
+
+
+          {(subscription.availablePlans || [])
+            .filter((plan) =>
+              ["FREE", "STARTER"].includes(plan.id)
+            )
+            .map((plan) => {
+              const isCurrent = plan.id === currentPlan;
+              const isProcessing = checkoutLoadingPlan === plan.id;
+              const anyCheckoutRunning = checkoutLoadingPlan !== "";
+
+              return (
+
               <section
                 key={plan.id}
                 style={{
