@@ -254,7 +254,7 @@ export default function PaymentReturnScreen() {
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => router.replace("/business")}
+            onPress={() => router.replace("/business" as any)}
             activeOpacity={0.8}
           >
             <Text style={styles.secondaryButtonText}>

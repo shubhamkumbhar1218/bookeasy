@@ -13,6 +13,14 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API_URL from "../../api";
+import {
+  CFPaymentGatewayService,
+} from "react-native-cashfree-pg-sdk";
+
+import {
+  CFEnvironment,
+  CFSubscriptionSession,
+} from "cashfree-pg-api-contract";
 
 type Plan = {
   id: string;
@@ -65,6 +73,7 @@ export default function BusinessSubscription() {
   const [data, setData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
 
   const loadSubscription = useCallback(async () => {
     try {
@@ -128,6 +137,90 @@ export default function BusinessSubscription() {
     setRefreshing(true);
     void loadSubscription();
   };
+
+  const handleUpgrade = async (plan: Plan) => {
+  if (upgradingPlan) return;
+
+  if (plan.price <= 0) {
+    Alert.alert("Plan", "This plan does not require a payment.");
+    return;
+  }
+
+  setUpgradingPlan(plan.id);
+
+  try {
+    const token = await AsyncStorage.getItem("bookeasy_token");
+
+    if (!token) {
+      setUpgradingPlan(null);
+      router.replace("/business/login");
+      return;
+    }
+
+    const response = await fetch(
+      `${API_URL}/payments/create-subscription`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ plan: plan.id }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.message || "Unable to start the subscription checkout."
+      );
+    }
+
+    if (!result.subscriptionSessionId || !result.subscriptionId) {
+      throw new Error("Cashfree did not return a valid subscription session.");
+    }
+
+    const environment =
+      String(result.cashfreeMode).toLowerCase() === "production"
+        ? CFEnvironment.PRODUCTION
+        : CFEnvironment.SANDBOX;
+
+    const session = new CFSubscriptionSession(
+      result.subscriptionSessionId,
+      result.subscriptionId,
+      environment
+    );
+
+    CFPaymentGatewayService.setCallback({
+      onVerify: () => {
+        router.replace({
+          pathname: "/business/paymentReturn",
+          params: {
+            subscription_id: result.subscriptionId,
+          },
+        });
+      },
+      onError: (error: import("react-native-cashfree-pg-sdk").CFErrorResponse) => {
+        setUpgradingPlan(null);
+        Alert.alert(
+          "Checkout not completed",
+          error.getMessage() || "Please try again."
+        );
+      },
+    });
+
+    CFPaymentGatewayService.doSubscriptionPayment(session);
+  } catch (error) {
+    setUpgradingPlan(null);
+    Alert.alert(
+      "Subscription",
+      error instanceof Error
+        ? error.message
+        : "Unable to start checkout. Please try again."
+    );
+  }
+};
 
   if (loading) {
     return (
@@ -401,31 +494,33 @@ export default function BusinessSubscription() {
                 </View>
               ) : (
                 <TouchableOpacity
-                  style={styles.upgradeButton}
-                  activeOpacity={0.8}
-                  onPress={() =>
-                    Alert.alert(
-                      "Plan upgrades",
-                      "Online payments are not enabled yet. You can view your plans here; upgrading will be available after payment integration."
-                    )
-                  }
-                >
-                  <Text style={styles.upgradeButtonText}>
-                    Upgrade to {plan.name}
-                  </Text>
-                </TouchableOpacity>
+  style={[
+    styles.upgradeButton,
+    upgradingPlan !== null && { opacity: 0.6 },
+  ]}
+  activeOpacity={0.8}
+  disabled={upgradingPlan !== null}
+  onPress={() => void handleUpgrade(plan)}
+>
+  {upgradingPlan === plan.id ? (
+    <ActivityIndicator color="#FFFFFF" />
+  ) : (
+    <Text style={styles.upgradeButtonText}>
+      Upgrade to {plan.name}
+    </Text>
+  )}
+</TouchableOpacity>
               )}
             </View>
           );
         })}
 
         <View style={styles.noteCard}>
-          <Text style={styles.noteTitle}>Need help with your plan?</Text>
-          <Text style={styles.noteText}>
-            Plan upgrades are not processed in this screen yet.
-            Do not make a payment until BookEasy enables its
-            official payment flow.
-          </Text>
+          <Text style={styles.noteTitle}>Secure subscription checkout</Text>
+<Text style={styles.noteText}>
+  Complete checkout through Cashfree. Your plan will update
+  after BookEasy verifies the subscription authorization.
+</Text>
         </View>
       </ScrollView>
     </View>
