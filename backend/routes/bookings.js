@@ -611,6 +611,231 @@ router.get("/customer", async (req, res) => {
 });
 
 
+
+/**
+ * ADVANCED ANALYTICS
+ * BUSINESS and PRO plans only.
+ * Separate from the existing Business Analytics endpoint.
+ */
+router.get(
+  "/advanced-analytics",
+  authMiddleware,
+  requireFeature("advanced_analytics"),
+  async (req, res) => {
+    try {
+      const businessId = req.user.id;
+
+      // Use the last six calendar months, based on India time.
+      const now = new Date();
+      const dateParts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+      }).formatToParts(now);
+
+      const dateValues = Object.fromEntries(
+        dateParts.map(({ type, value }) => [type, value])
+      );
+
+      const currentYear = Number(dateValues.year);
+      const currentMonth = Number(dateValues.month);
+
+      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+      const firstMonth = new Date(
+        Date.UTC(currentYear, currentMonth - 6, 1) -
+          IST_OFFSET_MS
+      );
+
+      const bookings = await Booking.find({
+        businessId,
+        bookingDate: {
+          $gte: firstMonth,
+          $lte: now,
+        },
+      })
+        .populate("serviceId", "name price")
+        .sort({ bookingDate: 1 })
+        .lean();
+
+      const statuses = {
+        pending: 0,
+        confirmed: 0,
+        completed: 0,
+        cancelled: 0,
+        no_show: 0,
+      };
+
+      const monthlyMap = new Map();
+      const serviceMap = new Map();
+      const customerMap = new Map();
+
+      let estimatedCompletedRevenue = 0;
+
+      // Prepare all six calendar-month buckets, including empty months.
+      for (let offset = 5; offset >= 0; offset--) {
+        const monthDate = new Date(
+          Date.UTC(currentYear, currentMonth - 1 - offset, 1)
+        );
+
+        const key = [
+          monthDate.getUTCFullYear(),
+          String(monthDate.getUTCMonth() + 1).padStart(2, "0"),
+        ].join("-");
+
+        monthlyMap.set(key, {
+          month: key,
+          bookings: 0,
+          completed: 0,
+          cancelled: 0,
+        });
+      }
+
+      const monthFormatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+      });
+
+      for (const booking of bookings) {
+        const status = booking.status;
+
+        if (Object.hasOwn(statuses, status)) {
+          statuses[status]++;
+        }
+
+        const monthKey = monthFormatter.format(
+          new Date(booking.bookingDate)
+        );
+
+        const monthly = monthlyMap.get(monthKey);
+
+        if (monthly) {
+          monthly.bookings++;
+
+          if (status === "completed") {
+            monthly.completed++;
+          }
+
+          if (status === "cancelled") {
+            monthly.cancelled++;
+          }
+        }
+
+        const serviceId = booking.serviceId?._id?.toString();
+
+        if (serviceId) {
+          const existing = serviceMap.get(serviceId) || {
+            serviceId,
+            name: booking.serviceId.name || "Unnamed service",
+            bookings: 0,
+            completed: 0,
+          };
+
+          existing.bookings++;
+
+          if (status === "completed") {
+            existing.completed++;
+
+            // Estimate only: uses today's service price, not a
+            // stored historical price or verified payment.
+            estimatedCompletedRevenue += Number(
+              booking.serviceId.price || 0
+            );
+          }
+
+          serviceMap.set(serviceId, existing);
+        }
+
+        const phone = String(booking.customerPhone || "").trim();
+
+        if (phone) {
+          const customer = customerMap.get(phone) || {
+            bookings: 0,
+            completed: 0,
+          };
+
+          customer.bookings++;
+
+          if (status === "completed") {
+            customer.completed++;
+          }
+
+          customerMap.set(phone, customer);
+        }
+      }
+
+      const totalBookings = bookings.length;
+      const completed = statuses.completed;
+      const cancelled = statuses.cancelled;
+      const noShow = statuses.no_show;
+
+      // Completion rate uses all bookings in this reporting window.
+      const completionRate = totalBookings
+        ? Number(((completed / totalBookings) * 100).toFixed(1))
+        : 0;
+
+      // No-show rate uses completed + no-show bookings.
+      const attendanceBase = completed + noShow;
+      const noShowRate = attendanceBase
+        ? Number(((noShow / attendanceBase) * 100).toFixed(1))
+        : 0;
+
+      const customers = Array.from(customerMap.values());
+      const uniqueCustomers = customers.length;
+      const repeatCustomers = customers.filter(
+        (customer) => customer.bookings > 1
+      ).length;
+
+      const repeatCustomerRate = uniqueCustomers
+        ? Number(((repeatCustomers / uniqueCustomers) * 100).toFixed(1))
+        : 0;
+
+      const popularServices = Array.from(serviceMap.values())
+        .sort((a, b) => b.bookings - a.bookings)
+        .slice(0, 5);
+
+      return res.json({
+        success: true,
+        period: {
+          start: firstMonth.toISOString(),
+          end: now.toISOString(),
+          months: 6,
+        },
+        overview: {
+          totalBookings,
+          completedBookings: completed,
+          cancelledBookings: cancelled,
+          pendingBookings: statuses.pending,
+          confirmedBookings: statuses.confirmed,
+          noShowBookings: noShow,
+          uniqueCustomers,
+          repeatCustomers,
+          completionRate,
+          noShowRate,
+          repeatCustomerRate,
+          estimatedCompletedRevenue: Math.round(
+            estimatedCompletedRevenue
+          ),
+        },
+        monthlyTrends: Array.from(monthlyMap.values()),
+        popularServices,
+        revenueNote:
+          "Estimated from current service prices for completed bookings; this is not verified payment revenue.",
+      });
+    } catch (error) {
+      console.error("Advanced analytics error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to load advanced analytics.",
+      });
+    }
+  }
+);
+
+
+
 router.get(
   "/stats/:businessId",
   authMiddleware,
