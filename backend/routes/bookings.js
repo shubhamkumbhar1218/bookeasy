@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Service from "../models/Service.js";
 import authMiddleware from "../middleware/authMiddleware.js";
@@ -7,7 +8,7 @@ import Notification from "../models/Notification.js";
 import { normalizePhone } from "../utils/normalizePhone.js";
 import PLANS from "../config/plans.js";
 import { requireFeature } from "../middleware/requireFeature.js";
-
+import Staff from "../models/Staff.js";
 
 import {
   sendPushForNotification,
@@ -557,11 +558,12 @@ router.get("/business/:businessId", authMiddleware,async (req, res) => {
     message: "You are not allowed to view these bookings",
   });
 }
-    const bookings = await Booking.find({
-      businessId: req.params.businessId,
-    })
-      .populate("serviceId", "name price duration")
-      .sort({ bookingDate: 1 });
+const bookings = await Booking.find({
+  businessId: req.params.businessId,
+})
+  .populate("serviceId", "name price duration")
+  .populate("staffId", "name phone email designation")
+  .sort({ bookingDate: 1 });
 
     res.json(bookings);
   } catch (error) {
@@ -1638,6 +1640,104 @@ router.patch(
     }
   }
 );
+
+
+/**
+ * Assign or unassign a staff member to a booking.
+ * Requires an eligible subscription with staff_management.
+ */
+router.patch(
+  "/:id/assign-staff",
+  authMiddleware,
+  requireFeature("staff_management"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { staffId } = req.body;
+
+      if (!mongoose.isValidObjectId(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid booking ID.",
+        });
+      }
+
+      if (
+        staffId !== null &&
+        (typeof staffId !== "string" ||
+          !mongoose.isValidObjectId(staffId))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid staff ID or null is required.",
+        });
+      }
+
+      const booking = await Booking.findById(id);
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Booking not found.",
+        });
+      }
+
+      if (booking.businessId.toString() !== req.user.id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not allowed to modify this booking.",
+        });
+      }
+
+      if (["cancelled", "completed"].includes(booking.status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Staff cannot be assigned to a cancelled or completed booking.",
+        });
+      }
+
+      if (staffId === null) {
+        booking.staffId = null;
+      } else {
+        const staff = await Staff.findOne({
+          _id: staffId,
+          businessId: req.user.id,
+          isActive: true,
+        });
+
+        if (!staff) {
+          return res.status(404).json({
+            success: false,
+            message: "Active staff member not found for this business.",
+          });
+        }
+
+        booking.staffId = staff._id;
+      }
+
+      await booking.save();
+
+      const updatedBooking = await Booking.findById(booking._id)
+        .populate("serviceId", "name price duration")
+        .populate("staffId", "name phone email designation");
+
+      return res.json({
+        success: true,
+        message: staffId === null
+          ? "Staff assignment removed."
+          : "Staff assigned successfully.",
+        booking: updatedBooking,
+      });
+    } catch (error) {
+      console.error("Assign staff error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to assign staff.",
+      });
+    }
+  }
+);
+
 
 
 export default router;

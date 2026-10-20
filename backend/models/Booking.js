@@ -14,6 +14,12 @@ const bookingSchema = new mongoose.Schema(
       required: true,
     },
 
+    staffId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Staff",
+  default: null,
+},
+
     customerName: {
       type: String,
       required: true,

@@ -1,0 +1,180 @@
+
+/* =================================
+   Staff Management Page
+================================= */
+
+.staff-page {
+  width: min(1100px, calc(100% - 32px));
+  margin: 28px auto;
+}
+
+.staff-page-header,
+.staff-list-heading,
+.staff-card-actions,
+.staff-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.staff-page-header {
+  margin-bottom: 20px;
+}
+
+.staff-panel {
+  margin-bottom: 22px;
+  padding: 24px;
+}
+
+.staff-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.staff-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.staff-form input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #d5dbe3;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.staff-form input:focus {
+  outline: 2px solid #a5b4fc;
+  border-color: #6366f1;
+}
+
+.staff-form-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.staff-message {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #eef8f0;
+  color: #18743a;
+}
+
+.staff-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.staff-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e1e6ed;
+  border-radius: 12px;
+}
+
+.staff-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 50%;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.staff-details {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.staff-details small,
+.staff-details span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.staff-details .staff-active {
+  color: #18743a;
+  font-weight: 600;
+}
+
+.staff-details .staff-inactive {
+  color: #a33b3b;
+  font-weight: 600;
+}
+
+.staff-card-actions {
+  justify-content: flex-end;
+}
+
+.staff-page button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 640px) {
+  .staff-page {
+    width: calc(100% - 24px);
+    margin: 16px auto;
+  }
+
+  .staff-form {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .staff-card-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .staff-panel {
+    padding: 16px;
+  }
+}
+
+.booking-staff-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.booking-staff-selector select {
+  width: 100%;
+  max-width: 320px;
+  padding: 9px 10px;
+  border: 1px solid #d5dbe3;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+
+.booking-staff-selector select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}

@@ -17,7 +17,7 @@ import BusinessReports from "./pages/BusinessReports";
 import AdminPanel from "./pages/AdminPanel";
 import Subscription from "./pages/Subscription";
 import PaymentReturn from "./pages/PaymentReturn";
-
+import StaffManagement from "./pages/StaffManagement";
 import {
   CalendarDays,
   CheckCircle2,
@@ -314,7 +314,7 @@ function Auth({ onLogin, initialMode = "login" }) {
                 required
               />
 
-              
+
 <select
   value={form.category}
   onChange={(e) =>
@@ -631,7 +631,7 @@ const [photoError, setPhotoError] = useState("");
     }
   };
 
-  
+
 const savePhotoToUser = (photoUrl, publicId = "") => {
   const savedUser = JSON.parse(
     localStorage.getItem("bookeasy_user") || "{}"
@@ -1004,7 +1004,7 @@ const copyQRBookingLink = async () => {
             </div>
           </section>
 
-          
+
 {/* BUSINESS PROFILE PHOTO */}
 
 <section className="settings-card">
@@ -1354,46 +1354,6 @@ const copyQRBookingLink = async () => {
   </div>
 </section>
 
-          {/* <section className="settings-card">
-            <div className="settings-card-header">
-              <div>
-                <p className="step-number">BOOKING LINK</p>
-                <h3>Share with customers</h3>
-                <p className="muted">
-                  Send this link to customers so they can book
-                  appointments.
-                </p>
-              </div>
-              <Copy size={22} />
-            </div>
-
-            <div className="booking-link-box">
-              <input
-                type="text"
-                value={`${window.location.origin}/book/${user.businessSlug}`}
-                readOnly
-              />
-
-              <button
-                className="secondary"
-                type="button"
-                onClick={copyBookingLink}
-              >
-                {copied ? (
-                  <>
-                    <Check size={17} />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy size={17} />
-                    Copy Link
-                  </>
-                )}
-              </button>
-            </div>
-          </section> */}
-
           {/* SAVE */}
 
           <div className="settings-actions">
@@ -1424,6 +1384,9 @@ function Dashboard({ user, logout }) {
 const [unreadCount, setUnreadCount] = useState(0);
 const [showNotifications, setShowNotifications] = useState(false);
 
+const [staffMembers, setStaffMembers] = useState([]);
+const [staffFeatureAvailable, setStaffFeatureAvailable] = useState(false);
+const [assigningBookingId, setAssigningBookingId] = useState("");
 
   const [services, setServices] =
     useState([]);
@@ -1902,7 +1865,56 @@ const markAllNotificationsRead = async () => {
     }
   };
 
-  
+
+
+  // ===============================
+  // STAFF MANAGEMENT / ASSIGNMENT
+  // ===============================
+
+  const loadStaffMembers = async () => {
+    try {
+      const data = await api("/staff");
+
+      setStaffMembers(
+        Array.isArray(data.staff) ? data.staff : []
+      );
+
+      setStaffFeatureAvailable(true);
+    } catch (error) {
+      // Staff access may be restricted by the subscription.
+      setStaffMembers([]);
+      setStaffFeatureAvailable(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id) {
+      loadStaffMembers();
+    }
+  }, [user?.id]);
+
+  const assignStaffToBooking = async (bookingId, staffId) => {
+    try {
+      setError("");
+      setAssigningBookingId(bookingId);
+
+      await api(`/bookings/${bookingId}/assign-staff`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          staffId: staffId || null,
+        }),
+      });
+
+      await load();
+      await loadStaffMembers();
+    } catch (error) {
+      setError(error.message || "Unable to assign staff.");
+    } finally {
+      setAssigningBookingId("");
+    }
+  };
+
+
   // ===============================
   // BOOKING SORTING AND DATE FILTER
   // ===============================
@@ -2157,7 +2169,7 @@ const rescheduleBooking = async () => {
   )}
 
   <span>{user.businessName}</span>
-  
+
 
   <div className="notification-wrapper">
   <button
@@ -2303,6 +2315,17 @@ const rescheduleBooking = async () => {
       <BarChart3 size={17} />
       Reports & Analytics
     </button>
+
+    <button
+  className="outline"
+  type="button"
+  onClick={() => {
+    window.location.href = "/staff";
+  }}
+>
+  <UserPlus size={17} />
+  Staff Management
+</button>
 
 <button
   className="outline"
@@ -2734,6 +2757,47 @@ const rescheduleBooking = async () => {
                           booking.customerPhone
                         }
                       </small>
+
+                      {staffFeatureAvailable && (
+  <label className="booking-staff-selector">
+    Assigned staff
+
+    <select
+      value={
+        booking.staffId?._id ||
+        booking.staffId ||
+        ""
+      }
+      disabled={
+        assigningBookingId === booking._id ||
+        ["cancelled", "completed"].includes(booking.status)
+      }
+      onChange={(event) =>
+        assignStaffToBooking(
+          booking._id,
+          event.target.value
+        )
+      }
+    >
+      <option value="">Unassigned</option>
+
+      {staffMembers
+        .filter((person) => person.isActive)
+        .map((person) => (
+          <option key={person._id} value={person._id}>
+            {person.name}
+            {person.designation
+              ? ` — ${person.designation}`
+              : ""}
+          </option>
+        ))}
+    </select>
+
+    {assigningBookingId === booking._id && (
+      <small>Saving assignment...</small>
+    )}
+  </label>
+)}
                     </div>
 
                     <div className="booking-actions">
@@ -3045,7 +3109,19 @@ function App() {
     }
   />
 
-  {/* Business Dashboard */}
+{/* Staff Management */}
+<Route
+  path="/staff"
+  element={
+    !user ? (
+      <Navigate to="/business/login" replace />
+    ) : user.role === "ADMIN" ? (
+      <Navigate to="/admin" replace />
+    ) : (
+      <StaffManagement user={user} api={api} />
+    )
+  }
+/>
 
 {/* Business Dashboard */}
 <Route
@@ -3110,7 +3186,7 @@ function App() {
     }
   />
 
-  
+
 
     <Route
   path="/subscription"
