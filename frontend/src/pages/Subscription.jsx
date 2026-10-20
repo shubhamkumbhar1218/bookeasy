@@ -780,7 +780,7 @@ if (checkoutResult?.redirect) {
 
           {(subscription.availablePlans || [])
             .filter((plan) =>
-              ["FREE", "STARTER"].includes(plan.id)
+              ["FREE", "STARTER", "BUSINESS"].includes(plan.id)
             )
             .map((plan) => {
               const isCurrent = plan.id === currentPlan;
