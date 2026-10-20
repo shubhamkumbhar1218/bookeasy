@@ -18,6 +18,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Subscription from "./pages/Subscription";
 import PaymentReturn from "./pages/PaymentReturn";
 import StaffManagement from "./pages/StaffManagement";
+import AdvancedAnalytics from "./pages/AdvancedAnalytics";
 import {
   CalendarDays,
   CheckCircle2,
@@ -2305,6 +2306,7 @@ const rescheduleBooking = async () => {
 
   <div className="hero-actions">
 
+
     <button
       className="outline"
       type="button"
@@ -2315,6 +2317,17 @@ const rescheduleBooking = async () => {
       <BarChart3 size={17} />
       Reports & Analytics
     </button>
+
+    <button
+  className="outline"
+  type="button"
+  onClick={() => {
+    window.location.href = "/advanced-analytics";
+  }}
+>
+  <BarChart3 size={17} />
+  Advanced Analytics
+</button>
 
     <button
   className="outline"
@@ -3185,6 +3198,21 @@ function App() {
       )
     }
   />
+
+
+  {/* Advanced Analytics — separate from Business Analytics */}
+<Route
+  path="/advanced-analytics"
+  element={
+    !user ? (
+      <Navigate to="/business/login" replace />
+    ) : user.role === "ADMIN" ? (
+      <Navigate to="/admin" replace />
+    ) : (
+      <AdvancedAnalytics user={user} api={api} />
+    )
+  }
+/>
 
 
 

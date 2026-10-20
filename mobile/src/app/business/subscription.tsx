@@ -588,7 +588,9 @@ CFPaymentGatewayService.setCallback({
 
 {data.availablePlans
   ?.filter((plan) =>
-    ["FREE", "STARTER"].includes(plan.id.toUpperCase())
+    ["FREE", "STARTER", "BUSINESS"].includes(
+      plan.id.toUpperCase()
+    )
   )
   .map((plan) => {
 

@@ -309,6 +309,23 @@ useFocusEffect(
             </Text>
           </TouchableOpacity>
 
+          {/* Staff Management */}
+<TouchableOpacity
+  style={styles.actionCard}
+  onPress={() => router.push("/business/staff" as any)}
+  activeOpacity={0.8}
+>
+  <View style={styles.actionIconBox}>
+    <Text style={styles.actionIcon}>👥</Text>
+  </View>
+
+  <Text style={styles.actionTitle}>Staff Management</Text>
+
+  <Text style={styles.actionDescription}>
+    Manage your team and staff members
+  </Text>
+</TouchableOpacity>
+
           {/* Reports */}
 
 {/* Reports */}
@@ -327,7 +344,24 @@ useFocusEffect(
   </Text>
 </TouchableOpacity>
 
-          {/* Notifications */}
+
+{/* Advanced Analytics — separate from Business Analytics */}
+<TouchableOpacity
+  style={styles.actionCard}
+  onPress={() => router.push("/business/advanced-analytics" as any)}
+  activeOpacity={0.8}
+>
+  <View style={styles.actionIconBox}>
+    <Text style={styles.actionIcon}>📊</Text>
+  </View>
+
+  <Text style={styles.actionTitle}>Advanced Analytics</Text>
+
+  <Text style={styles.actionDescription}>
+    View trends, customer retention and service performance
+  </Text>
+</TouchableOpacity>
+
 
           {/* Subscription */}
 <TouchableOpacity

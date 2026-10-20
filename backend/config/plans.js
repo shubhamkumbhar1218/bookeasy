@@ -24,6 +24,7 @@ const PLANS = {
       "reviews",
       "analytics",
       "qr_code",
+      "pop-up notifications",
     ],
   },
 
