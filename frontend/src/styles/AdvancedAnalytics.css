@@ -386,3 +386,208 @@
     scroll-behavior: auto !important;
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+/* BookEasy — Premium Dark Analytics Theme */
+
+.analytics-page {
+  color: #f4f1ff;
+  background: #090815;
+  border-radius: 24px;
+  padding: 24px;
+  isolation: isolate;
+}
+
+.analytics-page::before {
+  background: #7427cb;
+  opacity: 0.18;
+}
+
+.analytics-page::after {
+  background: #d329bc;
+  opacity: 0.13;
+}
+
+/* Dashboard header */
+.analytics-page .mb-8.flex {
+  color: #f8f6ff;
+  background:
+    radial-gradient(ellipse at 100% 0%, #342052 0%, transparent 55%),
+    linear-gradient(135deg, #171426, #100d1d);
+  border: 1px solid #302741;
+  border-radius: 22px;
+  box-shadow: 0 12px 35px #00000035;
+}
+
+.analytics-page h1 {
+  background: linear-gradient(100deg, #ffffff, #c7b7ff 65%, #e3a9ff);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.analytics-page p,
+.analytics-page label {
+  color: #aaa4c0;
+}
+
+/* Metric cards */
+.analytics-page .grid > article {
+  position: relative;
+  overflow: hidden;
+  color: #f6f3ff;
+  background: linear-gradient(145deg, #1c192b, #171423);
+  border: 1px solid #30283f;
+  border-radius: 20px;
+  box-shadow: 0 10px 28px #00000025;
+  transition: transform 220ms ease, border-color 220ms ease;
+}
+
+.analytics-page .grid > article::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #7055f5, #c34de5, #7055f5);
+}
+
+.analytics-page .grid > article:hover {
+  transform: translateY(-4px);
+  border-color: #6650a0;
+}
+
+.analytics-page .grid > article .text-2xl {
+  color: #ffffff;
+}
+
+.analytics-page .grid > article .mb-4 svg {
+  color: #b8a5ff;
+  background: #30264b;
+  border-radius: 12px;
+  padding: 10px;
+}
+
+/* Analytics panels */
+.analytics-page section {
+  color: #f4f1ff;
+  background: linear-gradient(145deg, #191626, #13111f);
+  border: 1px solid #30283f;
+  border-radius: 21px;
+  box-shadow: 0 12px 30px #00000020;
+  backdrop-filter: none;
+}
+
+.analytics-page section h2 {
+  color: #f6f2ff;
+}
+
+.analytics-page section h2::after {
+  background: linear-gradient(90deg, #765cf6, #d84bda);
+}
+
+.analytics-page section h3,
+.analytics-page section strong {
+  color: #eee9ff;
+}
+
+/* Tables */
+.analytics-page table {
+  color: #eae5fa;
+}
+
+.analytics-page thead th {
+  color: #c6bddf;
+  background: #211c31;
+}
+
+.analytics-page tbody tr {
+  border-bottom: 1px solid #30283f;
+}
+
+.analytics-page tbody tr:hover {
+  background: #242037;
+}
+
+/* Inputs and filters */
+.analytics-page input,
+.analytics-page select {
+  color: #f4f1ff;
+  background: #201b30;
+  border: 1px solid #3a3150;
+  border-radius: 10px;
+}
+
+.analytics-page input::placeholder {
+  color: #9289aa;
+}
+
+/* Progress tracks */
+.analytics-page .h-3.rounded-full,
+.analytics-page .h-2.rounded-full {
+  background: #30263e;
+}
+
+.analytics-page .bg-indigo-600 {
+  background: linear-gradient(90deg, #6e53ed, #b14ce0);
+}
+
+/* Secondary text and separators */
+.analytics-page .text-gray-500,
+.analytics-page .text-gray-400,
+.analytics-page .text-slate-500 {
+  color: #a29ab8;
+}
+
+.analytics-page .border-gray-100,
+.analytics-page .border-gray-200 {
+  border-color: #30283f;
+}
+
+/* Keep buttons readable */
+.analytics-page button:focus-visible {
+  outline: 3px solid #9582ff;
+  outline-offset: 3px;
+}
+
+@media (max-width: 700px) {
+  .analytics-page {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .analytics-page .mb-8.flex {
+    border-radius: 18px;
+  }
+
+  .analytics-page .grid > article {
+    border-radius: 16px;
+  }
+
+  .analytics-page section {
+    border-radius: 17px;
+    padding: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analytics-page,
+  .analytics-page *,
+  .analytics-page *::before,
+  .analytics-page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
