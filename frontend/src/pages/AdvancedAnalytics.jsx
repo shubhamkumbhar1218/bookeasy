@@ -1,5 +1,5 @@
-
 import React, { useCallback, useEffect, useState } from "react";
+import "../styles/AdvancedAnalytics.css";
 import {
   Activity,
   AlertCircle,
@@ -98,7 +98,7 @@ export default function AdvancedAnalytics() {
   const maxBookings = Math.max(1, ...trends.map((item) => item.bookings));
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6 sm:px-8">
+    <main className="analytics-page">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
