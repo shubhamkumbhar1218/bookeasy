@@ -1,7 +1,6 @@
-
 import express from "express";
 import mongoose from "mongoose";
-
+import Booking from "../models/Booking.js";
 import Staff from "../models/Staff.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import requireFeature from "../middleware/requireFeature.js";
@@ -64,6 +63,58 @@ router.post("/", async (req, res) => {
     });
   }
 });
+
+// Business owner: view a staff member's work history
+router.get("/:id/bookings", async (req, res) => {
+  try {
+    const staff = await Staff.findOne({
+      _id: req.params.id,
+      businessId: req.user.id,
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        message: "Staff member not found",
+      });
+    }
+
+    const bookings = await Booking.find({
+      businessId: req.user.id,
+      staffId: staff._id,
+    })
+      .populate("serviceId", "name price duration")
+      .populate("staffId", "name designation")
+      .populate("statusHistory.changedBy", "name")
+      .sort({ bookingDate: -1, createdAt: -1 });
+
+    const count = (status) =>
+      bookings.filter((booking) => booking.status === status).length;
+
+    return res.json({
+      success: true,
+      staff: {
+        _id: staff._id,
+        name: staff.name,
+        designation: staff.designation,
+      },
+      summary: {
+        total: bookings.length,
+        completed: count("completed"),
+        cancelled: count("cancelled"),
+        pending: count("pending"),
+        confirmed: count("confirmed"),
+        noShow: count("no_show"),
+      },
+      bookings,
+    });
+  } catch (error) {
+    console.error("Staff booking history error:", error);
+    return res.status(500).json({
+      message: "Failed to load staff booking history",
+    });
+  }
+});
+
 
 // Update staff details or active status
 router.patch("/:id", async (req, res) => {

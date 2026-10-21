@@ -5,6 +5,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -39,6 +40,11 @@ export default function StaffManagementScreen() {
   const [formVisible, setFormVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+
+  const [staffHistory, setStaffHistory] = useState<Record<string, any>>({});
+const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+const [historyLoadingId, setHistoryLoadingId] = useState<string | null>(null);
+const [historyError, setHistoryError] = useState("");
 
   const loadStaff = useCallback(async () => {
     try {
@@ -100,6 +106,51 @@ export default function StaffManagementScreen() {
       setLoading(false);
     }
   }, []);
+
+  const loadStaffHistory = async (staffId: string) => {
+  if (expandedHistoryId === staffId) {
+    setExpandedHistoryId(null);
+    return;
+  }
+
+  setHistoryLoadingId(staffId);
+  setHistoryError("");
+
+  try {
+    const token = await AsyncStorage.getItem("bookeasy_token");
+
+    if (!token) {
+      throw new Error("Your session has expired. Please log in again.");
+    }
+
+    const response = await fetch(
+      `${API_URL}/staff/${staffId}/bookings`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to load staff history");
+    }
+
+    setStaffHistory((previous) => ({
+      ...previous,
+      [staffId]: data,
+    }));
+
+    setExpandedHistoryId(staffId);
+  } catch (error: any) {
+    setHistoryError(error.message || "Unable to load staff history");
+  } finally {
+    setHistoryLoadingId(null);
+  }
+};
+
 
   useFocusEffect(
     useCallback(() => {
@@ -532,6 +583,108 @@ export default function StaffManagementScreen() {
                   </TouchableOpacity>
                 )}
               </View>
+
+              <Pressable
+  onPress={() => loadStaffHistory(member._id)}
+  disabled={historyLoadingId === member._id}
+  style={{
+    padding: 12,
+    marginTop: 10,
+    borderRadius: 8,
+    backgroundColor: "#E8EEFF",
+  }}
+>
+  <Text style={{ color: "#2447A8", fontWeight: "600" }}>
+    {historyLoadingId === member._id
+      ? "Loading history..."
+      : expandedHistoryId === member._id
+        ? "Hide Work History"
+        : "View Work History"}
+  </Text>
+</Pressable>
+
+{historyError && historyLoadingId === member._id ? (
+  <Text>{historyError}</Text>
+) : null}
+
+{historyError && expandedHistoryId === null ? (
+  <Text style={{ color: "red", marginTop: 8 }}>{historyError}</Text>
+) : null}
+
+{expandedHistoryId === member._id && staffHistory[member._id] && (
+  <View style={{ marginTop: 12, gap: 8 }}>
+    <Text style={{ fontSize: 17, fontWeight: "700" }}>
+      Work History — {member.name}
+    </Text>
+
+    <Text>
+      Total: {staffHistory[member._id].summary.total}
+      {" · "}Completed: {staffHistory[member._id].summary.completed}
+      {" · "}Cancelled: {staffHistory[member._id].summary.cancelled}
+    </Text>
+
+    <Text>
+      Pending: {staffHistory[member._id].summary.pending}
+      {" · "}Confirmed: {staffHistory[member._id].summary.confirmed}
+      {" · "}No-show: {staffHistory[member._id].summary.noShow}
+    </Text>
+
+    {staffHistory[member._id].bookings.length === 0 ? (
+      <Text>No bookings assigned yet.</Text>
+    ) : (
+      staffHistory[member._id].bookings.map((booking: any) => (
+        <View
+          key={booking._id}
+          style={{
+            padding: 10,
+            borderWidth: 1,
+            borderColor: "#D7DCE5",
+            borderRadius: 8,
+            gap: 4,
+          }}
+        >
+          <Text style={{ fontWeight: "700" }}>
+            {booking.serviceId?.name || "Service unavailable"}
+          </Text>
+
+          <Text>Customer: {booking.customerName}</Text>
+
+          <Text>
+            Appointment:{" "}
+            {new Date(booking.bookingDate).toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+            })}
+          </Text>
+
+          <Text>Status: {booking.status}</Text>
+
+          {(booking.statusHistory || []).map(
+            (event: any, index: number) => (
+              <Text key={`${booking._id}-${index}`} style={{ fontSize: 12 }}>
+                {event.action === "rescheduled"
+                  ? "Rescheduled"
+                  : event.action === "staff_assigned"
+                    ? "Staff assigned"
+                    : event.action === "staff_unassigned"
+                      ? "Staff unassigned"
+                      : `Status: ${event.status}`}
+                {" · "}
+                {event.changedByName || "Business owner"}
+                {" · "}
+                {event.changedAt
+                  ? new Date(event.changedAt).toLocaleString("en-IN")
+                  : ""}
+              </Text>
+            )
+          )}
+        </View>
+        
+      ))
+    )}
+    
+  </View>
+)}
+
             </View>
           ))
         )}

@@ -363,7 +363,6 @@ useFocusEffect(
 </TouchableOpacity>
 
 
-```tsx
 {/* Customer Retention */}
 <TouchableOpacity
   style={styles.actionCard}
@@ -382,7 +381,6 @@ useFocusEffect(
     Track repeat customers and inactive visits
   </Text>
 </TouchableOpacity>
-```
 
           {/* Subscription */}
 <TouchableOpacity

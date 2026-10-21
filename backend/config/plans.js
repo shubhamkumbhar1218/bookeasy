@@ -46,7 +46,7 @@ const PLANS = {
       "staff_management",
       "automated_reminders",
       "advanced_analytics",
-      "payment_features",
+      // "payment_features",
       "customer_retention",
     ],
   },

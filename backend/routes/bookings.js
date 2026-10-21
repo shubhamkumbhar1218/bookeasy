@@ -1586,9 +1586,24 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
     // --------------------------------------------------
 
 
-    // UPDATE BOOKING
-    booking.bookingDate = newStartTime;
-    booking.bookingSlot = bookingSlot;
+if (!Array.isArray(booking.statusHistory)) {
+  booking.statusHistory = [];
+}
+
+const previousBookingDate = booking.bookingDate;
+
+booking.bookingDate = newStartTime;
+booking.bookingSlot = bookingSlot;
+
+booking.statusHistory.push({
+  action: "rescheduled",
+  status: booking.status,
+  oldBookingDate: previousBookingDate,
+  newBookingDate: newStartTime,
+  changedBy: req.user.id,
+  changedByName: req.user.name || "Business owner",
+  changedAt: new Date(),
+});
 
     // Reset reminders for the new appointment time
     booking.reminder24hSentAt = null;
@@ -1744,9 +1759,35 @@ router.patch("/:id/cancel", authMiddleware, async (req, res) => {
       });
     }
 
-    booking.status = "cancelled";
+if (!Array.isArray(booking.statusHistory)) {
+  booking.statusHistory = [];
+}
 
-    await booking.save();
+if (booking.status !== "cancelled") {
+  booking.status = "cancelled";
+
+  booking.statusHistory.push({
+    status: "cancelled",
+    changedBy: req.user.id,
+    changedByName: req.user.name || "Business owner",
+    changedAt: new Date(),
+  });
+
+  await booking.save();
+}
+
+if (!Array.isArray(booking.statusHistory)) {
+  booking.statusHistory = [];
+}
+
+booking.statusHistory.push({
+  status: "cancelled",
+  changedBy: req.user.id,
+  changedByName: req.user.name || "Business owner",
+  changedAt: new Date(),
+});
+
+await booking.save();
 
 const cancelledNotification =
   await Notification.create({
@@ -1806,9 +1847,37 @@ if (booking.businessId.toString() !== req.user.id.toString()) {
       });
     }
 
-    booking.status = "completed";
+if (!Array.isArray(booking.statusHistory)) {
+  booking.statusHistory = [];
+}
 
-    await booking.save();
+if (booking.status !== "completed") {
+  booking.status = "completed";
+
+  booking.statusHistory.push({
+    status: "completed",
+    changedBy: req.user.id,
+    changedByName: req.user.name || "Business owner",
+    changedAt: new Date(),
+  });
+
+  await booking.save();
+}
+
+await booking.save();
+
+if (!Array.isArray(booking.statusHistory)) {
+  booking.statusHistory = [];
+}
+
+booking.statusHistory.push({
+  status: "completed",
+  changedBy: req.user.id,
+  changedByName: req.user.name || "Business owner",
+  changedAt: new Date(),
+});
+
+await booking.save();
 
 const completedNotification =
   await Notification.create({
@@ -1961,24 +2030,63 @@ router.patch(
         });
       }
 
-      if (staffId === null) {
-        booking.staffId = null;
-      } else {
-        const staff = await Staff.findOne({
-          _id: staffId,
-          businessId: req.user.id,
-          isActive: true,
-        });
+      const previousStaffId = booking.staffId
+  ? booking.staffId.toString()
+  : null;
 
-        if (!staff) {
-          return res.status(404).json({
-            success: false,
-            message: "Active staff member not found for this business.",
-          });
-        }
+let previousStaffName = "";
+let nextStaff = null;
 
-        booking.staffId = staff._id;
-      }
+if (previousStaffId) {
+  const previousStaff = await Staff.findOne({
+    _id: previousStaffId,
+    businessId: req.user.id,
+  });
+
+  previousStaffName = previousStaff?.name || "";
+}
+
+if (staffId === null) {
+  booking.staffId = null;
+} else {
+  nextStaff = await Staff.findOne({
+    _id: staffId,
+    businessId: req.user.id,
+    isActive: true,
+  });
+
+  if (!nextStaff) {
+    return res.status(404).json({
+      success: false,
+      message: "Active staff member not found for this business.",
+    });
+  }
+
+  booking.staffId = nextStaff._id;
+}
+
+const nextStaffId = booking.staffId
+  ? booking.staffId.toString()
+  : null;
+
+// Don't create a history event if the assignment didn't change.
+if (previousStaffId !== nextStaffId) {
+  if (!Array.isArray(booking.statusHistory)) {
+    booking.statusHistory = [];
+  }
+
+  booking.statusHistory.push({
+    action: nextStaffId ? "staff_assigned" : "staff_unassigned",
+    status: booking.status,
+    oldStaffId: previousStaffId,
+    newStaffId: nextStaffId,
+    oldStaffName: previousStaffName,
+    newStaffName: nextStaff?.name || "",
+    changedBy: req.user.id,
+    changedByName: req.user.name || "Business owner",
+    changedAt: new Date(),
+  });
+}
 
       await booking.save();
 

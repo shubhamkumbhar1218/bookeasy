@@ -10,6 +10,11 @@ export default function StaffManagement({ user, api }) {
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState(null);
 
+  const [staffHistory, setStaffHistory] = useState({});
+const [expandedHistoryId, setExpandedHistoryId] = useState(null);
+const [historyLoadingId, setHistoryLoadingId] = useState(null);
+const [historyError, setHistoryError] = useState("");
+
   const emptyForm = {
     name: "",
     phone: "",
@@ -35,6 +40,33 @@ export default function StaffManagement({ user, api }) {
       setLoading(false);
     }
   };
+
+  const loadStaffHistory = async (staffId) => {
+  if (expandedHistoryId === staffId) {
+    setExpandedHistoryId(null);
+    return;
+  }
+
+  setHistoryLoadingId(staffId);
+  setHistoryError("");
+
+  try {
+    const data = await api(`/staff/${staffId}/bookings`);
+
+    setStaffHistory((previous) => ({
+      ...previous,
+      [staffId]: data,
+    }));
+
+    setExpandedHistoryId(staffId);
+  } catch (error) {
+    setHistoryError(
+      error.message || "Unable to load staff booking history"
+    );
+  } finally {
+    setHistoryLoadingId(null);
+  }
+};
 
   useEffect(() => {
     loadStaff();
@@ -280,6 +312,106 @@ export default function StaffManagement({ user, api }) {
                     <UserX size={16} />
                     {person.isActive ? "Deactivate" : "Activate"}
                   </button>
+
+                  <button
+  type="button"
+  onClick={() => loadStaffHistory(person._id)}
+  disabled={historyLoadingId === person._id}
+>
+  {historyLoadingId === person._id
+    ? "Loading history..."
+    : expandedHistoryId === person._id
+      ? "Hide Work History"
+      : "View Work History"}
+</button>
+
+{historyError && expandedHistoryId === person._id && (
+  <p role="alert">{historyError}</p>
+)}
+
+{expandedHistoryId === person._id &&
+  staffHistory[person._id] && (
+    <div className="staff-work-history">
+      <h4>Work History — {person.name}</h4>
+
+      <div className="staff-work-summary">
+        <p>Total: {staffHistory[person._id].summary.total}</p>
+        <p>Completed: {staffHistory[person._id].summary.completed}</p>
+        <p>Cancelled: {staffHistory[person._id].summary.cancelled}</p>
+        <p>Pending: {staffHistory[person._id].summary.pending}</p>
+        <p>Confirmed: {staffHistory[person._id].summary.confirmed}</p>
+        <p>No-show: {staffHistory[person._id].summary.noShow}</p>
+      </div>
+
+      {staffHistory[person._id].bookings.length === 0 ? (
+        <p>No bookings assigned to this staff member yet.</p>
+      ) : (
+        staffHistory[person._id].bookings.map((booking) => (
+          <div
+            key={booking._id}
+            className="staff-work-booking"
+          >
+            <strong>
+              {booking.serviceId?.name || "Service unavailable"}
+            </strong>
+
+            <p>Customer: {booking.customerName}</p>
+
+            <p>
+              Appointment:{" "}
+              {new Date(booking.bookingDate).toLocaleString("en-IN", {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: "Asia/Kolkata",
+              })}
+            </p>
+
+            <p>Status: {booking.status}</p>
+
+            {(booking.statusHistory || []).map((event, index) => (
+              <p key={`${booking._id}-${index}`}>
+                {event.action === "rescheduled"
+                  ? "Rescheduled"
+                  : event.action === "staff_assigned"
+                    ? "Staff assigned"
+                    : event.action === "staff_unassigned"
+                      ? "Staff unassigned"
+                      : `Status: ${event.status}`}
+                {" — "}
+                {event.changedByName || "Business owner"}
+                {" — "}
+                {event.changedAt
+                  ? new Date(event.changedAt).toLocaleString("en-IN")
+                  : ""}
+                {event.action === "rescheduled" && (
+                  <>
+                    {" · "}
+                    {event.oldBookingDate
+                      ? new Date(event.oldBookingDate).toLocaleString(
+                          "en-IN",
+                          { timeZone: "Asia/Kolkata" }
+                        )
+                      : "Previous date unavailable"}
+                    {" → "}
+                    {event.newBookingDate
+                      ? new Date(event.newBookingDate).toLocaleString(
+                          "en-IN",
+                          { timeZone: "Asia/Kolkata" }
+                        )
+                      : "New date unavailable"}
+                  </>
+                )}
+                {event.action === "staff_assigned" && (
+                  <> · {event.oldStaffName || "Unassigned"} → {event.newStaffName || "Unassigned"}</>
+                )}
+              </p>
+            ))}
+          </div>
+        ))
+      )}
+    </div>
+  )}
+  
                 </div>
               </article>
             ))}

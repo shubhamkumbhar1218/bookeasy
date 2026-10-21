@@ -55,11 +55,125 @@ const bookingSchema = new mongoose.Schema(
     },
 
 
+
     status: {
       type: String,
       enum: ["pending", "confirmed", "cancelled", "completed", "no_show"],
       default: "pending",
     },
+
+    // Track who completed or cancelled the booking
+    statusHistory: [
+      {
+        action: {
+          type: String,
+          enum: [
+            "created",
+            "rescheduled",
+            "staff_reassigned",
+            "confirmed",
+            "cancelled",
+            "completed",
+            "no_show",
+          ],
+          required: true,
+        },
+
+        status: {
+          type: String,
+          enum: [
+            "pending",
+            "confirmed",
+            "cancelled",
+            "completed",
+            "no_show",
+          ],
+          default: null,
+        },
+
+        oldBookingDate: {
+          type: Date,
+          default: null,
+        },
+        newBookingDate: {
+          type: Date,
+          default: null,
+        },
+
+        oldBookingSlot: {
+          type: String,
+          default: "",
+        },
+        newBookingSlot: {
+          type: String,
+          default: "",
+        },
+
+        oldStaffId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Staff",
+          default: null,
+        },
+        newStaffId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Staff",
+          default: null,
+        },
+
+        changedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+        changedByName: {
+          type: String,
+          default: "Unknown",
+          trim: true,
+        },
+        changedAt: {
+          type: Date,
+          default: Date.now,
+        },
+
+        action: {
+  type: String,
+  enum: [
+    "status_changed",
+    "rescheduled",
+    "staff_assigned",
+    "staff_unassigned",
+  ],
+  default: "status_changed",
+},
+oldBookingDate: {
+  type: Date,
+  default: null,
+},
+newBookingDate: {
+  type: Date,
+  default: null,
+},
+oldStaffId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Staff",
+  default: null,
+},
+newStaffId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Staff",
+  default: null,
+},
+oldStaffName: {
+  type: String,
+  default: "",
+},
+newStaffName: {
+  type: String,
+  default: "",
+},
+      },
+    ],
+
   },
   {
     timestamps: true,
