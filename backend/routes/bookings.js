@@ -37,6 +37,46 @@ router.get("/availability", async (req, res) => {
       });
     }
 
+    // Validate IDs before querying MongoDB.
+    if (
+      !mongoose.Types.ObjectId.isValid(businessId) ||
+      !mongoose.Types.ObjectId.isValid(serviceId)
+    ) {
+      return res.status(400).json({
+        message: "Invalid businessId or serviceId",
+      });
+    }
+
+    if (
+      excludeBookingId &&
+      !mongoose.Types.ObjectId.isValid(excludeBookingId)
+    ) {
+      return res.status(400).json({
+        message: "Invalid excludeBookingId",
+      });
+    }
+
+    // Require a real calendar date in YYYY-MM-DD format.
+    if (
+      typeof date !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    ) {
+      return res.status(400).json({
+        message: "Invalid date. Expected YYYY-MM-DD",
+      });
+    }
+
+    const parsedDate = new Date(`${date}T00:00:00.000Z`);
+
+    if (
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== date
+    ) {
+      return res.status(400).json({
+        message: "Invalid date",
+      });
+    }
+
     const business = await User.findById(businessId);
 
     if (!business) {
