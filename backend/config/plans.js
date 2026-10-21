@@ -9,6 +9,7 @@ const PLANS = {
       "basic_bookings",
       "basic_dashboard",
       "basic_notifications",
+      "qr_code",
     ],
   },
 

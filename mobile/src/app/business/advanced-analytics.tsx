@@ -1,5 +1,5 @@
-
 import { useCallback, useEffect, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   ActivityIndicator,
   Alert,
@@ -175,13 +175,18 @@ export default function AdvancedAnalytics() {
         <Text style={styles.backText}>← Back to Dashboard</Text>
       </TouchableOpacity>
 
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>BUSINESS INSIGHTS</Text>
-        <Text style={styles.heading}>Advanced Analytics</Text>
-        <Text style={styles.muted}>
-          Six-month trends, customer retention and service performance.
-        </Text>
-      </View>
+<LinearGradient
+  colors={["#7567F0", "#5145CD", "#39318F"]}
+  start={{ x: 0, y: 0 }}
+  end={{ x: 1, y: 1 }}
+  style={styles.header}
+>
+  <Text style={styles.eyebrow}>BUSINESS INSIGHTS</Text>
+  <Text style={styles.heading}>Advanced Analytics</Text>
+  <Text style={styles.headerDescription}>
+    Six-month trends, customer retention and service performance.
+  </Text>
+</LinearGradient>
 
       <TouchableOpacity
         style={styles.refreshButton}
@@ -347,152 +352,324 @@ export default function AdvancedAnalytics() {
   );
 }
 
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F7F6F0" },
-  content: { padding: 18, paddingBottom: 40 },
+  screen: {
+    flex: 1,
+    backgroundColor: "#F7F8FC",
+  },
+
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 44,
+  },
+
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F7F6F0",
+    backgroundColor: "#F7F8FC",
     padding: 24,
   },
-  backButton: { paddingVertical: 8, marginBottom: 12 },
-  backText: { color: "#2F4F43", fontWeight: "700" },
-  header: {
-    backgroundColor: "#E9F0E8",
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 12,
-  },
-  eyebrow: {
-    color: "#2F4F43",
-    fontWeight: "800",
-    fontSize: 11,
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  heading: {
-    color: "#243B35",
-    fontSize: 26,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  muted: { color: "#64766A", fontSize: 12, lineHeight: 18 },
-  refreshButton: {
-    alignSelf: "flex-end",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+
+  backButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 11,
+    paddingHorizontal: 15,
+    marginBottom: 18,
+    borderRadius: 14,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#D8E3D7",
-    marginBottom: 18,
+    borderColor: "#E9E9F5",
+    shadowColor: "#30256E",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
-  refreshText: { color: "#2F4F43", fontWeight: "700" },
-  errorBox: {
-    padding: 16,
-    backgroundColor: "#FCE9E6",
-    borderColor: "#F4D3CE",
-    borderWidth: 1,
-    borderRadius: 16,
-    marginBottom: 18,
-  },
-  errorTitle: { color: "#9B3028", fontWeight: "800", marginBottom: 6 },
-  errorText: { color: "#9B3028", fontSize: 13, lineHeight: 19 },
-  retry: {
-    color: "#9B3028",
-    fontWeight: "700",
-    textDecorationLine: "underline",
-    marginTop: 12,
-  },
-  sectionTitle: {
-    fontSize: 17,
+
+  backText: {
+    color: "#5145CD",
     fontWeight: "800",
-    color: "#243B35",
-    marginBottom: 14,
+    fontSize: 13,
   },
+
+  header: {
+    borderRadius: 25,
+    padding: 23,
+    marginBottom: 20,
+    overflow: "hidden",
+    backgroundColor: "#5145CD",
+    shadowColor: "#5145CD",
+    shadowOffset: { width: 0, height: 9 },
+    shadowOpacity: 0.19,
+    shadowRadius: 16,
+    elevation: 5,
+  },
+
+  eyebrow: {
+    color: "#DDD7FF",
+    fontWeight: "800",
+    fontSize: 10,
+    letterSpacing: 2,
+    marginBottom: 12,
+    textTransform: "uppercase",
+  },
+
+  heading: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    lineHeight: 35,
+    marginBottom: 10,
+  },
+
+  headerDescription: {
+    color: "#EEEAFE",
+    fontSize: 13,
+    lineHeight: 21,
+  },
+
+  muted: {
+    color: "#747B98",
+    fontSize: 12,
+    lineHeight: 19,
+  },
+
+  refreshButton: {
+    alignSelf: "flex-end",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 17,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E4E0FF",
+    marginBottom: 21,
+    shadowColor: "#30256E",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 7,
+    elevation: 1,
+  },
+
+  refreshText: {
+    color: "#5145CD",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+
+  errorBox: {
+    padding: 17,
+    backgroundColor: "#FFF3F5",
+    borderColor: "#FBCDD7",
+    borderWidth: 1,
+    borderRadius: 18,
+    marginBottom: 18,
+  },
+
+  errorTitle: {
+    color: "#B42345",
+    fontWeight: "900",
+    marginBottom: 7,
+    fontSize: 14,
+  },
+
+  errorText: {
+    color: "#96374F",
+    fontSize: 13,
+    lineHeight: 20,
+  },
+
+  retry: {
+    color: "#5145CD",
+    fontWeight: "800",
+    textDecorationLine: "underline",
+    marginTop: 13,
+  },
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#171B3B",
+    letterSpacing: -0.4,
+    marginBottom: 15,
+  },
+
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 9,
   },
+
   metric: {
-    width: "48%",
+    width: "48.3%",
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
+    borderRadius: 20,
+    padding: 15,
+    marginBottom: 13,
     borderWidth: 1,
-    borderColor: "#E5E7DF",
+    borderColor: "#E9E9F5",
+    shadowColor: "#30256E",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.055,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  metricTitle: { color: "#64766A", fontSize: 12, fontWeight: "600" },
+
+  metricTitle: {
+    color: "#747B98",
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+
   metricValue: {
-    color: "#243B35",
-    fontSize: 23,
-    fontWeight: "800",
-    marginVertical: 8,
+    color: "#5145CD",
+    fontSize: 25,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    marginVertical: 10,
   },
+
   panel: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 14,
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 17,
     borderWidth: 1,
-    borderColor: "#E5E7DF",
+    borderColor: "#E9E9F5",
+    shadowColor: "#30256E",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.045,
+    shadowRadius: 13,
+    elevation: 2,
   },
-  trend: { marginBottom: 16 },
+
+  trend: {
+    marginBottom: 21,
+  },
+
   trendHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 7,
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
   },
-  trendLabel: { color: "#243B35", fontSize: 12, fontWeight: "600" },
+
+  trendLabel: {
+    color: "#292D4E",
+    fontSize: 12,
+    fontWeight: "700",
+    flexShrink: 1,
+  },
+
   barBackground: {
-    height: 9,
-    backgroundColor: "#E9F0E8",
+    height: 10,
+    backgroundColor: "#EFEDFA",
     borderRadius: 10,
     overflow: "hidden",
-    marginBottom: 5,
+    marginBottom: 8,
   },
-  bar: { height: 9, backgroundColor: "#2F4F43", borderRadius: 10 },
+
+  bar: {
+    height: 10,
+    backgroundColor: "#7567F0",
+    borderRadius: 10,
+  },
+
   statusRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 10,
+    alignItems: "center",
+    paddingVertical: 13,
+    gap: 12,
   },
-  statusLabel: { color: "#64766A", fontSize: 13 },
-  statusValue: { color: "#243B35", fontSize: 13, fontWeight: "800" },
-  divider: { height: 1, backgroundColor: "#E5E7DF", marginVertical: 6 },
+
+  statusLabel: {
+    color: "#747B98",
+    fontSize: 13,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+
+  statusValue: {
+    color: "#292D4E",
+    fontSize: 13,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#E9E9F5",
+    marginVertical: 9,
+  },
+
   serviceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7DF",
+    borderBottomColor: "#F0EFF8",
+    gap: 12,
   },
-  serviceInfo: { flex: 1, paddingRight: 10 },
+
+  serviceInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+
   serviceName: {
-    color: "#243B35",
+    color: "#292D4E",
     fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 4,
+    fontWeight: "800",
+    lineHeight: 20,
+    marginBottom: 5,
   },
+
   revenueBox: {
-    backgroundColor: "#FFF4D9",
-    borderRadius: 18,
+    backgroundColor: "#F0EDFF",
+    borderRadius: 23,
     borderWidth: 1,
-    borderColor: "#EAD7A5",
-    padding: 17,
+    borderColor: "#DDD7FF",
+    padding: 21,
+    marginBottom: 14,
+    shadowColor: "#5145CD",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  revenueTitle: { color: "#765515", fontWeight: "800", fontSize: 14 },
+
+  revenueTitle: {
+    color: "#5145A5",
+    fontWeight: "800",
+    fontSize: 13,
+    marginBottom: 3,
+  },
+
   revenueValue: {
-    color: "#765515",
+    color: "#5145CD",
     fontWeight: "900",
-    fontSize: 26,
-    marginVertical: 8,
+    fontSize: 29,
+    letterSpacing: -0.8,
+    marginVertical: 10,
   },
-  revenueNote: { color: "#765515", fontSize: 12, lineHeight: 18 },
+
+  revenueNote: {
+    color: "#625C91",
+    fontSize: 12,
+    lineHeight: 20,
+  },
 });
+
