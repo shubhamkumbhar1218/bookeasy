@@ -19,6 +19,7 @@ import Subscription from "./pages/Subscription";
 import PaymentReturn from "./pages/PaymentReturn";
 import StaffManagement from "./pages/StaffManagement";
 import AdvancedAnalytics from "./pages/AdvancedAnalytics";
+import CustomerRetention from "./pages/CustomerRetention";
 import {
   CalendarDays,
   CheckCircle2,
@@ -37,6 +38,8 @@ import {
   Bell,
   BarChart3,
   Crown,
+  Users,
+  LayoutDashboard,
 } from "lucide-react";
 
 import "./style.css";
@@ -2344,6 +2347,17 @@ const rescheduleBooking = async () => {
   className="outline"
   type="button"
   onClick={() => {
+    window.location.href = "/customer-retention";
+  }}
+>
+  <Users size={17} />
+  Customer Retention
+</button>
+
+<button
+  className="outline"
+  type="button"
+  onClick={() => {
     window.location.href = "/subscription";
   }}
 >
@@ -3250,6 +3264,20 @@ function App() {
 <Route
   path="*"
   element={<Navigate to="/" replace />}
+/>
+
+{/* Customer Retention */}
+<Route
+  path="/customer-retention"
+  element={
+    !user ? (
+      <Navigate to="/business/login" replace />
+    ) : user.role === "ADMIN" ? (
+      <Navigate to="/admin" replace />
+    ) : (
+      <CustomerRetention api={api} />
+    )
+  }
 />
 
 </Routes>

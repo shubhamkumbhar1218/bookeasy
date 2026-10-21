@@ -15,6 +15,7 @@ import pushTokenRoutes from "./routes/pushToken.js";
 import adminRoutes from "./routes/admin.js";
 import paymentRoutes from "./routes/payments.js";
 import staffRoutes from "./routes/staff.js";
+import retentionRoutes from "./routes/retention.js";
 import {
   startAppointmentExpiryScheduler,
 } from "./utils/appointmentExpiryScheduler.js";
@@ -89,6 +90,8 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/payments", paymentRoutes);
 
 app.use("/api/staff", staffRoutes);
+
+app.use("/api/retention", retentionRoutes);
 
 app.use(
   "/api/push-tokens",

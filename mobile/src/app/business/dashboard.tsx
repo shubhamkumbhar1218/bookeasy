@@ -363,6 +363,27 @@ useFocusEffect(
 </TouchableOpacity>
 
 
+```tsx
+{/* Customer Retention */}
+<TouchableOpacity
+  style={styles.actionCard}
+  onPress={() => router.push("/business/customer-retention" as any)}
+  activeOpacity={0.8}
+>
+  <View style={styles.actionIconBox}>
+    <Text style={styles.actionIcon}>🔄</Text>
+  </View>
+
+  <Text style={styles.actionTitle}>
+    Customer Retention
+  </Text>
+
+  <Text style={styles.actionDescription}>
+    Track repeat customers and inactive visits
+  </Text>
+</TouchableOpacity>
+```
+
           {/* Subscription */}
 <TouchableOpacity
   style={styles.actionCard}

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "../styles/AdvancedAnalytics.css";
 import {
   Activity,
@@ -25,20 +26,37 @@ const money = (value) =>
 const number = (value) =>
   Number(value || 0).toLocaleString("en-IN");
 
+
 function Metric({ icon: Icon, label, value, hint }) {
   return (
-    <article className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-500">{label}</span>
-        <Icon size={20} className="text-indigo-600" />
+    <article className="rounded-2xl border p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">
+          {label}
+        </span>
+
+        <span className="analytics-metric-icon">
+          <Icon size={21} />
+        </span>
       </div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
-      {hint && <p className="mt-2 text-sm text-gray-500">{hint}</p>}
+
+      <div className="text-2xl font-bold">
+        {value}
+      </div>
+
+      {hint && (
+        <p className="mt-2 text-sm">
+          {hint}
+        </p>
+      )}
     </article>
   );
 }
 
+
 export default function AdvancedAnalytics() {
+    const navigate = useNavigate();
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -114,16 +132,28 @@ export default function AdvancedAnalytics() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={loadAnalytics}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60"
-          >
-            <RefreshCw size={16} />
-            Refresh
-          </button>
-        </div>
+
+<div className="flex items-center gap-3">
+  <button
+    type="button"
+    onClick={() => navigate("/dashboard")}
+    className="inline-flex items-center gap-2 rounded-xl border border-violet-400/30 bg-[#211B31] px-4 py-2.5 font-semibold text-violet-200 transition hover:bg-[#302342]"
+  >
+    ← Dashboard
+  </button>
+
+  <button
+    type="button"
+    onClick={loadAnalytics}
+    disabled={loading}
+    className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+  >
+    <RefreshCw size={16} />
+    Refresh
+  </button>
+</div>
+</div>
+
 
         {loading && !data && (
           <div className="rounded-2xl border bg-white p-10 text-center text-gray-600">

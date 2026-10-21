@@ -67,9 +67,24 @@ function Metric({
 }) {
   return (
     <View style={styles.metric}>
+      <LinearGradient
+        colors={["#A78BFA", "#8B5CF6", "#6D4AFF"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.metricAccent}
+      />
+
       <Text style={styles.metricTitle}>{title}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.muted}>{hint}</Text>
+
+      <Text
+        style={styles.metricValue}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
+
+      <Text style={styles.metricHint}>{hint}</Text>
     </View>
   );
 }
@@ -168,12 +183,19 @@ export default function AdvancedAnalytics() {
         />
       }
     >
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => router.back()}
-      >
-        <Text style={styles.backText}>← Back to Dashboard</Text>
-      </TouchableOpacity>
+<View style={styles.topBar}>
+  <Text style={styles.topBarLabel}>Analytics</Text>
+
+  <TouchableOpacity
+    style={styles.dashboardButton}
+    onPress={() => router.replace("/business/dashboard" as any)}
+    activeOpacity={0.8}
+  >
+    <Text style={styles.dashboardButtonText}>
+      ← Dashboard
+    </Text>
+  </TouchableOpacity>
+</View>
 
 <LinearGradient
   colors={["#7567F0", "#5145CD", "#39318F"]}
@@ -289,18 +311,74 @@ export default function AdvancedAnalytics() {
           <View style={styles.panel}>
             <Text style={styles.sectionTitle}>Booking status</Text>
 
-            {[
-              { label: "Completed", value: overview.completedBookings },
-              { label: "Confirmed", value: overview.confirmedBookings },
-              { label: "Pending", value: overview.pendingBookings },
-              { label: "Cancelled", value: overview.cancelledBookings },
-              { label: "No-show", value: overview.noShowBookings },
-            ].map((item) => (
-              <View key={item.label} style={styles.statusRow}>
-                <Text style={styles.statusLabel}>{item.label}</Text>
-                <Text style={styles.statusValue}>{number(item.value)}</Text>
-              </View>
-            ))}
+           
+{[
+  {
+    label: "Completed",
+    value: overview.completedBookings,
+    color: "#34D399",
+  },
+  {
+    label: "Confirmed",
+    value: overview.confirmedBookings,
+    color: "#60A5FA",
+  },
+  {
+    label: "Pending",
+    value: overview.pendingBookings,
+    color: "#FBBF24",
+  },
+  {
+    label: "Cancelled",
+    value: overview.cancelledBookings,
+    color: "#FB7185",
+  },
+  {
+    label: "No-show",
+    value: overview.noShowBookings,
+    color: "#9CA3AF",
+  },
+].map((item) => {
+  const percentage = overview.totalBookings
+    ? Math.min(
+        100,
+        (Number(item.value) / overview.totalBookings) * 100
+      )
+    : 0;
+
+  return (
+    <View key={item.label} style={styles.statusItem}>
+      <View style={styles.statusRow}>
+        <View style={styles.statusNameContainer}>
+          <View
+            style={[
+              styles.statusDot,
+              { backgroundColor: item.color },
+            ]}
+          />
+          <Text style={styles.statusLabel}>{item.label}</Text>
+        </View>
+
+        <Text style={styles.statusValue}>
+          {number(item.value)}
+        </Text>
+      </View>
+
+      <View style={styles.statusProgressBackground}>
+        <View
+          style={[
+            styles.statusProgress,
+            {
+              width: `${percentage}%`,
+              backgroundColor: item.color,
+            },
+          ]}
+        />
+      </View>
+    </View>
+  );
+})}
+
 
             <View style={styles.divider} />
 
@@ -354,6 +432,7 @@ export default function AdvancedAnalytics() {
 
 
 
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -375,47 +454,45 @@ const styles = StyleSheet.create({
     padding: 24,
   },
 
+  // Back navigation
   backButton: {
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 11,
     paddingHorizontal: 15,
-    marginBottom: 18,
+    marginBottom: 20,
     borderRadius: 14,
     backgroundColor: "#1B1728",
     borderWidth: 1,
     borderColor: "#352B49",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius: 9,
-    elevation: 3,
   },
 
   backText: {
-    color: "#B7A5FF",
+    color: "#C4B5FD",
     fontWeight: "800",
     fontSize: 13,
+    letterSpacing: 0.1,
   },
 
+  // Premium analytics header
   header: {
     borderRadius: 25,
     padding: 23,
     marginBottom: 20,
     overflow: "hidden",
-    backgroundColor: "#21142F",
     borderWidth: 1,
     borderColor: "#49315F",
-    shadowColor: "#8B45D5",
-    shadowOffset: { width: 0, height: 9 },
-    shadowOpacity: 0.2,
+    shadowColor: "#8B5CF6",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
     shadowRadius: 18,
     elevation: 5,
   },
 
   eyebrow: {
-    color: "#D8B8FF",
+    color: "#E0C5FF",
     fontWeight: "800",
     fontSize: 10,
     letterSpacing: 2,
@@ -428,14 +505,134 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "900",
     letterSpacing: -0.8,
-    lineHeight: 35,
+    lineHeight: 36,
     marginBottom: 10,
   },
 
   headerDescription: {
-    color: "#C8BFD9",
+    color: "#D0C6E4",
     fontSize: 13,
     lineHeight: 21,
+  },
+
+  // Refresh action
+  refreshButton: {
+    alignSelf: "flex-end",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 43,
+    paddingVertical: 11,
+    paddingHorizontal: 17,
+    borderRadius: 14,
+    backgroundColor: "#211B31",
+    borderWidth: 1,
+    borderColor: "#514071",
+    marginBottom: 24,
+  },
+
+  refreshText: {
+    color: "#C4B5FD",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+
+  // Error state
+  errorBox: {
+    padding: 18,
+    backgroundColor: "#251522",
+    borderColor: "#713147",
+    borderWidth: 1,
+    borderRadius: 18,
+    marginBottom: 22,
+  },
+
+  errorTitle: {
+    color: "#FF8CA8",
+    fontWeight: "900",
+    marginBottom: 8,
+    fontSize: 15,
+  },
+
+  errorText: {
+    color: "#E8B8C8",
+    fontSize: 13,
+    lineHeight: 21,
+  },
+
+  retry: {
+    color: "#C4B5FD",
+    fontWeight: "800",
+    textDecorationLine: "underline",
+    marginTop: 13,
+    fontSize: 13,
+  },
+
+  // Section headings
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#F5F0FF",
+    letterSpacing: -0.4,
+    lineHeight: 25,
+    marginBottom: 17,
+  },
+
+  // Overview metrics
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+
+  metric: {
+    width: "48.2%",
+    minHeight: 151,
+    backgroundColor: "#191524",
+    borderRadius: 20,
+    padding: 15,
+    paddingTop: 19,
+    marginBottom: 13,
+    borderWidth: 1,
+    borderColor: "#39304C",
+    overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+
+  metricAccent: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+  },
+
+  metricTitle: {
+    color: "#B7ADC9",
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 17,
+    minHeight: 34,
+    marginBottom: 7,
+  },
+
+  metricValue: {
+    color: "#C4B5FD",
+    fontSize: 26,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    marginBottom: 8,
+  },
+
+  metricHint: {
+    color: "#9186A8",
+    fontSize: 10,
+    lineHeight: 16,
   },
 
   muted: {
@@ -444,133 +641,36 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
 
-  refreshButton: {
-    alignSelf: "flex-end",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 17,
-    borderRadius: 14,
-    backgroundColor: "#211B31",
-    borderWidth: 1,
-    borderColor: "#423459",
-    marginBottom: 21,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 7,
-    elevation: 2,
-  },
-
-  refreshText: {
-    color: "#C2B2FF",
-    fontWeight: "800",
-    fontSize: 13,
-  },
-
-  errorBox: {
-    padding: 17,
-    backgroundColor: "#321823",
-    borderColor: "#713147",
-    borderWidth: 1,
-    borderRadius: 18,
+  // Analytics panels
+  panel: {
+    backgroundColor: "#171321",
+    borderRadius: 22,
+    padding: 18,
     marginBottom: 18,
-  },
-
-  errorTitle: {
-    color: "#FF8CA8",
-    fontWeight: "900",
-    marginBottom: 7,
-    fontSize: 14,
-  },
-
-  errorText: {
-    color: "#F1B7C7",
-    fontSize: 13,
-    lineHeight: 20,
-  },
-
-  retry: {
-    color: "#C2B2FF",
-    fontWeight: "800",
-    textDecorationLine: "underline",
-    marginTop: 13,
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#F4F0FF",
-    letterSpacing: -0.4,
-    marginBottom: 15,
-  },
-
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginBottom: 9,
-  },
-
-  metric: {
-    width: "48.3%",
-    backgroundColor: "#1B1728",
-    borderRadius: 20,
-    padding: 15,
-    marginBottom: 13,
     borderWidth: 1,
-    borderColor: "#342B45",
+    borderColor: "#352B45",
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-
-  metricTitle: {
-    color: "#AAA1BE",
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 17,
-  },
-
-  metricValue: {
-    color: "#C0A8FF",
-    fontSize: 25,
-    fontWeight: "900",
-    letterSpacing: -0.8,
-    marginVertical: 10,
-  },
-
-  panel: {
-    backgroundColor: "#191524",
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 17,
-    borderWidth: 1,
-    borderColor: "#332940",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.18,
     shadowRadius: 13,
     elevation: 3,
   },
 
+  // Monthly booking trends
   trend: {
-    marginBottom: 21,
+    marginBottom: 23,
   },
 
   trendHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 11,
     gap: 8,
   },
 
   trendLabel: {
-    color: "#E4DCF5",
+    color: "#E5DDF5",
     fontSize: 12,
     fontWeight: "700",
     flexShrink: 1,
@@ -581,15 +681,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#30253F",
     borderRadius: 10,
     overflow: "hidden",
-    marginBottom: 8,
+    marginBottom: 9,
   },
 
   bar: {
     height: 10,
-    backgroundColor: "#8A54F5",
+    backgroundColor: "#8B5CF6",
     borderRadius: 10,
   },
 
+  // Booking status
   statusRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -599,30 +700,32 @@ const styles = StyleSheet.create({
   },
 
   statusLabel: {
-    color: "#AAA1BE",
+    color: "#B7ADC9",
     fontSize: 13,
     fontWeight: "600",
-    flexShrink: 1,
+    flex: 1,
   },
 
   statusValue: {
-    color: "#F1ECFF",
+    color: "#F5F0FF",
     fontSize: 13,
     fontWeight: "900",
     textAlign: "right",
+    flexShrink: 0,
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#342B43",
-    marginVertical: 9,
+    backgroundColor: "#393047",
+    marginVertical: 10,
   },
 
+  // Popular services
   serviceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 15,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#30263D",
     gap: 12,
@@ -638,43 +741,109 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     lineHeight: 20,
-    marginBottom: 5,
+    marginBottom: 6,
   },
 
+  // Estimated revenue
   revenueBox: {
     backgroundColor: "#251735",
     borderRadius: 23,
     borderWidth: 1,
-    borderColor: "#53346B",
+    borderColor: "#65417D",
     padding: 21,
-    marginBottom: 14,
+    marginBottom: 18,
     shadowColor: "#8B45D5",
     shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation: 4,
   },
 
   revenueTitle: {
-    color: "#D6B7FF",
+    color: "#E0C5FF",
     fontWeight: "800",
     fontSize: 13,
-    marginBottom: 3,
+    lineHeight: 20,
+    marginBottom: 6,
   },
 
   revenueValue: {
-    color: "#D4B5FF",
+    color: "#D8B4FE",
     fontWeight: "900",
-    fontSize: 29,
+    fontSize: 30,
     letterSpacing: -0.8,
-    marginVertical: 10,
+    marginVertical: 9,
   },
 
   revenueNote: {
-    color: "#BCAACF",
+    color: "#C1B0D2",
     fontSize: 12,
     lineHeight: 20,
   },
+
+  
+statusItem: {
+  marginBottom: 10,
+},
+
+statusNameContainer: {
+  flex: 1,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 9,
+},
+
+statusDot: {
+  width: 8,
+  height: 8,
+  borderRadius: 4,
+},
+
+statusProgressBackground: {
+  height: 6,
+  borderRadius: 10,
+  backgroundColor: "#30253F",
+  overflow: "hidden",
+  marginBottom: 7,
+},
+
+statusProgress: {
+  height: 6,
+  borderRadius: 10,
+},
+
+
+topBar: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 20,
+  gap: 12,
+},
+
+topBarLabel: {
+  color: "#F5F0FF",
+  fontSize: 17,
+  fontWeight: "800",
+  flex: 1,
+},
+
+dashboardButton: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  paddingVertical: 11,
+  paddingHorizontal: 15,
+  borderRadius: 14,
+  backgroundColor: "#211B31",
+  borderWidth: 1,
+  borderColor: "#514071",
+},
+
+dashboardButtonText: {
+  color: "#C4B5FD",
+  fontSize: 13,
+  fontWeight: "800",
+},
+
 });
-
-
