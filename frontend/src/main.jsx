@@ -1390,7 +1390,7 @@ const [showNotifications, setShowNotifications] = useState(false);
 
 const [staffMembers, setStaffMembers] = useState([]);
 const [staffFeatureAvailable, setStaffFeatureAvailable] = useState(false);
-const [assigningBookingId, setAssigningBookingId] = useState("");
+const [assigningBookingId, setAssigningBookingId] = useState(null);
 
   const [services, setServices] =
     useState([]);
@@ -1451,6 +1451,30 @@ const [rescheduleLoading, setRescheduleLoading] =
   const [profilePhoto, setProfilePhoto] = useState(
   user?.profilePhoto || ""
 );
+
+// const assignStaffToBooking = async (bookingId, staffId) => {
+//   try {
+//     setAssigningStaff(true);
+
+//     await api(`/bookings/${bookingId}/assign-staff`, {
+//       method: "PATCH",
+//       body: JSON.stringify({ staffId: staffId || null }),
+//     });
+
+//     await load();
+
+//     alert(
+//       staffId
+//         ? "Staff assigned successfully."
+//         : "Staff assignment removed."
+//     );
+//   } catch (error) {
+//     alert(error.message || "Unable to assign staff.");
+//   } finally {
+//     setAssigningStaff(false);
+//     setAssigningBookingId(null);
+//   }
+// };
 
 useEffect(() => {
   const loadBusinessPhoto = async () => {
@@ -2321,6 +2345,20 @@ const rescheduleBooking = async () => {
       Reports & Analytics
     </button>
 
+    
+<button
+  className="primary"
+  type="button"
+  onClick={() => {
+    localStorage.setItem("bookeasy_role", "customer");
+    window.location.href = "/customer";
+  }}
+>
+  <CalendarDays size={17} />
+  Book as Customer
+</button>
+
+
     <button
   className="outline"
   type="button"
@@ -2785,16 +2823,15 @@ const rescheduleBooking = async () => {
                         }
                       </small>
 
-                      {staffFeatureAvailable && (
-  <label className="booking-staff-selector">
-    Assigned staff
+{staffFeatureAvailable && (
+  <div className="booking-staff-assignment">
+    <label htmlFor={`staff-${booking._id}`}>
+      Assigned staff
+    </label>
 
     <select
-      value={
-        booking.staffId?._id ||
-        booking.staffId ||
-        ""
-      }
+      id={`staff-${booking._id}`}
+      value={booking.staffId?._id || booking.staffId || ""}
       disabled={
         assigningBookingId === booking._id ||
         ["cancelled", "completed"].includes(booking.status)
@@ -2809,12 +2846,12 @@ const rescheduleBooking = async () => {
       <option value="">Unassigned</option>
 
       {staffMembers
-        .filter((person) => person.isActive)
-        .map((person) => (
-          <option key={person._id} value={person._id}>
-            {person.name}
-            {person.designation
-              ? ` — ${person.designation}`
+        .filter((member) => member.isActive)
+        .map((member) => (
+          <option key={member._id} value={member._id}>
+            {member.name}
+            {member.designation
+              ? ` — ${member.designation}`
               : ""}
           </option>
         ))}
@@ -2823,18 +2860,8 @@ const rescheduleBooking = async () => {
     {assigningBookingId === booking._id && (
       <small>Saving assignment...</small>
     )}
-  </label>
+  </div>
 )}
-                    </div>
-
-                    <div className="booking-actions">
-                      <span
-                        className={`badge ${booking.status}`}
-                      >
-                        {
-                          booking.status
-                        }
-                      </span>
 
 
 {/* PENDING ACTIONS */}

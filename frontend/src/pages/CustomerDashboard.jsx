@@ -276,23 +276,31 @@ const categories = [
       {/* HEADER */}
       {/* ========================= */}
 
-      <header className="customer-header">
-        <div className="customer-brand">
 
-          <div className="customer-brand-icon">
-            <Store size={22} />
-          </div>
+<header className="customer-header">
+  <div className="customer-brand">
+    <div className="customer-brand-icon">
+      <Store size={22} />
+    </div>
 
-          <div>
-            <h1>BookEasy</h1>
+    <div>
+      <h1>BookEasy</h1>
+      <span>Find & Book Local Services</span>
+    </div>
+  </div>
 
-            <span>
-              Find & Book Local Services
-            </span>
-          </div>
+  <button
+    type="button"
+    className="outline"
+    onClick={() => {
+      navigate("/business");
+    }}
+  >
+    <CalendarDays size={17} />
+    Back to Business Dashboard
+  </button>
+</header>
 
-        </div>
-      </header>
 
       {/* ========================= */}
       {/* HERO */}

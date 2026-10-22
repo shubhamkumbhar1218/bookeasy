@@ -263,6 +263,35 @@ if (selectedCategory !== "All") {
               </View>
             </View>
 
+            {/* Back to Business Dashboard */}
+
+<TouchableOpacity
+  style={{
+    backgroundColor: "#E9F0E8",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#D8E3D7",
+  }}
+  onPress={() => {
+    router.replace("/business" as any);
+  }}
+  activeOpacity={0.8}
+>
+  <Text
+    style={{
+      color: "#243B35",
+      fontSize: 14,
+      fontWeight: "700",
+      textAlign: "center",
+    }}
+  >
+    ← Back to Business Dashboard
+  </Text>
+</TouchableOpacity>
+
             {/* Title */}
 
             <Text style={styles.title}>

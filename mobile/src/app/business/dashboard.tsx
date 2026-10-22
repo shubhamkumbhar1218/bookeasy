@@ -263,6 +263,30 @@ useFocusEffect(
         </Text>
 
         <View style={styles.actionGrid}>
+
+          
+{/* Book as Customer */}
+<TouchableOpacity
+  style={styles.actionCard}
+  onPress={() => {
+    void AsyncStorage.setItem("bookeasy_role", "customer");
+    router.push("/customer" as any);
+  }}
+  activeOpacity={0.8}
+>
+  <View style={styles.actionIconBox}>
+    <Text style={styles.actionIcon}>🛍️</Text>
+  </View>
+
+  <Text style={styles.actionTitle}>
+    Book as Customer
+  </Text>
+
+  <Text style={styles.actionDescription}>
+    Discover other businesses and book appointments
+  </Text>
+</TouchableOpacity>
+
           {/* Bookings */}
 
           <TouchableOpacity

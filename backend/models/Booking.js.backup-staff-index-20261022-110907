@@ -1,0 +1,183 @@
+import mongoose from "mongoose";
+
+const bookingSchema = new mongoose.Schema(
+  {
+    businessId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    serviceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Service",
+      required: true,
+    },
+
+    staffId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Staff",
+  default: null,
+},
+
+    customerName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    customerPhone: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    bookingDate: {
+      type: Date,
+      required: true,
+    },
+
+    bookingSlot: {
+  type: String,
+  required: false,
+},
+
+
+    // Automated reminder tracking
+    reminder24hSentAt: {
+      type: Date,
+      default: null,
+    },
+
+    reminder1hSentAt: {
+      type: Date,
+      default: null,
+    },
+
+
+
+    status: {
+      type: String,
+      enum: ["pending", "confirmed", "cancelled", "completed", "no_show"],
+      default: "pending",
+    },
+
+    // Track who completed or cancelled the booking
+
+    statusHistory: [
+      {
+        action: {
+          type: String,
+          enum: [
+            "created",
+            "rescheduled",
+            "staff_reassigned",
+            "confirmed",
+            "cancelled",
+            "completed",
+            "no_show",
+            "status_changed",
+            "staff_assigned",
+            "staff_unassigned",
+          ],
+          default: "status_changed",
+        },
+
+        status: {
+          type: String,
+          enum: [
+            "pending",
+            "confirmed",
+            "cancelled",
+            "completed",
+            "no_show",
+          ],
+          default: null,
+        },
+
+        oldBookingDate: {
+          type: Date,
+          default: null,
+        },
+
+        newBookingDate: {
+          type: Date,
+          default: null,
+        },
+
+        oldBookingSlot: {
+          type: String,
+          default: "",
+        },
+
+        newBookingSlot: {
+          type: String,
+          default: "",
+        },
+
+        oldStaffId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Staff",
+          default: null,
+        },
+
+        newStaffId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Staff",
+          default: null,
+        },
+
+        oldStaffName: {
+          type: String,
+          default: "",
+        },
+
+        newStaffName: {
+          type: String,
+          default: "",
+        },
+
+        changedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+
+        changedByName: {
+          type: String,
+          default: "Unknown",
+          trim: true,
+        },
+
+        changedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+
+
+  },
+  {
+    timestamps: true,
+  }
+);
+
+bookingSchema.index(
+  {
+    businessId: 1,
+    bookingSlot: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: {
+        $in: ["pending", "confirmed"],
+      },
+    },
+  }
+);
+
+const Booking = mongoose.model("Booking", bookingSchema);
+
+export default Booking;

@@ -23,11 +23,38 @@ type Booking = {
   customerPhone: string;
   bookingDate: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
-  serviceId?: {
-    name?: string;
-    price?: number;
-    duration?: number;
-  };
+serviceId?: {
+  _id: string;
+  name?: string;
+  price?: number;
+  duration?: number;
+} | string | null;
+  staffId?:
+  | string
+  | {
+      _id: string;
+      name: string;
+      designation?: string;
+    }
+  | null;
+};
+
+type StaffMember = {
+  _id: string;
+  name: string;
+  designation?: string;
+  isActive: boolean;
+};
+
+type AvailableSlot = {
+  value: string;
+  label: string;
+};
+
+const getBookingService = (serviceId: Booking["serviceId"]) => {
+  return typeof serviceId === "object" && serviceId !== null
+    ? serviceId
+    : null;
 };
 
 export default function BusinessBookings() {
@@ -50,8 +77,15 @@ const [showFilterDatePicker, setShowFilterDatePicker] =
   const [showDatePicker, setShowDatePicker] =
     useState(false);
 
-  const [showTimePicker, setShowTimePicker] =
-    useState(false);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+const [staffFeatureAvailable, setStaffFeatureAvailable] = useState(true);
+const [staffPickerBookingId, setStaffPickerBookingId] = useState<string | null>(null);
+const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
+
+const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+const [loadingSlots, setLoadingSlots] = useState(false);
+const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+const [rescheduleDateString, setRescheduleDateString] = useState("");
 
   // ================================
   // LOAD BOOKINGS
@@ -113,9 +147,164 @@ const [showFilterDatePicker, setShowFilterDatePicker] =
     }
   };
 
-  useEffect(() => {
-    loadBookings();
-  }, []);
+
+  const loadStaffMembers = async () => {
+  try {
+    const token = await AsyncStorage.getItem("bookeasy_token");
+
+    if (!token) return;
+
+    const response = await fetch(`${API_URL}/staff`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.status === 403) {
+      setStaffFeatureAvailable(false);
+      setStaffMembers([]);
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error("Unable to load staff");
+    }
+
+    const data = await response.json();
+
+    setStaffMembers(
+      (data.staff || []).filter(
+        (member: StaffMember) => member.isActive
+      )
+    );
+
+    setStaffFeatureAvailable(true);
+  } catch (error) {
+    console.error("Load staff error:", error);
+  }
+};
+
+
+const assignStaffToBooking = async (
+  bookingId: string,
+  staffId: string | null
+) => {
+  try {
+    setAssigningBookingId(bookingId);
+
+    const token = await AsyncStorage.getItem("bookeasy_token");
+
+    if (!token) {
+      Alert.alert("Session expired", "Please log in again.");
+      router.replace("/business/login");
+      return;
+    }
+
+    const response = await fetch(
+      `${API_URL}/bookings/${bookingId}/assign-staff`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ staffId }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        setStaffFeatureAvailable(false);
+      }
+
+      throw new Error(data.message || "Could not assign staff");
+    }
+
+    setBookings((current) =>
+      current.map((booking) =>
+        booking._id === bookingId
+          ? { ...booking, staffId: data.booking.staffId }
+          : booking
+      )
+    );
+
+    setStaffPickerBookingId(null);
+    Alert.alert("Success", data.message);
+  } catch (error) {
+    Alert.alert(
+      "Staff assignment",
+      error instanceof Error ? error.message : "Something went wrong"
+    );
+  } finally {
+    setAssigningBookingId(null);
+  }
+};
+
+
+const loadAvailableSlots = async (
+  booking: Booking,
+  date: string
+) => {
+  try {
+    if (!booking.serviceId || typeof booking.serviceId === "string") {
+      Alert.alert("Cannot reschedule", "The booking's service details are unavailable.");
+      return;
+    }
+
+    setLoadingSlots(true);
+    setAvailableSlots([]);
+    setSelectedSlot(null);
+
+    const token = await AsyncStorage.getItem("bookeasy_token");
+    const userString = await AsyncStorage.getItem("bookeasy_user");
+
+    if (!token || !userString) {
+      Alert.alert("Session expired", "Please log in again.");
+      router.replace("/business/login");
+      return;
+    }
+
+    const user = JSON.parse(userString);
+
+    const query = new URLSearchParams({
+      businessId: user.id,
+      serviceId: booking.serviceId._id,
+      date,
+      excludeBookingId: booking._id,
+    });
+
+    const response = await fetch(
+      `${API_URL}/bookings/availability?${query.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Could not load available slots");
+    }
+
+    setAvailableSlots(data.slots || []);
+  } catch (error) {
+    Alert.alert(
+      "Available slots",
+      error instanceof Error ? error.message : "Something went wrong"
+    );
+  } finally {
+    setLoadingSlots(false);
+  }
+};
+
+useEffect(() => {
+  loadBookings();
+  loadStaffMembers();
+}, []);
 
   // ================================
 // SORT BOOKINGS AND FILTER BY DATE
@@ -187,89 +376,120 @@ const filteredBookings = sortedBookings.filter((booking) => {
   // OPEN RESCHEDULE
   // ================================
 
-  const openReschedule = (booking: Booking) => {
-    setRescheduleBooking(booking);
-    setNewBookingDate(new Date(booking.bookingDate));
-    setShowDatePicker(false);
-    setShowTimePicker(false);
-  };
+
+const getLocalDateString = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const openReschedule = (booking: Booking) => {
+  const initialDate = new Date(booking.bookingDate);
+
+  if (Number.isNaN(initialDate.getTime())) {
+    Alert.alert("Invalid date", "This booking has an invalid appointment date.");
+    return;
+  }
+
+  const dateString = getLocalDateString(initialDate);
+
+  setRescheduleBooking(booking);
+  setNewBookingDate(initialDate);
+  setRescheduleDateString(dateString);
+  setAvailableSlots([]);
+  setSelectedSlot(null);
+  setShowDatePicker(false);
+
+  loadAvailableSlots(booking, dateString);
+};
+
 
   // ================================
   // CLOSE RESCHEDULE
   // ================================
 
-  const closeReschedule = () => {
-    setRescheduleBooking(null);
-    setShowDatePicker(false);
-    setShowTimePicker(false);
-  };
+const closeReschedule = () => {
+  setRescheduleBooking(null);
+  setShowDatePicker(false);
+  setAvailableSlots([]);
+  setSelectedSlot(null);
+  setRescheduleDateString("");
+  setLoadingSlots(false);
+};
+
 
   // ================================
   // HANDLE RESCHEDULE
   // ================================
 
-  const handleReschedule = async () => {
-    if (!rescheduleBooking) return;
 
-    try {
-      const token = await AsyncStorage.getItem(
-        "bookeasy_token"
-      );
+const handleReschedule = async () => {
+  if (!rescheduleBooking) return;
 
-      if (!token) {
-        router.replace("/business/login");
-        return;
-      }
+  if (!selectedSlot) {
+    Alert.alert(
+      "Select a time",
+      "Please choose an available appointment slot."
+    );
+    return;
+  }
 
-      setActionLoading(
-        `${rescheduleBooking._id}-reschedule`
-      );
+  try {
+    const token = await AsyncStorage.getItem("bookeasy_token");
 
-      const response = await fetch(
-        `${API_URL}/bookings/${rescheduleBooking._id}/reschedule`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            bookingDate: newBookingDate.toISOString(),
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert(
-          "Reschedule failed",
-          data.message ||
-            "Could not reschedule booking."
-        );
-
-        return;
-      }
-
-      closeReschedule();
-
-      Alert.alert(
-        "Success",
-        "Appointment rescheduled successfully."
-      );
-
-      await loadBookings();
-    } catch (error) {
-      console.log("Reschedule error:", error);
-
-      Alert.alert(
-        "Connection error",
-        "Could not connect to the BookEasy server."
-      );
-    } finally {
-      setActionLoading(null);
+    if (!token) {
+      router.replace("/business/login");
+      return;
     }
-  };
+
+    setActionLoading(`${rescheduleBooking._id}-reschedule`);
+
+    const response = await fetch(
+      `${API_URL}/bookings/${rescheduleBooking._id}/reschedule`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bookingDate: selectedSlot,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      Alert.alert(
+        "Reschedule failed",
+        data.message || "Could not reschedule booking."
+      );
+      return;
+    }
+
+    closeReschedule();
+
+    await loadBookings();
+
+    Alert.alert(
+      "Success",
+      "Appointment rescheduled successfully."
+    );
+  } catch (error) {
+    console.log("Reschedule error:", error);
+
+    Alert.alert(
+      "Connection error",
+      "Could not connect to the BookEasy server."
+    );
+  } finally {
+    setActionLoading(null);
+  }
+};
+
 
   // ================================
   // UPDATE BOOKING STATUS
@@ -639,7 +859,7 @@ const filteredBookings = sortedBookings.filter((booking) => {
                   </Text>
 
                   <Text style={styles.infoValue}>
-                    {booking.serviceId?.name || "Service"}
+                    {getBookingService(booking.serviceId)?.name || "Service"}
                   </Text>
                 </View>
 
@@ -666,17 +886,99 @@ const filteredBookings = sortedBookings.filter((booking) => {
                 </View>
 
                 {/* PRICE */}
-                {booking.serviceId?.price !== undefined && (
+                {getBookingService(booking.serviceId)?.price !== undefined && (
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>
                       💰 Price
                     </Text>
 
                     <Text style={styles.price}>
-                      ₹{booking.serviceId.price}
+                      ₹{getBookingService(booking.serviceId)?.price}
                     </Text>
                   </View>
                 )}
+
+
+                
+{/* STAFF ASSIGNMENT */}
+{staffFeatureAvailable &&
+  !["cancelled", "completed"].includes(booking.status) && (
+  <View style={{ marginTop: 12, marginBottom: 10 }}>
+    <Text style={{ fontSize: 13, fontWeight: "700", color: "#374151", marginBottom: 8 }}>
+      Assigned staff
+    </Text>
+
+    <TouchableOpacity
+      style={styles.dateButton}
+      onPress={() =>
+        setStaffPickerBookingId(
+          staffPickerBookingId === booking._id ? null : booking._id
+        )
+      }
+      disabled={
+        assigningBookingId === booking._id ||
+        ["cancelled", "completed"].includes(booking.status)
+      }
+    >
+      <Text style={styles.dateButtonText}>
+{assigningBookingId === booking._id
+  ? "Updating..."
+  : typeof booking.staffId === "object" && booking.staffId
+    ? booking.staffId.name
+    : typeof booking.staffId === "string"
+      ? staffMembers.find(
+          (member) => member._id === booking.staffId
+        )?.name || "Assigned staff — select to change"
+      : "Unassigned — select staff"}
+      </Text>
+    </TouchableOpacity>
+
+    {staffPickerBookingId === booking._id && (
+      <View style={{ gap: 8 }}>
+        <TouchableOpacity
+          style={styles.modalCancelButton}
+          onPress={() => assignStaffToBooking(booking._id, null)}
+          disabled={assigningBookingId === booking._id}
+        >
+          <Text style={styles.modalCancelText}>Unassign staff</Text>
+        </TouchableOpacity>
+
+        {staffMembers.map((member) => (
+          <TouchableOpacity
+            key={member._id}
+            style={styles.dateButton}
+            onPress={() =>
+              assignStaffToBooking(booking._id, member._id)
+            }
+            disabled={assigningBookingId === booking._id}
+          >
+            <Text style={styles.dateButtonText}>
+              {member.name}
+              {member.designation ? ` · ${member.designation}` : ""}
+            </Text>
+          </TouchableOpacity>
+        ))}
+
+        {staffMembers.length === 0 && (
+          <Text style={{ color: "#6b7280", fontSize: 12 }}>
+            No active staff members. Add staff from Staff Management.
+          </Text>
+        )}
+
+        <TouchableOpacity
+          onPress={() => setStaffPickerBookingId(null)}
+          style={{ paddingVertical: 8 }}
+        >
+          <Text style={{ color: "#2563eb", fontWeight: "600" }}>
+            Close selector
+          </Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  </View>
+)}
+
+
 
                 {/* PENDING ACTIONS */}
                 {booking.status === "pending" && (
@@ -717,10 +1019,10 @@ const filteredBookings = sortedBookings.filter((booking) => {
                 {booking.status === "confirmed" && (
                   <>
                     <TouchableOpacity
-                      style={styles.rescheduleButton}
-                      onPress={() => openReschedule(booking)}
-                      disabled={actionLoading !== null}
-                    >
+  style={styles.rescheduleButton}
+  onPress={() => openReschedule(booking)}
+  disabled={actionLoading !== null}
+>
                       <Text style={styles.rescheduleText}>
                         📅 Reschedule
                       </Text>
@@ -771,130 +1073,85 @@ const filteredBookings = sortedBookings.filter((booking) => {
             </Text>
 
             <Text style={styles.modalService}>
-              {rescheduleBooking?.serviceId?.name ||
-                "Service"}
+              {getBookingService(rescheduleBooking?.serviceId)?.name ||
+  "Service"}
             </Text>
 
-            {/* DATE BUTTON */}
+ {/* DATE BUTTON */}
+<TouchableOpacity
+  style={styles.dateButton}
+  onPress={() => setShowDatePicker(true)}
+>
+  <Text style={styles.dateButtonText}>
+    📅{" "}
+    {newBookingDate.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })}
+  </Text>
+</TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => {
-                setShowTimePicker(false);
-                setShowDatePicker(true);
-              }}
-            >
-              <Text
-                style={styles.dateButtonText}
-              >
-                📅{" "}
-                {newBookingDate.toLocaleDateString(
-                  "en-IN",
-                  {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  }
-                )}
-              </Text>
-            </TouchableOpacity>
+{/* DATE PICKER */}
+{showDatePicker && (
+  <DateTimePicker
+    value={newBookingDate}
+    mode="date"
+    minimumDate={new Date()}
+    onChange={(event, selectedDate) => {
+      setShowDatePicker(false);
 
-            {/* TIME BUTTON */}
+      if (event.type === "set" && selectedDate && rescheduleBooking) {
+        const dateKey = getLocalDateString(selectedDate);
 
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => {
-                setShowDatePicker(false);
-                setShowTimePicker(true);
-              }}
-            >
-              <Text
-                style={styles.dateButtonText}
-              >
-                🕐{" "}
-                {newBookingDate.toLocaleTimeString(
-                  "en-IN",
-                  {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: true,
-                  }
-                )}
-              </Text>
-            </TouchableOpacity>
+        setNewBookingDate(selectedDate);
+        setRescheduleDateString(dateKey);
+        setSelectedSlot(null);
 
-            {/* DATE PICKER */}
+        loadAvailableSlots(rescheduleBooking, dateKey);
+      }
+    }}
+  />
+)}
 
-            {showDatePicker && (
-              <DateTimePicker
-                value={newBookingDate}
-                mode="date"
-                minimumDate={new Date()}
-                onChange={(
-                  event,
-                  selectedDate
-                ) => {
-                  setShowDatePicker(false);
+<Text style={styles.slotHint}>
+  Choose an available appointment time for{" "}
+  {rescheduleDateString || "the selected date"}.
+</Text>
 
-                  if (selectedDate) {
-                    const updatedDate =
-                      new Date(
-                        newBookingDate
-                      );
-
-                    updatedDate.setFullYear(
-                      selectedDate.getFullYear()
-                    );
-
-                    updatedDate.setMonth(
-                      selectedDate.getMonth()
-                    );
-
-                    updatedDate.setDate(
-                      selectedDate.getDate()
-                    );
-
-                    setNewBookingDate(
-                      updatedDate
-                    );
-                  }
-                }}
-              />
-            )}
-
-            {/* TIME PICKER */}
-
-            {showTimePicker && (
-              <DateTimePicker
-                value={newBookingDate}
-                mode="time"
-                onChange={(
-                  event,
-                  selectedTime
-                ) => {
-                  setShowTimePicker(false);
-
-                  if (selectedTime) {
-                    const updatedDate =
-                      new Date(
-                        newBookingDate
-                      );
-
-                    updatedDate.setHours(
-                      selectedTime.getHours()
-                    );
-
-                    updatedDate.setMinutes(
-                      selectedTime.getMinutes()
-                    );
-
-                    setNewBookingDate(
-                      updatedDate
-                    );
-                  }
-                }}
-              />
-            )}
+{/* AVAILABLE SLOTS */}
+{loadingSlots ? (
+  <View style={{ paddingVertical: 18, alignItems: "center" }}>
+    <ActivityIndicator size="small" color="#2563eb" />
+    <Text style={styles.slotHint}>Loading available slots...</Text>
+  </View>
+) : availableSlots.length === 0 ? (
+  <Text style={styles.slotHint}>
+    No available slots for this date. Choose another date.
+  </Text>
+) : (
+  <ScrollView
+    style={styles.slotList}
+    nestedScrollEnabled
+    keyboardShouldPersistTaps="handled"
+  >
+    {availableSlots.map((slot) => (
+      <TouchableOpacity
+        key={slot.value}
+        style={[
+          styles.slotOption,
+          selectedSlot === slot.value && styles.slotOptionSelected,
+        ]}
+        onPress={() => setSelectedSlot(slot.value)}
+      >
+        <Text style={styles.slotOptionText}>
+          {selectedSlot === slot.value ? "✓ " : ""}
+          {slot.label}
+        </Text>
+      </TouchableOpacity>
+    ))}
+  </ScrollView>
+)}
 
             {/* MODAL ACTIONS */}
 
@@ -905,9 +1162,7 @@ const filteredBookings = sortedBookings.filter((booking) => {
                   styles.modalCancelButton
                 }
                 onPress={closeReschedule}
-                disabled={
-                  actionLoading !== null
-                }
+               disabled={actionLoading !== null}
               >
                 <Text
                   style={
@@ -918,22 +1173,21 @@ const filteredBookings = sortedBookings.filter((booking) => {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.modalSaveButton}
-                onPress={handleReschedule}
-                disabled={
-                  actionLoading !== null
-                }
-              >
-                <Text
-                  style={styles.modalSaveText}
-                >
-                  {actionLoading ===
-                  `${rescheduleBooking?._id}-reschedule`
-                    ? "Saving..."
-                    : "Reschedule"}
-                </Text>
-              </TouchableOpacity>
+<TouchableOpacity
+  style={styles.modalSaveButton}
+  onPress={handleReschedule}
+  disabled={
+    actionLoading !== null ||
+    !selectedSlot ||
+    loadingSlots
+  }
+>
+  <Text style={styles.modalSaveText}>
+    {actionLoading === `${rescheduleBooking?._id}-reschedule`
+      ? "Saving..."
+      : "Reschedule"}
+  </Text>
+</TouchableOpacity>
 
             </View>
           </View>
@@ -1370,5 +1624,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: "#2563eb",
+  },
+
+    // AVAILABLE APPOINTMENT SLOTS
+  slotList: {
+    maxHeight: 220,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+
+  slotOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 10,
+    marginBottom: 8,
+    backgroundColor: "#ffffff",
+  },
+
+  slotOptionSelected: {
+    borderColor: "#2563eb",
+    backgroundColor: "#eff6ff",
+  },
+
+  slotOptionText: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  slotHint: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 4,
+    marginBottom: 8,
   },
 });
