@@ -19,7 +19,6 @@ import Subscription from "./pages/Subscription";
 import PaymentReturn from "./pages/PaymentReturn";
 import StaffManagement from "./pages/StaffManagement";
 import AdvancedAnalytics from "./pages/AdvancedAnalytics";
-import CustomerRetention from "./pages/CustomerRetention";
 import {
   CalendarDays,
   CheckCircle2,
@@ -1391,6 +1390,7 @@ const [showNotifications, setShowNotifications] = useState(false);
 const [staffMembers, setStaffMembers] = useState([]);
 const [staffFeatureAvailable, setStaffFeatureAvailable] = useState(false);
 const [assigningBookingId, setAssigningBookingId] = useState(null);
+const [updatingBookingId, setUpdatingBookingId] = useState(null);
 
   const [services, setServices] =
     useState([]);
@@ -1481,10 +1481,14 @@ useEffect(() => {
     try {
       const data = await api("/business/profile/me");
 
-      const photo =
-        data.profilePhoto ||
-        data.user?.profilePhoto ||
-        "";
+const photo =
+  data.user?.profilePhoto ||
+  data.profilePhoto ||
+  data.user?.business?.profilePhoto ||
+  data.profile?.profilePhoto ||
+  data.profilePhotoUrl ||
+  user?.profilePhoto ||
+  "";
 
       setProfilePhoto(photo);
 
@@ -1854,44 +1858,37 @@ const markAllNotificationsRead = async () => {
   // BOOKING STATUS
   // ===============================
 
-  const status = async (
-    id,
-    value
-  ) => {
-    try {
-      setError("");
 
-      let endpoint = "";
-
-      if (value === "confirmed") {
-        endpoint =
-          `/bookings/${id}/confirm`;
-      }
-
-      if (value === "cancelled") {
-        endpoint =
-          `/bookings/${id}/cancel`;
-      }
-
-      if (value === "completed") {
-        endpoint =
-          `/bookings/${id}/complete`;
-      }
-
-      if (!endpoint) {
-        return;
-      }
-
-      await api(endpoint, {
-        method: "PATCH",
-      });
-
-      await load();
-    } catch (e) {
-      console.log(e);
-      setError(e.message);
-    }
+const status = async (id, value) => {
+  const endpointByStatus = {
+    confirmed: `/bookings/${id}/confirm`,
+    cancelled: `/bookings/${id}/cancel`,
+    completed: `/bookings/${id}/complete`,
   };
+
+  const endpoint = endpointByStatus[value];
+
+  if (!endpoint || updatingBookingId !== null) {
+    return;
+  }
+
+  try {
+    setError("");
+    setUpdatingBookingId(id);
+
+    await api(endpoint, {
+      method: "PATCH",
+    });
+
+    await load();
+  } catch (error) {
+    console.error("Booking status update failed:", error);
+    setError(error.message || "Unable to update appointment.");
+  } finally {
+    setUpdatingBookingId(null);
+  }
+};
+
 
 
 
@@ -1899,21 +1896,29 @@ const markAllNotificationsRead = async () => {
   // STAFF MANAGEMENT / ASSIGNMENT
   // ===============================
 
-  const loadStaffMembers = async () => {
-    try {
-      const data = await api("/staff");
 
-      setStaffMembers(
-        Array.isArray(data.staff) ? data.staff : []
-      );
+const loadStaffMembers = async () => {
+  try {
+    const data = await api("/staff");
 
-      setStaffFeatureAvailable(true);
-    } catch (error) {
-      // Staff access may be restricted by the subscription.
-      setStaffMembers([]);
-      setStaffFeatureAvailable(false);
-    }
-  };
+    setStaffMembers(
+      Array.isArray(data.staff) ? data.staff : []
+    );
+
+    setStaffFeatureAvailable(true);
+  } catch (error) {
+    console.error("Unable to load staff members:", error);
+
+    setStaffMembers([]);
+    setStaffFeatureAvailable(false);
+
+    // The dashboard already has an error message area.
+    setError(
+      error.message || "Unable to load staff members."
+    );
+  }
+};
+
 
   useEffect(() => {
     if (user?.id) {
@@ -2385,17 +2390,6 @@ const rescheduleBooking = async () => {
   className="outline"
   type="button"
   onClick={() => {
-    window.location.href = "/customer-retention";
-  }}
->
-  <Users size={17} />
-  Customer Retention
-</button>
-
-<button
-  className="outline"
-  type="button"
-  onClick={() => {
     window.location.href = "/subscription";
   }}
 >
@@ -2768,170 +2762,286 @@ const rescheduleBooking = async () => {
   {filteredBookings.length === 1 ? "" : "s"}
 </p>
 
+
+
+
 <div className="booking-list">
-  {filteredBookings.map(
-                (booking) => (
-                  <div
-                    className="booking"
-                    key={
-                      booking._id
-                    }
-                  >
-                    <div className="booking-main">
-                      <b>
-                        {
-                          booking.customerName
-                        }
-                      </b>
+  {filteredBookings.length === 0 && !loading ? (
+    <div className="appointments-empty">
+      <CalendarDays size={32} />
+      <h3>No appointments found</h3>
+      <p>
+        {bookingDateFilter
+          ? "Try selecting another date."
+          : "New customer bookings will appear here."}
+      </p>
+    </div>
+  ) : (
+    filteredBookings.map((booking) => {
+      const assignedStaffId =
+        booking.staffId?._id ||
+        booking.staffId ||
+        "";
 
-                      <span>
-                        {booking
-                          .serviceId
-                          ?.name ||
-                          "Service"}
+      const statusLabel = {
+        pending: "Pending",
+        confirmed: "Confirmed",
+        completed: "Completed",
+        cancelled: "Cancelled",
+      };
 
-                        {" · "}
+      const bookingDate = booking.bookingDate
+        ? new Date(booking.bookingDate)
+        : null;
 
-                        {booking.bookingDate
-  ? new Date(
-      booking.bookingDate
-    ).toLocaleDateString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })
-  : "No date"}
+      const validBookingDate =
+        bookingDate &&
+        !Number.isNaN(bookingDate.getTime());
 
-{" at "}
+      const isFinalStatus = [
+        "completed",
+        "cancelled",
+      ].includes(booking.status);
 
-{booking.bookingDate
-  ? new Date(
-      booking.bookingDate
-    ).toLocaleTimeString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    })
-  : "No time"}
-                      </span>
+      return (
+        <article
+          className="appointment-card"
+          key={booking._id}
+        >
+          {/* Customer and status */}
+          <div className="appointment-card-top">
+            <div className="appointment-customer">
+              <div className="appointment-avatar">
+                {(booking.customerName || "C")
+                  .trim()
+                  .charAt(0)
+                  .toUpperCase()}
+              </div>
 
-                      <small>
-                        {
-                          booking.customerPhone
-                        }
-                      </small>
+              <div>
+                <h3>
+                  {booking.customerName || "Customer"}
+                </h3>
+                <p>
+                  {booking.serviceId?.name || "Service"}
+                </p>
+              </div>
+            </div>
 
-{staffFeatureAvailable && (
-  <div className="booking-staff-assignment">
-    <label htmlFor={`staff-${booking._id}`}>
-      Assigned staff
-    </label>
+            <span
+              className={`appointment-status status-${
+                booking.status || "pending"
+              }`}
+            >
+              {statusLabel[booking.status] ||
+                booking.status ||
+                "Pending"}
+            </span>
+          </div>
 
-    <select
-      id={`staff-${booking._id}`}
-      value={booking.staffId?._id || booking.staffId || ""}
-      disabled={
-        assigningBookingId === booking._id ||
-        ["cancelled", "completed"].includes(booking.status)
-      }
-      onChange={(event) =>
-        assignStaffToBooking(
-          booking._id,
-          event.target.value
-        )
-      }
-    >
-      <option value="">Unassigned</option>
+          {/* Appointment details */}
+          <div className="appointment-details">
+            <div>
+              <CalendarDays size={16} />
+              <span>
+                {validBookingDate
+                  ? bookingDate.toLocaleDateString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "Date unavailable"}
+              </span>
+            </div>
 
-      {staffMembers
-        .filter((member) => member.isActive)
-        .map((member) => (
-          <option key={member._id} value={member._id}>
-            {member.name}
-            {member.designation
-              ? ` — ${member.designation}`
-              : ""}
-          </option>
-        ))}
-    </select>
+            <div>
+              <Clock3 size={16} />
+              <span>
+                {validBookingDate
+                  ? bookingDate.toLocaleTimeString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: true,
+                    })
+                  : "Time unavailable"}
+              </span>
+            </div>
 
-    {assigningBookingId === booking._id && (
-      <small>Saving assignment...</small>
-    )}
-  </div>
-)}
+            <div>
+              <IndianRupee size={16} />
+              <span>
+                {booking.serviceId?.price != null
+                  ? `₹${booking.serviceId.price}`
+                  : "Price unavailable"}
+              </span>
+            </div>
 
+            {booking.customerPhone && (
+              <div>
+                <span className="appointment-phone">
+                  {booking.customerPhone}
+                </span>
+              </div>
+            )}
+          </div>
 
-{/* PENDING ACTIONS */}
+          {/* Staff assignment: subscription-gated */}
+          {staffFeatureAvailable && (
+            <div className="appointment-staff">
+              <label htmlFor={`staff-${booking._id}`}>
+                <Users size={16} />
+                Assign staff member
+              </label>
 
-{booking.status === "pending" && (
-  <>
-    <button
-      type="button"
-      title="Confirm"
-      onClick={() =>
-        status(
-          booking._id,
-          "confirmed"
-        )
-      }
-    >
-      <CheckCircle2 size={18} />
-    </button>
+              <select
+                id={`staff-${booking._id}`}
+                value={assignedStaffId}
+                disabled={
+                  assigningBookingId === booking._id ||
+                  isFinalStatus
+                }
+                onChange={(event) =>
+                  assignStaffToBooking(
+                    booking._id,
+                    event.target.value
+                  )
+                }
+              >
+                <option value="">Unassigned</option>
 
-    <button
-      type="button"
-      title="Cancel"
-      onClick={() =>
-        status(
-          booking._id,
-          "cancelled"
-        )
-      }
-    >
-      <XCircle size={18} />
-    </button>
-  </>
-)}
+                {staffMembers
+                  .filter(
+                    (member) =>
+                      member.isActive ||
+                      member._id === assignedStaffId
+                  )
+                  .map((member) => (
+                    <option
+                      key={member._id}
+                      value={member._id}
+                    >
+                      {member.name}
+                      {member.designation
+                        ? ` — ${member.designation}`
+                        : ""}
+                    </option>
+                  ))}
+              </select>
 
-{/* CONFIRMED ACTIONS */}
-
-{booking.status === "confirmed" && (
-  <>
-    <button
-      type="button"
-      title="Reschedule"
-      onClick={() => startReschedule(booking)}
-    >
-      Reschedule
-    </button>
-
-    <button
-      type="button"
-      title="Complete"
-      onClick={() =>
-        status(booking._id, "completed")
-      }
-    >
-      Complete
-    </button>
-  </>
-)}
-                    </div>
-                  </div>
-                )
+              {assigningBookingId === booking._id && (
+                <small>
+                  Updating staff assignment...
+                </small>
               )}
+            </div>
+          )}
 
-              {filteredBookings.length === 0 && !loading && (
+          {/* Appointment actions */}
+          <div className="appointment-actions">
+            {booking.status === "pending" && (
+              <>
+                <button
+                  type="button"
+                  className="appointment-btn confirm-btn"
+                  onClick={() =>
+                    status(booking._id, "confirmed")
+                  }
+                >
+                  <CheckCircle2 size={16} />
+                  Confirm
+                </button>
+
+                <button
+                  type="button"
+                  className="appointment-btn cancel-btn"
+                  onClick={() =>
+                    status(booking._id, "cancelled")
+                  }
+                >
+                  <XCircle size={16} />
+                  Cancel
+                </button>
+              </>
+            )}
+
+            {booking.status === "confirmed" && (
+              <>
+                <button
+                  type="button"
+                  className="appointment-btn reschedule-btn"
+                  onClick={() => startReschedule(booking)}
+                >
+                  <RefreshCw size={16} />
+                  Reschedule
+                </button>
+
+                <button
+                  type="button"
+                  className="appointment-btn complete-btn"
+                  onClick={() =>
+                    status(booking._id, "completed")
+                  }
+                >
+                  <CheckCircle2 size={16} />
+                  Complete
+                </button>
+
+                <button
+                  type="button"
+                  className="appointment-btn cancel-btn"
+                  onClick={() =>
+                    status(booking._id, "cancelled")
+                  }
+                >
+                  <XCircle size={16} />
+                  Cancel
+                </button>
+              </>
+            )}
+
+            {booking.status === "completed" && (
+              <span className="appointment-final-state">
+                <CheckCircle2 size={16} />
+                Appointment completed
+              </span>
+            )}
+
+            {booking.status === "cancelled" && (
+              <span className="appointment-final-state cancelled-text">
+                <XCircle size={16} />
+                Appointment cancelled
+              </span>
+            )}
+
+            {![
+              "pending",
+              "confirmed",
+              "completed",
+              "cancelled",
+            ].includes(booking.status) && (
+              <span className="appointment-final-state">
+                Status: {booking.status || "Unknown"}
+              </span>
+            )}
+          </div>
+        </article>
+      );
+    })
+  )}
+</div>
+
+
+              {/* {filteredBookings.length === 0 && !loading && (
   <p className="empty">
     {bookingDateFilter
       ? "No bookings found for this date."
       : "No bookings yet."}
   </p>
-)}
-            </div>
+    })
+  )}
+            </div> */}
           </section>
         </div>
             </main>
@@ -3291,20 +3401,6 @@ function App() {
 <Route
   path="*"
   element={<Navigate to="/" replace />}
-/>
-
-{/* Customer Retention */}
-<Route
-  path="/customer-retention"
-  element={
-    !user ? (
-      <Navigate to="/business/login" replace />
-    ) : user.role === "ADMIN" ? (
-      <Navigate to="/admin" replace />
-    ) : (
-      <CustomerRetention api={api} />
-    )
-  }
 />
 
 </Routes>

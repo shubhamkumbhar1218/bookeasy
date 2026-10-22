@@ -47,7 +47,7 @@ const PLANS = {
       "automated_reminders",
       "advanced_analytics",
       // "payment_features",
-      "customer_retention",
+      // "customer_retention",
     ],
   },
 
@@ -71,7 +71,7 @@ const PLANS = {
       "automated_reminders",
       "advanced_analytics",
       "payment_features",
-      "customer_retention",
+      // "customer_retention",
       "multiple_branches",
       "advanced_marketing",
       "loyalty_program",
