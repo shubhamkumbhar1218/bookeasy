@@ -9,7 +9,7 @@ import { normalizePhone } from "../utils/normalizePhone.js";
 import PLANS from "../config/plans.js";
 import { requireFeature } from "../middleware/requireFeature.js";
 import Staff from "../models/Staff.js";
-
+import { hasBookingConflict } from "../utils/bookingConflict.js";
 import {
   sendPushForNotification,
 } from "../utils/sendPushNotification.js";
@@ -28,6 +28,7 @@ router.get("/availability", async (req, res) => {
       serviceId,
       date,
       excludeBookingId,
+      staffId,
     } = req.query;
 
     if (!businessId || !serviceId || !date) {
@@ -97,6 +98,45 @@ router.get("/availability", async (req, res) => {
       });
     }
 
+    let selectedStaffId = null;
+
+if (staffId) {
+  if (!mongoose.isValidObjectId(staffId)) {
+    return res.status(400).json({
+      message: "Invalid staffId",
+    });
+  }
+
+  let effectivePlan = business.plan || "FREE";
+
+  if (
+    effectivePlan !== "FREE" &&
+    business.subscriptionEndDate &&
+    new Date(business.subscriptionEndDate) <= new Date()
+  ) {
+    effectivePlan = "FREE";
+  }
+
+  if (!PLANS[effectivePlan]?.features.includes("staff_management")) {
+    return res.status(403).json({
+      message: "Staff selection requires a plan with staff management.",
+    });
+  }
+
+  const selectedStaff = await Staff.findOne({
+    _id: staffId,
+    businessId,
+    isActive: true,
+  });
+
+  if (!selectedStaff) {
+    return res.status(404).json({
+      message: "Active staff member not found for this business.",
+    });
+  }
+
+  selectedStaffId = selectedStaff._id;
+}
     // --------------------------------------------------
     // INDIA TIME HELPERS
     // --------------------------------------------------
@@ -156,6 +196,7 @@ router.get("/availability", async (req, res) => {
     // EXISTING ACTIVE BOOKINGS
     // --------------------------------------------------
 
+
     const bookingQuery = {
       businessId,
       status: {
@@ -169,12 +210,11 @@ router.get("/availability", async (req, res) => {
       };
     }
 
-    const bookings = await Booking.find(
+    const existingBookings = await Booking.find(
       bookingQuery
-    ).populate(
-      "serviceId",
-      "duration"
-    );
+    )
+      .populate("serviceId", "duration")
+      .populate("staffId", "_id");
 
     // --------------------------------------------------
     // CURRENT TIME IN INDIA
@@ -229,30 +269,12 @@ router.get("/availability", async (req, res) => {
       // CHECK BOOKING CONFLICT
       // --------------------------------------------------
 
-      const conflict =
-        bookings.some((booking) => {
-          if (!booking.serviceId) {
-            return false;
-          }
-
-          const bookingStart =
-            new Date(
-              booking.bookingDate
-            );
-
-          const bookingEnd =
-            new Date(
-              bookingStart.getTime() +
-                booking.serviceId.duration *
-                  60 *
-                  1000
-            );
-
-          return (
-            slotDate < bookingEnd &&
-            slotEnd > bookingStart
-          );
-        });
+const conflict = hasBookingConflict({
+  bookings: existingBookings,
+  startTime: slotDate,
+  endTime: slotEnd,
+  staffId: selectedStaffId,
+});
 
       if (!conflict) {
         slots.push({
@@ -298,6 +320,7 @@ router.post("/public", async (req, res) => {
       customerName,
       customerPhone,
       bookingDate,
+      staffId,
     } = req.body;
 
     if (
@@ -328,8 +351,7 @@ router.post("/public", async (req, res) => {
       });
     }
 
-    
-    // -----------------------------------------------
+        let selectedStaffId = null;// -----------------------------------------------
     // BUSINESS PLAN AND MONTHLY BOOKING LIMIT
     // -----------------------------------------------
 
@@ -371,6 +393,43 @@ if (
         message: "Invalid business subscription plan",
       });
     }
+
+    if (staffId !== undefined && staffId !== null && staffId !== "") {
+  if (!mongoose.isValidObjectId(staffId)) {
+    return res.status(400).json({
+      message: "Invalid staffId",
+    });
+  }
+
+  if (!plan.features.includes("staff_management")) {
+    return res.status(403).json({
+      message: "Staff selection requires a plan with staff management.",
+    });
+  }
+
+  const selectedStaff = await Staff.findOne({
+    _id: staffId,
+    businessId,
+    isActive: true,
+  });
+
+  if (!selectedStaff) {
+    return res.status(404).json({
+      message: "Active staff member not found for this business.",
+    });
+  }
+
+  selectedStaffId = selectedStaff._id;
+}
+
+    if (
+  selectedStaffId &&
+  !plan.features.includes("staff_management")
+) {
+  return res.status(403).json({
+    message: "Staff selection requires a plan with staff management.",
+  });
+}
 
     // Free plan monthly booking limit
     if (plan.bookingLimit !== null) {
@@ -450,63 +509,32 @@ if (
     // EXACT SLOT KEY
     // --------------------------------------------------
 
-    const bookingSlot =
-      `${businessId}_${startTime.toISOString()}`;
+        const bookingSlot = `${businessId}_${startTime.toISOString()}`;
 
-    // --------------------------------------------------
-    // CHECK EXISTING ACTIVE BOOKINGS
-    // --------------------------------------------------
+    // Check overlapping active bookings for this business.
+    const bookingQuery = {
+      businessId,
+      status: { $in: ["pending", "confirmed"] },
+    };
 
-    const existingBookings =
-      await Booking.find({
-        businessId,
-        status: {
-          $in: ["pending", "confirmed"],
-        },
-      }).populate(
-        "serviceId",
-        "duration"
-      );
+    const existingBookings = await Booking.find(bookingQuery)
+      .populate("serviceId", "duration")
+      .populate("staffId", "_id");
 
-    // --------------------------------------------------
-    // CHECK TIME OVERLAP
-    // --------------------------------------------------
-
-    const hasConflict =
-      existingBookings.some(
-        (booking) => {
-          if (!booking.serviceId) {
-            return false;
-          }
-
-          const existingStart =
-            new Date(
-              booking.bookingDate
-            );
-
-          const existingEnd =
-            new Date(
-              existingStart.getTime() +
-                booking.serviceId.duration *
-                  60 *
-                  1000
-            );
-
-          return (
-            startTime < existingEnd &&
-            endTime > existingStart
-          );
-        }
-      );
+    const hasConflict = hasBookingConflict({
+      bookings: existingBookings,
+      startTime,
+      endTime,
+      staffId: selectedStaffId,
+    });
 
     if (hasConflict) {
       return res.status(409).json({
         message:
-          "This time slot is already booked",
+          "This time overlaps an existing appointment. Please select another time or staff member.",
       });
     }
-
-    // --------------------------------------------------
+// --------------------------------------------------
     // CREATE BOOKING
     // --------------------------------------------------
 
@@ -519,6 +547,7 @@ if (
         customerPhone: normalizePhone(customerPhone),
         bookingDate: startTime,
         bookingSlot,
+        staffId: selectedStaffId,
       });
 
     // --------------------------------------------------
@@ -1533,32 +1562,12 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
     // CHECK TIME OVERLAP
     // --------------------------------------------------
 
-    const hasConflict =
-      existingBookings.some(
-        (existingBooking) => {
-          if (!existingBooking.serviceId) {
-            return false;
-          }
-
-          const existingStart =
-            new Date(
-              existingBooking.bookingDate
-            );
-
-          const existingEnd =
-            new Date(
-              existingStart.getTime() +
-                existingBooking.serviceId.duration *
-                  60 *
-                  1000
-            );
-
-          return (
-            newStartTime < existingEnd &&
-            newEndTime > existingStart
-          );
-        }
-      );
+const hasConflict = hasBookingConflict({
+      bookings: existingBookings,
+      startTime: newStartTime,
+      endTime: newEndTime,
+      staffId: booking.staffId || null,
+    });
 
     if (hasConflict) {
       return res.status(409).json({
@@ -2007,7 +2016,8 @@ router.patch(
         });
       }
 
-      const booking = await Booking.findById(id);
+      const booking = await Booking.findById(id)
+  .populate("serviceId", "duration");
 
       if (!booking) {
         return res.status(404).json({
@@ -2062,6 +2072,44 @@ if (staffId === null) {
     });
   }
 
+  
+  if (!booking.serviceId?.duration) {
+    return res.status(400).json({
+      success: false,
+      message: "The booking's service duration could not be found.",
+    });
+  }
+
+  const bookingStart = new Date(booking.bookingDate);
+  const bookingEnd = new Date(
+    bookingStart.getTime() +
+      booking.serviceId.duration * 60 * 1000
+  );
+
+  const existingBookings = await Booking.find({
+    businessId: booking.businessId,
+    _id: { $ne: booking._id },
+    status: { $in: ["pending", "confirmed"] },
+  })
+    .populate("serviceId", "duration")
+    .populate("staffId", "_id");
+
+  const hasConflict = hasBookingConflict({
+    bookings: existingBookings,
+    startTime: bookingStart,
+    endTime: bookingEnd,
+    staffId: nextStaff._id,
+  });
+
+  if (hasConflict) {
+    return res.status(409).json({
+      success: false,
+      message:
+        "This staff member already has an overlapping appointment. Choose another staff member or time.",
+    });
+  }
+
+
   booking.staffId = nextStaff._id;
 }
 
@@ -2100,9 +2148,16 @@ if (previousStaffId !== nextStaffId) {
           ? "Staff assignment removed."
           : "Staff assigned successfully.",
         booking: updatedBooking,
-      });
-    } catch (error) {
+      });    } catch (error) {
       console.error("Assign staff error:", error);
+
+      if (error.code === 11000) {
+        return res.status(409).json({
+          success: false,
+          message: "This appointment conflicts with another booking.",
+        });
+      }
+
       return res.status(500).json({
         success: false,
         message: "Unable to assign staff.",

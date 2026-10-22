@@ -63,6 +63,7 @@ const bookingSchema = new mongoose.Schema(
     },
 
     // Track who completed or cancelled the booking
+
     statusHistory: [
       {
         action: {
@@ -75,8 +76,11 @@ const bookingSchema = new mongoose.Schema(
             "cancelled",
             "completed",
             "no_show",
+            "status_changed",
+            "staff_assigned",
+            "staff_unassigned",
           ],
-          required: true,
+          default: "status_changed",
         },
 
         status: {
@@ -95,6 +99,7 @@ const bookingSchema = new mongoose.Schema(
           type: Date,
           default: null,
         },
+
         newBookingDate: {
           type: Date,
           default: null,
@@ -104,6 +109,7 @@ const bookingSchema = new mongoose.Schema(
           type: String,
           default: "",
         },
+
         newBookingSlot: {
           type: String,
           default: "",
@@ -114,10 +120,21 @@ const bookingSchema = new mongoose.Schema(
           ref: "Staff",
           default: null,
         },
+
         newStaffId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "Staff",
           default: null,
+        },
+
+        oldStaffName: {
+          type: String,
+          default: "",
+        },
+
+        newStaffName: {
+          type: String,
+          default: "",
         },
 
         changedBy: {
@@ -125,54 +142,20 @@ const bookingSchema = new mongoose.Schema(
           ref: "User",
           default: null,
         },
+
         changedByName: {
           type: String,
           default: "Unknown",
           trim: true,
         },
+
         changedAt: {
           type: Date,
           default: Date.now,
         },
-
-        action: {
-  type: String,
-  enum: [
-    "status_changed",
-    "rescheduled",
-    "staff_assigned",
-    "staff_unassigned",
-  ],
-  default: "status_changed",
-},
-oldBookingDate: {
-  type: Date,
-  default: null,
-},
-newBookingDate: {
-  type: Date,
-  default: null,
-},
-oldStaffId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Staff",
-  default: null,
-},
-newStaffId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Staff",
-  default: null,
-},
-oldStaffName: {
-  type: String,
-  default: "",
-},
-newStaffName: {
-  type: String,
-  default: "",
-},
       },
     ],
+
 
   },
   {
@@ -184,6 +167,7 @@ bookingSchema.index(
   {
     businessId: 1,
     bookingSlot: 1,
+    staffId: 1,
   },
   {
     unique: true,
@@ -191,6 +175,7 @@ bookingSchema.index(
       status: {
         $in: ["pending", "confirmed"],
       },
+      bookingSlot: { $type: "string" },
     },
   }
 );
