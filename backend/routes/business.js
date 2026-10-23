@@ -680,15 +680,17 @@ cashfreeSubscriptionStatus:
           resetsAt: nextMonthStart,
         },
         features: plan.features,
-        availablePlans: Object.entries(PLANS).map(
-          ([key, value]) => ({
-            id: key,
-            name: value.name,
-            price: value.price,
-            bookingLimit: value.bookingLimit,
-            features: value.features,
-          })
-        ),
+
+availablePlans: Object.entries(PLANS)
+  .filter(([key]) => ["FREE", "STARTER"].includes(key))
+  .map(([key, value]) => ({
+    id: key,
+    name: value.name,
+    price: value.price,
+    bookingLimit: value.bookingLimit,
+    features: value.features,
+  })),
+
       });
     } catch (error) {
       console.error(

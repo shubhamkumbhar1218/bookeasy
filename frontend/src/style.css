@@ -2576,41 +2576,6 @@ select {
   overflow-wrap: anywhere;
 }
 
-.appointment-staff {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 12px;
-  background: #f8fafc;
-}
-
-.appointment-staff label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.appointment-staff select {
-  width: 100%;
-  max-width: 420px;
-  min-height: 42px;
-  padding: 9px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 9px;
-  background: white;
-  color: #0f172a;
-}
-
-.appointment-staff small {
-  color: #64748b;
-  font-size: 12px;
-}
-
 .appointment-actions {
   display: flex;
   align-items: center;
@@ -2707,7 +2672,4 @@ select {
     padding: 9px 7px;
   }
 
-  .appointment-staff select {
-    max-width: none;
-  }
 }

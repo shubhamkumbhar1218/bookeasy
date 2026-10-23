@@ -25,7 +25,6 @@ const featureLabels = {
   reviews: "Customer reviews",
   analytics: "Business analytics",
   qr_code: "Booking QR code",
-  staff_management: "Staff management",
   whatsapp_automation: "WhatsApp automation",
   automated_reminders: "Automated reminders",
   advanced_analytics: "Advanced analytics",
@@ -778,9 +777,12 @@ if (checkoutResult?.redirect) {
 
 
 
+
           {(subscription.availablePlans || [])
             .filter((plan) =>
-              ["FREE", "STARTER", "BUSINESS"].includes(plan.id)
+              ["FREE", "STARTER"].includes(
+                String(plan.id).toUpperCase()
+              )
             )
             .map((plan) => {
               const isCurrent = plan.id === currentPlan;
@@ -788,110 +790,109 @@ if (checkoutResult?.redirect) {
               const anyCheckoutRunning = checkoutLoadingPlan !== "";
 
               return (
-
-              <section
-                key={plan.id}
-                style={{
-                  ...styles.card,
-                  border: isCurrent
-                    ? "2px solid #2563eb"
-                    : "1px solid #e2e8f0",
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
-                {isCurrent && (
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: "#1d4ed8",
-                      fontWeight: 700,
-                    }}
-                  >
-                    CURRENT PLAN
-                  </span>
-                )}
-
-                <h2 style={{ margin: "12px 0 4px" }}>
-                  {plan.name}
-                </h2>
-
-                <div style={{ margin: "10px 0 18px" }}>
-                  <strong style={{ fontSize: 30 }}>
-                    ₹{plan.price}
-                  </strong>
-                  <span style={styles.muted}> / month</span>
-                </div>
-
-                <p style={styles.muted}>
-                  {plan.bookingLimit == null
-                    ? "Unlimited bookings"
-                    : `${plan.bookingLimit} bookings per month`}
-                </p>
-
-                <div
+                <section
+                  key={plan.id}
                   style={{
-                    borderTop: "1px solid #e2e8f0",
-                    paddingTop: 16,
-                    marginTop: 8,
-                    flex: 1,
+                    ...styles.card,
+                    border: isCurrent
+                      ? "2px solid #2563eb"
+                      : "1px solid #e2e8f0",
+                    display: "flex",
+                    flexDirection: "column",
                   }}
                 >
-                  {(plan.features || []).map((feature) => (
-                    <div
-                      key={feature}
+                  {isCurrent && (
+                    <span
                       style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 9,
-                        marginBottom: 12,
-                        fontSize: 14,
-                        lineHeight: 1.45,
+                        fontSize: 12,
+                        color: "#1d4ed8",
+                        fontWeight: 700,
                       }}
                     >
-                      <CheckCircle2
-                        size={17}
-                        color="#16a34a"
+                      CURRENT PLAN
+                    </span>
+                  )}
+
+                  <h2 style={{ margin: "12px 0 4px" }}>
+                    {plan.name}
+                  </h2>
+
+                  <div style={{ margin: "10px 0 18px" }}>
+                    <strong style={{ fontSize: 30 }}>
+                      ₹{plan.price}
+                    </strong>
+                    <span style={styles.muted}> / month</span>
+                  </div>
+
+                  <p style={styles.muted}>
+                    {plan.bookingLimit == null
+                      ? "Unlimited bookings"
+                      : `${plan.bookingLimit} bookings per month`}
+                  </p>
+
+                  <div
+                    style={{
+                      borderTop: "1px solid #e2e8f0",
+                      paddingTop: 16,
+                      marginTop: 8,
+                      flex: 1,
+                    }}
+                  >
+                    {(plan.features || []).map((feature) => (
+                      <div
+                        key={feature}
                         style={{
-                          flexShrink: 0,
-                          marginTop: 1,
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 9,
+                          marginBottom: 12,
+                          fontSize: 14,
+                          lineHeight: 1.45,
                         }}
-                      />
+                      >
+                        <CheckCircle2
+                          size={17}
+                          color="#16a34a"
+                          style={{
+                            flexShrink: 0,
+                            marginTop: 1,
+                          }}
+                        />
+                        {featureLabels[feature] ||
+                          feature.replaceAll("_", " ")}
+                      </div>
+                    ))}
+                  </div>
 
-                      {featureLabels[feature] ||
-                        feature.replaceAll("_", " ")}
-                    </div>
-                  ))}
-                </div>
+                  <button
+                    type="button"
+                    disabled={isCurrent || anyCheckoutRunning}
+                    onClick={() => startPlanCheckout(plan)}
+                    style={{
+                      ...styles.primary,
+                      marginTop: 16,
+                      opacity:
+                        isCurrent || anyCheckoutRunning ? 0.7 : 1,
+                      cursor:
+                        isCurrent || anyCheckoutRunning
+                          ? "not-allowed"
+                          : "pointer",
+                      background: isCurrent ? "#e2e8f0" : "#2563eb",
+                      color: isCurrent ? "#334155" : "#ffffff",
+                    }}
+                  >
+                    {isCurrent
+                      ? "Current Plan"
+                      : isProcessing
+                        ? "Opening checkout..."
+                        : Number(plan.price) === 0
+                          ? "Switch to Free"
+                          : `Upgrade to ${plan.name}`}
+                  </button>
+                </section>
+              );
+            })}
 
-                <button
-                  type="button"
-                  disabled={isCurrent || anyCheckoutRunning}
-                  onClick={() => startPlanCheckout(plan)}
-                  style={{
-                    ...styles.primary,
-                    marginTop: 16,
-                    opacity:
-                      isCurrent || anyCheckoutRunning ? 0.7 : 1,
-                    cursor:
-                      isCurrent || anyCheckoutRunning
-                        ? "not-allowed"
-                        : "pointer",
-                    background: isCurrent ? "#e2e8f0" : "#2563eb",
-                    color: isCurrent ? "#334155" : "#ffffff",
-                  }}
-                >
-                  {isCurrent
-                    ? "Current Plan"
-                    : isProcessing
-                      ? "Opening checkout..."
-                      : Number(plan.price) === 0
-                        ? "Switch to Free"
-                        : `Upgrade to ${plan.name}`}
-                </button>
-              </section>
-            );
-          })}
         </div>
 
         <div

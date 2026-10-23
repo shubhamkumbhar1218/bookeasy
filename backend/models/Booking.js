@@ -14,12 +14,6 @@ const bookingSchema = new mongoose.Schema(
       required: true,
     },
 
-    staffId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Staff",
-  default: null,
-},
-
     customerName: {
       type: String,
       required: true,
@@ -71,14 +65,11 @@ const bookingSchema = new mongoose.Schema(
           enum: [
             "created",
             "rescheduled",
-            "staff_reassigned",
             "confirmed",
             "cancelled",
             "completed",
             "no_show",
             "status_changed",
-            "staff_assigned",
-            "staff_unassigned",
           ],
           default: "status_changed",
         },
@@ -115,28 +106,6 @@ const bookingSchema = new mongoose.Schema(
           default: "",
         },
 
-        oldStaffId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Staff",
-          default: null,
-        },
-
-        newStaffId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Staff",
-          default: null,
-        },
-
-        oldStaffName: {
-          type: String,
-          default: "",
-        },
-
-        newStaffName: {
-          type: String,
-          default: "",
-        },
-
         changedBy: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
@@ -167,7 +136,6 @@ bookingSchema.index(
   {
     businessId: 1,
     bookingSlot: 1,
-    staffId: 1,
   },
   {
     unique: true,

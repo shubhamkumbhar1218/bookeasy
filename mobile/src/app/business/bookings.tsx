@@ -29,21 +29,6 @@ serviceId?: {
   price?: number;
   duration?: number;
 } | string | null;
-  staffId?:
-  | string
-  | {
-      _id: string;
-      name: string;
-      designation?: string;
-    }
-  | null;
-};
-
-type StaffMember = {
-  _id: string;
-  name: string;
-  designation?: string;
-  isActive: boolean;
 };
 
 type AvailableSlot = {
@@ -76,12 +61,6 @@ const [showFilterDatePicker, setShowFilterDatePicker] =
 
   const [showDatePicker, setShowDatePicker] =
     useState(false);
-
-  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
-const [staffFeatureAvailable, setStaffFeatureAvailable] = useState(true);
-const [staffPickerBookingId, setStaffPickerBookingId] = useState<string | null>(null);
-const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
-
 const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
 const [loadingSlots, setLoadingSlots] = useState(false);
 const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -148,100 +127,6 @@ const [rescheduleDateString, setRescheduleDateString] = useState("");
   };
 
 
-  const loadStaffMembers = async () => {
-  try {
-    const token = await AsyncStorage.getItem("bookeasy_token");
-
-    if (!token) return;
-
-    const response = await fetch(`${API_URL}/staff`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 403) {
-      setStaffFeatureAvailable(false);
-      setStaffMembers([]);
-      return;
-    }
-
-    if (!response.ok) {
-      throw new Error("Unable to load staff");
-    }
-
-    const data = await response.json();
-
-    setStaffMembers(
-      (data.staff || []).filter(
-        (member: StaffMember) => member.isActive
-      )
-    );
-
-    setStaffFeatureAvailable(true);
-  } catch (error) {
-    console.error("Load staff error:", error);
-  }
-};
-
-
-const assignStaffToBooking = async (
-  bookingId: string,
-  staffId: string | null
-) => {
-  try {
-    setAssigningBookingId(bookingId);
-
-    const token = await AsyncStorage.getItem("bookeasy_token");
-
-    if (!token) {
-      Alert.alert("Session expired", "Please log in again.");
-      router.replace("/business/login");
-      return;
-    }
-
-    const response = await fetch(
-      `${API_URL}/bookings/${bookingId}/assign-staff`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ staffId }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      if (response.status === 403) {
-        setStaffFeatureAvailable(false);
-      }
-
-      throw new Error(data.message || "Could not assign staff");
-    }
-
-    setBookings((current) =>
-      current.map((booking) =>
-        booking._id === bookingId
-          ? { ...booking, staffId: data.booking.staffId }
-          : booking
-      )
-    );
-
-    setStaffPickerBookingId(null);
-    Alert.alert("Success", data.message);
-  } catch (error) {
-    Alert.alert(
-      "Staff assignment",
-      error instanceof Error ? error.message : "Something went wrong"
-    );
-  } finally {
-    setAssigningBookingId(null);
-  }
-};
-
 
 const loadAvailableSlots = async (
   booking: Booking,
@@ -303,7 +188,6 @@ const loadAvailableSlots = async (
 
 useEffect(() => {
   loadBookings();
-  loadStaffMembers();
 }, []);
 
   // ================================
@@ -897,86 +781,6 @@ const handleReschedule = async () => {
                     </Text>
                   </View>
                 )}
-
-
-                
-{/* STAFF ASSIGNMENT */}
-{staffFeatureAvailable &&
-  !["cancelled", "completed"].includes(booking.status) && (
-  <View style={{ marginTop: 12, marginBottom: 10 }}>
-    <Text style={{ fontSize: 13, fontWeight: "700", color: "#374151", marginBottom: 8 }}>
-      Assigned staff
-    </Text>
-
-    <TouchableOpacity
-      style={styles.dateButton}
-      onPress={() =>
-        setStaffPickerBookingId(
-          staffPickerBookingId === booking._id ? null : booking._id
-        )
-      }
-      disabled={
-        assigningBookingId === booking._id ||
-        ["cancelled", "completed"].includes(booking.status)
-      }
-    >
-      <Text style={styles.dateButtonText}>
-{assigningBookingId === booking._id
-  ? "Updating..."
-  : typeof booking.staffId === "object" && booking.staffId
-    ? booking.staffId.name
-    : typeof booking.staffId === "string"
-      ? staffMembers.find(
-          (member) => member._id === booking.staffId
-        )?.name || "Assigned staff — select to change"
-      : "Unassigned — select staff"}
-      </Text>
-    </TouchableOpacity>
-
-    {staffPickerBookingId === booking._id && (
-      <View style={{ gap: 8 }}>
-        <TouchableOpacity
-          style={styles.modalCancelButton}
-          onPress={() => assignStaffToBooking(booking._id, null)}
-          disabled={assigningBookingId === booking._id}
-        >
-          <Text style={styles.modalCancelText}>Unassign staff</Text>
-        </TouchableOpacity>
-
-        {staffMembers.map((member) => (
-          <TouchableOpacity
-            key={member._id}
-            style={styles.dateButton}
-            onPress={() =>
-              assignStaffToBooking(booking._id, member._id)
-            }
-            disabled={assigningBookingId === booking._id}
-          >
-            <Text style={styles.dateButtonText}>
-              {member.name}
-              {member.designation ? ` · ${member.designation}` : ""}
-            </Text>
-          </TouchableOpacity>
-        ))}
-
-        {staffMembers.length === 0 && (
-          <Text style={{ color: "#6b7280", fontSize: 12 }}>
-            No active staff members. Add staff from Staff Management.
-          </Text>
-        )}
-
-        <TouchableOpacity
-          onPress={() => setStaffPickerBookingId(null)}
-          style={{ paddingVertical: 8 }}
-        >
-          <Text style={{ color: "#2563eb", fontWeight: "600" }}>
-            Close selector
-          </Text>
-        </TouchableOpacity>
-      </View>
-    )}
-  </View>
-)}
 
 
 

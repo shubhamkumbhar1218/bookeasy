@@ -333,22 +333,6 @@ useFocusEffect(
             </Text>
           </TouchableOpacity>
 
-          {/* Staff Management */}
-<TouchableOpacity
-  style={styles.actionCard}
-  onPress={() => router.push("/business/staff" as any)}
-  activeOpacity={0.8}
->
-  <View style={styles.actionIconBox}>
-    <Text style={styles.actionIcon}>👥</Text>
-  </View>
-
-  <Text style={styles.actionTitle}>Staff Management</Text>
-
-  <Text style={styles.actionDescription}>
-    Manage your team and staff members
-  </Text>
-</TouchableOpacity>
 
           {/* Reports */}
 

@@ -321,7 +321,7 @@ router.get("/business-booking-stats", async (req, res) => {
 
 const ADMIN_SUBSCRIPTION_PLANS = {
   FREE: { name: "Free", price: 0, bookingLimit: 30 },
-  STARTER: { name: "Starter", price: 199, bookingLimit: null },
+  STARTER: { name: "Starter", price: 299, bookingLimit: null },
   BUSINESS: { name: "Business", price: 499, bookingLimit: null },
   PRO: { name: "Pro", price: 999, bookingLimit: null },
 };

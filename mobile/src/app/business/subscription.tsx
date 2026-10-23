@@ -63,7 +63,6 @@ const featureLabels: Record<string, string> = {
   reviews: "Customer reviews",
   analytics: "Business analytics",
   qr_code: "Booking QR code",
-  staff_management: "Staff management",
   whatsapp_automation: "WhatsApp automation",
   automated_reminders: "Automated reminders",
   advanced_analytics: "Advanced analytics",
@@ -588,8 +587,8 @@ CFPaymentGatewayService.setCallback({
 
 {data.availablePlans
   ?.filter((plan) =>
-    ["FREE", "STARTER", "BUSINESS"].includes(
-      plan.id.toUpperCase()
+    ["FREE", "STARTER"].includes(
+      String(plan.id).toUpperCase()
     )
   )
   .map((plan) => {

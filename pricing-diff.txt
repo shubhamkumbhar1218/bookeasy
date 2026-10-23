@@ -1,0 +1,30 @@
+diff --git a/backend/config/plans.js b/backend/config/plans.js
+index e4f2eeb..ab6bde1 100644
+--- a/backend/config/plans.js
++++ b/backend/config/plans.js
+@@ -10,13 +10,14 @@ const PLANS = {
+       "basic_dashboard",
+       "basic_notifications",
+       "qr_code",
++      "analytics",
+     ],
+   },
+ 
+   STARTER: {
+-    name: "Basic",
+-    price: 199,
+-    yearlyPrice: 1990,
++    name: "Premium",
++    price: 299,
++    yearlyPrice: 2990,
+     bookingLimit: null,
+     features: [
+       "booking_link",
+@@ -27,6 +28,7 @@ const PLANS = {
+       "qr_code",
+       "pop-up notifications",
+       "automated_reminders",
++      "advanced_analytics",
+     ],
+   },
+ 

@@ -17,7 +17,6 @@ import BusinessReports from "./pages/BusinessReports";
 import AdminPanel from "./pages/AdminPanel";
 import Subscription from "./pages/Subscription";
 import PaymentReturn from "./pages/PaymentReturn";
-import StaffManagement from "./pages/StaffManagement";
 import AdvancedAnalytics from "./pages/AdvancedAnalytics";
 import {
   CalendarDays,
@@ -37,8 +36,6 @@ import {
   Bell,
   BarChart3,
   Crown,
-  Users,
-  LayoutDashboard,
 } from "lucide-react";
 
 import "./style.css";
@@ -708,10 +705,13 @@ const handlePhotoUpload = async (event) => {
       );
     }
 
-    const photoUrl =
-      data.user?.profilePhoto ||
-      data.profilePhoto ||
-      "";
+const photoUrl =
+  data.user?.profilePhoto ||
+  data.profilePhoto ||
+  data.user?.business?.profilePhoto ||
+  data.profile?.profilePhoto ||
+  data.profilePhotoUrl ||
+  "";
 
     if (!photoUrl) {
       throw new Error(
@@ -1379,6 +1379,16 @@ const copyQRBookingLink = async () => {
 // ===============================
 
 function Dashboard({ user, logout }) {
+  // Get today's date in Indian Standard Time (IST)
+  const todayIST = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  // ===============================
+  // STATES
   // ===============================
   // STATES
   // ===============================
@@ -1387,9 +1397,6 @@ function Dashboard({ user, logout }) {
 const [unreadCount, setUnreadCount] = useState(0);
 const [showNotifications, setShowNotifications] = useState(false);
 
-const [staffMembers, setStaffMembers] = useState([]);
-const [staffFeatureAvailable, setStaffFeatureAvailable] = useState(false);
-const [assigningBookingId, setAssigningBookingId] = useState(null);
 const [updatingBookingId, setUpdatingBookingId] = useState(null);
 
   const [services, setServices] =
@@ -1452,30 +1459,6 @@ const [rescheduleLoading, setRescheduleLoading] =
   user?.profilePhoto || ""
 );
 
-// const assignStaffToBooking = async (bookingId, staffId) => {
-//   try {
-//     setAssigningStaff(true);
-
-//     await api(`/bookings/${bookingId}/assign-staff`, {
-//       method: "PATCH",
-//       body: JSON.stringify({ staffId: staffId || null }),
-//     });
-
-//     await load();
-
-//     alert(
-//       staffId
-//         ? "Staff assigned successfully."
-//         : "Staff assignment removed."
-//     );
-//   } catch (error) {
-//     alert(error.message || "Unable to assign staff.");
-//   } finally {
-//     setAssigningStaff(false);
-//     setAssigningBookingId(null);
-//   }
-// };
-
 useEffect(() => {
   const loadBusinessPhoto = async () => {
     try {
@@ -1497,13 +1480,13 @@ const photo =
         localStorage.getItem("bookeasy_user") || "{}"
       );
 
-      localStorage.setItem(
-        "bookeasy_user",
-        JSON.stringify({
-          ...savedUser,
-          profilePhoto: photo,
-        })
-      );
+localStorage.setItem(
+  "bookeasy_user",
+  JSON.stringify({
+    ...savedUser,
+    profilePhoto: photo,
+  })
+);
     } catch (error) {
       console.error("Unable to load business photo:", error);
     }
@@ -1888,64 +1871,6 @@ const status = async (id, value) => {
     setUpdatingBookingId(null);
   }
 };
-
-
-
-
-  // ===============================
-  // STAFF MANAGEMENT / ASSIGNMENT
-  // ===============================
-
-
-const loadStaffMembers = async () => {
-  try {
-    const data = await api("/staff");
-
-    setStaffMembers(
-      Array.isArray(data.staff) ? data.staff : []
-    );
-
-    setStaffFeatureAvailable(true);
-  } catch (error) {
-    console.error("Unable to load staff members:", error);
-
-    setStaffMembers([]);
-    setStaffFeatureAvailable(false);
-
-    // The dashboard already has an error message area.
-    setError(
-      error.message || "Unable to load staff members."
-    );
-  }
-};
-
-
-  useEffect(() => {
-    if (user?.id) {
-      loadStaffMembers();
-    }
-  }, [user?.id]);
-
-  const assignStaffToBooking = async (bookingId, staffId) => {
-    try {
-      setError("");
-      setAssigningBookingId(bookingId);
-
-      await api(`/bookings/${bookingId}/assign-staff`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          staffId: staffId || null,
-        }),
-      });
-
-      await load();
-      await loadStaffMembers();
-    } catch (error) {
-      setError(error.message || "Unable to assign staff.");
-    } finally {
-      setAssigningBookingId("");
-    }
-  };
 
 
   // ===============================
@@ -2375,17 +2300,6 @@ const rescheduleBooking = async () => {
   Advanced Analytics
 </button>
 
-    <button
-  className="outline"
-  type="button"
-  onClick={() => {
-    window.location.href = "/staff";
-  }}
->
-  <UserPlus size={17} />
-  Staff Management
-</button>
-
 <button
   className="outline"
   type="button"
@@ -2765,6 +2679,7 @@ const rescheduleBooking = async () => {
 
 
 
+
 <div className="booking-list">
   {filteredBookings.length === 0 && !loading ? (
     <div className="appointments-empty">
@@ -2778,11 +2693,6 @@ const rescheduleBooking = async () => {
     </div>
   ) : (
     filteredBookings.map((booking) => {
-      const assignedStaffId =
-        booking.staffId?._id ||
-        booking.staffId ||
-        "";
-
       const statusLabel = {
         pending: "Pending",
         confirmed: "Confirmed",
@@ -2797,11 +2707,6 @@ const rescheduleBooking = async () => {
       const validBookingDate =
         bookingDate &&
         !Number.isNaN(bookingDate.getTime());
-
-      const isFinalStatus = [
-        "completed",
-        "cancelled",
-      ].includes(booking.status);
 
       return (
         <article
@@ -2887,57 +2792,6 @@ const rescheduleBooking = async () => {
             )}
           </div>
 
-          {/* Staff assignment: subscription-gated */}
-          {staffFeatureAvailable && (
-            <div className="appointment-staff">
-              <label htmlFor={`staff-${booking._id}`}>
-                <Users size={16} />
-                Assign staff member
-              </label>
-
-              <select
-                id={`staff-${booking._id}`}
-                value={assignedStaffId}
-                disabled={
-                  assigningBookingId === booking._id ||
-                  isFinalStatus
-                }
-                onChange={(event) =>
-                  assignStaffToBooking(
-                    booking._id,
-                    event.target.value
-                  )
-                }
-              >
-                <option value="">Unassigned</option>
-
-                {staffMembers
-                  .filter(
-                    (member) =>
-                      member.isActive ||
-                      member._id === assignedStaffId
-                  )
-                  .map((member) => (
-                    <option
-                      key={member._id}
-                      value={member._id}
-                    >
-                      {member.name}
-                      {member.designation
-                        ? ` — ${member.designation}`
-                        : ""}
-                    </option>
-                  ))}
-              </select>
-
-              {assigningBookingId === booking._id && (
-                <small>
-                  Updating staff assignment...
-                </small>
-              )}
-            </div>
-          )}
-
           {/* Appointment actions */}
           <div className="appointment-actions">
             {booking.status === "pending" && (
@@ -2945,6 +2799,7 @@ const rescheduleBooking = async () => {
                 <button
                   type="button"
                   className="appointment-btn confirm-btn"
+                  disabled={updatingBookingId !== null}
                   onClick={() =>
                     status(booking._id, "confirmed")
                   }
@@ -2956,6 +2811,7 @@ const rescheduleBooking = async () => {
                 <button
                   type="button"
                   className="appointment-btn cancel-btn"
+                  disabled={updatingBookingId !== null}
                   onClick={() =>
                     status(booking._id, "cancelled")
                   }
@@ -2971,6 +2827,7 @@ const rescheduleBooking = async () => {
                 <button
                   type="button"
                   className="appointment-btn reschedule-btn"
+                  disabled={updatingBookingId !== null}
                   onClick={() => startReschedule(booking)}
                 >
                   <RefreshCw size={16} />
@@ -2980,6 +2837,7 @@ const rescheduleBooking = async () => {
                 <button
                   type="button"
                   className="appointment-btn complete-btn"
+                  disabled={updatingBookingId !== null}
                   onClick={() =>
                     status(booking._id, "completed")
                   }
@@ -2991,6 +2849,7 @@ const rescheduleBooking = async () => {
                 <button
                   type="button"
                   className="appointment-btn cancel-btn"
+                  disabled={updatingBookingId !== null}
                   onClick={() =>
                     status(booking._id, "cancelled")
                   }
@@ -3031,17 +2890,6 @@ const rescheduleBooking = async () => {
     })
   )}
 </div>
-
-
-              {/* {filteredBookings.length === 0 && !loading && (
-  <p className="empty">
-    {bookingDateFilter
-      ? "No bookings found for this date."
-      : "No bookings yet."}
-  </p>
-    })
-  )}
-            </div> */}
           </section>
         </div>
             </main>
@@ -3087,11 +2935,7 @@ const rescheduleBooking = async () => {
                 <input
                   type="date"
                   value={rescheduleDate}
-                  min={
-                    new Date()
-                      .toISOString()
-                      .split("T")[0]
-                  }
+                  min={todayIST}
                   onChange={(e) => {
                     setRescheduleDate(
                       e.target.value
@@ -3272,20 +3116,6 @@ function App() {
       )
     }
   />
-
-{/* Staff Management */}
-<Route
-  path="/staff"
-  element={
-    !user ? (
-      <Navigate to="/business/login" replace />
-    ) : user.role === "ADMIN" ? (
-      <Navigate to="/admin" replace />
-    ) : (
-      <StaffManagement user={user} api={api} />
-    )
-  }
-/>
 
 {/* Business Dashboard */}
 <Route

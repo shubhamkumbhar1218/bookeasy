@@ -8,13 +8,64 @@ import Notification from "../models/Notification.js";
 import { normalizePhone } from "../utils/normalizePhone.js";
 import PLANS from "../config/plans.js";
 import { requireFeature } from "../middleware/requireFeature.js";
-import Staff from "../models/Staff.js";
-import { hasBookingConflict } from "../utils/bookingConflict.js";
 import {
   sendPushForNotification,
 } from "../utils/sendPushNotification.js";
 
 const router = express.Router();
+
+
+/**
+ * Check whether a proposed booking overlaps an existing
+ * pending or confirmed booking for the same business.
+ *
+ * Each booking's end time is calculated using its service duration.
+ */
+function hasBookingConflict({
+  bookings,
+  startTime,
+  endTime,
+}) {
+  const proposedStart = new Date(startTime).getTime();
+  const proposedEnd = new Date(endTime).getTime();
+
+  return bookings.some((booking) => {
+    // Ignore bookings without a valid scheduled date.
+    if (!booking.bookingDate) {
+      return false;
+    }
+
+    // Only pending and confirmed bookings block a slot.
+    if (!["pending", "confirmed"].includes(booking.status)) {
+      return false;
+    }
+
+    const existingStart = new Date(
+      booking.bookingDate
+    ).getTime();
+
+    const duration = Number(
+      booking.serviceId?.duration
+    );
+
+    if (
+      !Number.isFinite(existingStart) ||
+      !Number.isFinite(duration) ||
+      duration <= 0
+    ) {
+      return false;
+    }
+
+    const existingEnd =
+      existingStart + duration * 60 * 1000;
+
+    // Overlap occurs when the appointments intersect.
+    return (
+      proposedStart < existingEnd &&
+      proposedEnd > existingStart
+    );
+  });
+}
 
 // Get available booki
 // ng slots
@@ -28,7 +79,6 @@ router.get("/availability", async (req, res) => {
       serviceId,
       date,
       excludeBookingId,
-      staffId,
     } = req.query;
 
     if (!businessId || !serviceId || !date) {
@@ -98,45 +148,9 @@ router.get("/availability", async (req, res) => {
       });
     }
 
-    let selectedStaffId = null;
-
-if (staffId) {
-  if (!mongoose.isValidObjectId(staffId)) {
-    return res.status(400).json({
-      message: "Invalid staffId",
-    });
-  }
 
   let effectivePlan = business.plan || "FREE";
 
-  if (
-    effectivePlan !== "FREE" &&
-    business.subscriptionEndDate &&
-    new Date(business.subscriptionEndDate) <= new Date()
-  ) {
-    effectivePlan = "FREE";
-  }
-
-  if (!PLANS[effectivePlan]?.features.includes("staff_management")) {
-    return res.status(403).json({
-      message: "Staff selection requires a plan with staff management.",
-    });
-  }
-
-  const selectedStaff = await Staff.findOne({
-    _id: staffId,
-    businessId,
-    isActive: true,
-  });
-
-  if (!selectedStaff) {
-    return res.status(404).json({
-      message: "Active staff member not found for this business.",
-    });
-  }
-
-  selectedStaffId = selectedStaff._id;
-}
     // --------------------------------------------------
     // INDIA TIME HELPERS
     // --------------------------------------------------
@@ -214,7 +228,6 @@ if (staffId) {
       bookingQuery
     )
       .populate("serviceId", "duration")
-      .populate("staffId", "_id");
 
     // --------------------------------------------------
     // CURRENT TIME IN INDIA
@@ -273,7 +286,6 @@ const conflict = hasBookingConflict({
   bookings: existingBookings,
   startTime: slotDate,
   endTime: slotEnd,
-  staffId: selectedStaffId,
 });
 
       if (!conflict) {
@@ -320,7 +332,6 @@ router.post("/public", async (req, res) => {
       customerName,
       customerPhone,
       bookingDate,
-      staffId,
     } = req.body;
 
     if (
@@ -350,8 +361,7 @@ router.post("/public", async (req, res) => {
         message: "Service not found",
       });
     }
-
-        let selectedStaffId = null;// -----------------------------------------------
+// -----------------------------------------------
     // BUSINESS PLAN AND MONTHLY BOOKING LIMIT
     // -----------------------------------------------
 
@@ -393,43 +403,6 @@ if (
         message: "Invalid business subscription plan",
       });
     }
-
-    if (staffId !== undefined && staffId !== null && staffId !== "") {
-  if (!mongoose.isValidObjectId(staffId)) {
-    return res.status(400).json({
-      message: "Invalid staffId",
-    });
-  }
-
-  if (!plan.features.includes("staff_management")) {
-    return res.status(403).json({
-      message: "Staff selection requires a plan with staff management.",
-    });
-  }
-
-  const selectedStaff = await Staff.findOne({
-    _id: staffId,
-    businessId,
-    isActive: true,
-  });
-
-  if (!selectedStaff) {
-    return res.status(404).json({
-      message: "Active staff member not found for this business.",
-    });
-  }
-
-  selectedStaffId = selectedStaff._id;
-}
-
-    if (
-  selectedStaffId &&
-  !plan.features.includes("staff_management")
-) {
-  return res.status(403).json({
-    message: "Staff selection requires a plan with staff management.",
-  });
-}
 
     // Free plan monthly booking limit
     if (plan.bookingLimit !== null) {
@@ -519,19 +492,17 @@ if (
 
     const existingBookings = await Booking.find(bookingQuery)
       .populate("serviceId", "duration")
-      .populate("staffId", "_id");
 
     const hasConflict = hasBookingConflict({
       bookings: existingBookings,
       startTime,
       endTime,
-      staffId: selectedStaffId,
     });
 
     if (hasConflict) {
       return res.status(409).json({
         message:
-          "This time overlaps an existing appointment. Please select another time or staff member.",
+          "This time overlaps an existing appointment. Please select another time.",
       });
     }
 // --------------------------------------------------
@@ -547,7 +518,6 @@ if (
         customerPhone: normalizePhone(customerPhone),
         bookingDate: startTime,
         bookingSlot,
-        staffId: selectedStaffId,
       });
 
     // --------------------------------------------------
@@ -631,7 +601,6 @@ const bookings = await Booking.find({
   businessId: req.params.businessId,
 })
   .populate("serviceId", "name price duration")
-  .populate("staffId", "name phone email designation")
   .sort({ bookingDate: 1 });
 
     res.json(bookings);
@@ -1566,7 +1535,6 @@ const hasConflict = hasBookingConflict({
       bookings: existingBookings,
       startTime: newStartTime,
       endTime: newEndTime,
-      staffId: booking.staffId || null,
     });
 
     if (hasConflict) {
@@ -1768,26 +1736,17 @@ router.patch("/:id/cancel", authMiddleware, async (req, res) => {
       });
     }
 
-if (!Array.isArray(booking.statusHistory)) {
-  booking.statusHistory = [];
-}
-
-if (booking.status !== "cancelled") {
-  booking.status = "cancelled";
-
-  booking.statusHistory.push({
-    status: "cancelled",
-    changedBy: req.user.id,
-    changedByName: req.user.name || "Business owner",
-    changedAt: new Date(),
+if (booking.status === "cancelled") {
+  return res.status(400).json({
+    message: "This booking is already cancelled",
   });
-
-  await booking.save();
 }
 
 if (!Array.isArray(booking.statusHistory)) {
   booking.statusHistory = [];
 }
+
+booking.status = "cancelled";
 
 booking.statusHistory.push({
   status: "cancelled",
@@ -1856,22 +1815,31 @@ if (booking.businessId.toString() !== req.user.id.toString()) {
       });
     }
 
+
+if (!["pending", "confirmed"].includes(booking.status)) {
+  return res.status(400).json({
+    message: "Only pending or confirmed bookings can be completed",
+  });
+}
+
+if (new Date(booking.bookingDate) > new Date()) {
+  return res.status(400).json({
+    message: "A future appointment cannot be completed",
+  });
+}
+
 if (!Array.isArray(booking.statusHistory)) {
   booking.statusHistory = [];
 }
 
-if (booking.status !== "completed") {
-  booking.status = "completed";
+booking.status = "completed";
 
-  booking.statusHistory.push({
-    status: "completed",
-    changedBy: req.user.id,
-    changedByName: req.user.name || "Business owner",
-    changedAt: new Date(),
-  });
-
-  await booking.save();
-}
+booking.statusHistory.push({
+  status: "completed",
+  changedBy: req.user.id,
+  changedByName: req.user.name || "Business owner",
+  changedAt: new Date(),
+});
 
 await booking.save();
 
@@ -1937,16 +1905,6 @@ router.patch(
       }
 
       if (
-        booking.businessId.toString() !==
-        req.user.id.toString()
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "You are not allowed to modify this booking.",
-        });
-      }
-
-      if (
         booking.status !== "pending" &&
         booking.status !== "confirmed"
       ) {
@@ -1979,188 +1937,6 @@ router.patch(
       return res.status(500).json({
         success: false,
         message: "Unable to mark appointment as no-show.",
-      });
-    }
-  }
-);
-
-
-/**
- * Assign or unassign a staff member to a booking.
- * Requires an eligible subscription with staff_management.
- */
-router.patch(
-  "/:id/assign-staff",
-  authMiddleware,
-  requireFeature("staff_management"),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { staffId } = req.body;
-
-      if (!mongoose.isValidObjectId(id)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid booking ID.",
-        });
-      }
-
-      if (
-        staffId !== null &&
-        (typeof staffId !== "string" ||
-          !mongoose.isValidObjectId(staffId))
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "A valid staff ID or null is required.",
-        });
-      }
-
-      const booking = await Booking.findById(id)
-  .populate("serviceId", "duration");
-
-      if (!booking) {
-        return res.status(404).json({
-          success: false,
-          message: "Booking not found.",
-        });
-      }
-
-      if (booking.businessId.toString() !== req.user.id.toString()) {
-        return res.status(403).json({
-          success: false,
-          message: "You are not allowed to modify this booking.",
-        });
-      }
-
-      if (["cancelled", "completed"].includes(booking.status)) {
-        return res.status(400).json({
-          success: false,
-          message: "Staff cannot be assigned to a cancelled or completed booking.",
-        });
-      }
-
-      const previousStaffId = booking.staffId
-  ? booking.staffId.toString()
-  : null;
-
-let previousStaffName = "";
-let nextStaff = null;
-
-if (previousStaffId) {
-  const previousStaff = await Staff.findOne({
-    _id: previousStaffId,
-    businessId: req.user.id,
-  });
-
-  previousStaffName = previousStaff?.name || "";
-}
-
-if (staffId === null) {
-  booking.staffId = null;
-} else {
-  nextStaff = await Staff.findOne({
-    _id: staffId,
-    businessId: req.user.id,
-    isActive: true,
-  });
-
-  if (!nextStaff) {
-    return res.status(404).json({
-      success: false,
-      message: "Active staff member not found for this business.",
-    });
-  }
-
-  
-  if (!booking.serviceId?.duration) {
-    return res.status(400).json({
-      success: false,
-      message: "The booking's service duration could not be found.",
-    });
-  }
-
-  const bookingStart = new Date(booking.bookingDate);
-  const bookingEnd = new Date(
-    bookingStart.getTime() +
-      booking.serviceId.duration * 60 * 1000
-  );
-
-  const existingBookings = await Booking.find({
-    businessId: booking.businessId,
-    _id: { $ne: booking._id },
-    status: { $in: ["pending", "confirmed"] },
-  })
-    .populate("serviceId", "duration")
-    .populate("staffId", "_id");
-
-  const hasConflict = hasBookingConflict({
-    bookings: existingBookings,
-    startTime: bookingStart,
-    endTime: bookingEnd,
-    staffId: nextStaff._id,
-  });
-
-  if (hasConflict) {
-    return res.status(409).json({
-      success: false,
-      message:
-        "This staff member already has an overlapping appointment. Choose another staff member or time.",
-    });
-  }
-
-
-  booking.staffId = nextStaff._id;
-}
-
-const nextStaffId = booking.staffId
-  ? booking.staffId.toString()
-  : null;
-
-// Don't create a history event if the assignment didn't change.
-if (previousStaffId !== nextStaffId) {
-  if (!Array.isArray(booking.statusHistory)) {
-    booking.statusHistory = [];
-  }
-
-  booking.statusHistory.push({
-    action: nextStaffId ? "staff_assigned" : "staff_unassigned",
-    status: booking.status,
-    oldStaffId: previousStaffId,
-    newStaffId: nextStaffId,
-    oldStaffName: previousStaffName,
-    newStaffName: nextStaff?.name || "",
-    changedBy: req.user.id,
-    changedByName: req.user.name || "Business owner",
-    changedAt: new Date(),
-  });
-}
-
-      await booking.save();
-
-      const updatedBooking = await Booking.findById(booking._id)
-        .populate("serviceId", "name price duration")
-        .populate("staffId", "name phone email designation");
-
-      return res.json({
-        success: true,
-        message: staffId === null
-          ? "Staff assignment removed."
-          : "Staff assigned successfully.",
-        booking: updatedBooking,
-      });    } catch (error) {
-      console.error("Assign staff error:", error);
-
-      if (error.code === 11000) {
-        return res.status(409).json({
-          success: false,
-          message: "This appointment conflicts with another booking.",
-        });
-      }
-
-      return res.status(500).json({
-        success: false,
-        message: "Unable to assign staff.",
       });
     }
   }
