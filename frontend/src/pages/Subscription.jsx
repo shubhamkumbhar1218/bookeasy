@@ -29,7 +29,6 @@ const featureLabels = {
   automated_reminders: "Automated reminders",
   advanced_analytics: "Advanced analytics",
   payment_features: "Payment features",
-  customer_retention: "Customer retention tools",
   multiple_branches: "Multiple branches",
   advanced_marketing: "Advanced marketing",
   loyalty_program: "Loyalty program",

@@ -15,57 +15,74 @@ import {
 const router = express.Router();
 
 
+
 /**
- * Check whether a proposed booking overlaps an existing
- * pending or confirmed booking for the same business.
+ * Check appointment overlap, including each service's
+ * buffer time after the appointment.
  *
- * Each booking's end time is calculated using its service duration.
+ * Older services default to a 30-minute interval and
+ * zero buffer.
  */
 function hasBookingConflict({
   bookings,
   startTime,
   endTime,
+  bufferMinutes = 0,
 }) {
   const proposedStart = new Date(startTime).getTime();
   const proposedEnd = new Date(endTime).getTime();
 
+  if (
+    !Number.isFinite(proposedStart) ||
+    !Number.isFinite(proposedEnd) ||
+    proposedEnd <= proposedStart
+  ) {
+    return true;
+  }
+
+  const proposedBlockedEnd =
+    proposedEnd + Number(bufferMinutes || 0) * 60 * 1000;
+
   return bookings.some((booking) => {
-    // Ignore bookings without a valid scheduled date.
-    if (!booking.bookingDate) {
+    if (
+      !booking.bookingDate ||
+      !["pending", "confirmed"].includes(booking.status)
+    ) {
       return false;
     }
 
-    // Only pending and confirmed bookings block a slot.
-    if (!["pending", "confirmed"].includes(booking.status)) {
-      return false;
-    }
+    const existingStart =
+      new Date(booking.bookingDate).getTime();
 
-    const existingStart = new Date(
-      booking.bookingDate
-    ).getTime();
+    const duration = Number(booking.serviceId?.duration);
 
-    const duration = Number(
-      booking.serviceId?.duration
+    const existingBuffer = Number(
+      booking.serviceId?.bufferMinutes ?? 0
     );
 
     if (
       !Number.isFinite(existingStart) ||
       !Number.isFinite(duration) ||
-      duration <= 0
+      duration <= 0 ||
+      !Number.isFinite(existingBuffer) ||
+      existingBuffer < 0
     ) {
-      return false;
+      // Fail safely if an active booking has invalid timing data.
+      return true;
     }
 
-    const existingEnd =
-      existingStart + duration * 60 * 1000;
+    const existingBlockedEnd =
+      existingStart +
+      (duration + existingBuffer) * 60 * 1000;
 
-    // Overlap occurs when the appointments intersect.
+    // Include buffers on both appointments.
     return (
-      proposedStart < existingEnd &&
-      proposedEnd > existingStart
+      proposedStart < existingBlockedEnd &&
+      proposedBlockedEnd > existingStart
     );
   });
 }
+
 
 // Get available booki
 // ng slots
@@ -148,6 +165,14 @@ router.get("/availability", async (req, res) => {
       });
     }
 
+    console.log("AVAILABILITY SERVICE:", {
+  serviceId: service._id.toString(),
+  name: service.name,
+  duration: service.duration,
+  slotIntervalMinutes: service.slotIntervalMinutes,
+  bufferMinutes: service.bufferMinutes,
+});
+
 
   let effectivePlan = business.plan || "FREE";
 
@@ -194,17 +219,51 @@ router.get("/availability", async (req, res) => {
       });
     }
 
+    if (
+  typeof hours.open !== "string" ||
+  typeof hours.close !== "string" ||
+  !/^\d{2}:\d{2}$/.test(hours.open) ||
+  !/^\d{2}:\d{2}$/.test(hours.close)
+) {
+  return res.status(400).json({
+    message: "Business working hours are invalid",
+  });
+}
+
     const [openHour, openMinute] =
       hours.open.split(":").map(Number);
 
     const [closeHour, closeMinute] =
       hours.close.split(":").map(Number);
 
+
+
+if (
+  !Number.isInteger(openHour) ||
+  !Number.isInteger(openMinute) ||
+  !Number.isInteger(closeHour) ||
+  !Number.isInteger(closeMinute) ||
+  openHour < 0 ||
+  openHour > 23 ||
+  openMinute < 0 ||
+  openMinute > 59 ||
+  closeHour < 0 ||
+  closeHour > 23 ||
+  closeMinute < 0 ||
+  closeMinute > 59
+) {
+  return res.status(400).json({
+    message: "Business working hours are invalid",
+  });
+}
+
+
     const openMinutes =
       openHour * 60 + openMinute;
 
     const closeMinutes =
       closeHour * 60 + closeMinute;
+
 
     // --------------------------------------------------
     // EXISTING ACTIVE BOOKINGS
@@ -224,10 +283,8 @@ router.get("/availability", async (req, res) => {
       };
     }
 
-    const existingBookings = await Booking.find(
-      bookingQuery
-    )
-      .populate("serviceId", "duration")
+const existingBookings = await Booking.find(bookingQuery)
+  .populate("serviceId", "duration bufferMinutes");
 
     // --------------------------------------------------
     // CURRENT TIME IN INDIA
@@ -241,11 +298,39 @@ router.get("/availability", async (req, res) => {
 
     const slots = [];
 
-    for (
-      let minutes = openMinutes;
-      minutes + service.duration <= closeMinutes;
-      minutes += 30
-    ) {
+
+const slotIntervalMinutes = Number(
+  service.slotIntervalMinutes ?? 30
+);
+
+const serviceDuration = Number(service.duration);
+
+const serviceBufferMinutes = Number(
+  service.bufferMinutes ?? 0
+);
+
+// Validate scheduling settings before generating slots.
+if (
+  !Number.isFinite(slotIntervalMinutes) ||
+  !Number.isFinite(serviceDuration) ||
+  !Number.isFinite(serviceBufferMinutes) ||
+  ![5, 10, 15, 20, 30].includes(slotIntervalMinutes) ||
+  ![15, 20, 30, 45, 60].includes(serviceDuration) ||
+  ![0, 5, 10, 15].includes(serviceBufferMinutes)
+) {
+  return res.status(400).json({
+    message: "Invalid service scheduling settings",
+  });
+}
+
+// Generate slots using the service's configured interval.
+// Appointment duration plus buffer must fit before closing.
+for (
+  let minutes = openMinutes;
+  minutes + serviceDuration + serviceBufferMinutes <= closeMinutes;
+  minutes += slotIntervalMinutes
+) {
+
       const hour = Math.floor(
         minutes / 60
       );
@@ -265,10 +350,9 @@ router.get("/availability", async (req, res) => {
         localWallClockAsUTC - IST_OFFSET_MS
       );
 
-      const slotEnd = new Date(
-        slotDate.getTime() +
-          service.duration * 60 * 1000
-      );
+const slotEnd = new Date(
+  slotDate.getTime() + serviceDuration * 60 * 1000
+);
 
       // --------------------------------------------------
       // DON'T SHOW PAST SLOTS
@@ -286,6 +370,7 @@ const conflict = hasBookingConflict({
   bookings: existingBookings,
   startTime: slotDate,
   endTime: slotEnd,
+  bufferMinutes: serviceBufferMinutes,
 });
 
       if (!conflict) {
@@ -469,6 +554,89 @@ if (
       });
     }
 
+    
+    // --------------------------------------------------
+    // VALIDATE WORKING HOURS AND SLOT INTERVAL
+    // --------------------------------------------------
+
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(
+      startTime.getTime() + IST_OFFSET_MS
+    );
+
+    const dayNames = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
+
+    const dayName = dayNames[istDate.getUTCDay()];
+    const hours = business.workingHours?.[dayName];
+
+    if (!hours || hours.closed) {
+      return res.status(400).json({
+        message: "Business is closed on this day",
+      });
+    }
+
+    const startMinutes =
+      istDate.getUTCHours() * 60 +
+      istDate.getUTCMinutes();
+
+    const [openHour, openMinute] =
+      hours.open.split(":").map(Number);
+
+    const [closeHour, closeMinute] =
+      hours.close.split(":").map(Number);
+
+    const openMinutes =
+      openHour * 60 + openMinute;
+
+    const closeMinutes =
+      closeHour * 60 + closeMinute;
+
+    const durationMinutes = Number(service.duration);
+    const intervalMinutes = Number(
+      service.slotIntervalMinutes ?? 30
+    );
+    const bufferMinutes = Number(
+      service.bufferMinutes ?? 0
+    );
+
+if (
+  ![15, 20, 30, 45, 60].includes(durationMinutes) ||
+  ![5, 10, 15, 20, 30].includes(intervalMinutes) ||
+  ![0, 5, 10, 15].includes(bufferMinutes)
+) {
+      return res.status(400).json({
+        message: "Invalid service scheduling settings",
+      });
+    }
+
+    if (startTime <= new Date()) {
+      return res.status(400).json({
+        message: "Please select a future appointment time",
+      });
+    }
+
+if (
+  startMinutes < openMinutes ||
+  startMinutes + durationMinutes + bufferMinutes > closeMinutes ||
+  (startMinutes - openMinutes) % intervalMinutes !== 0 ||
+  istDate.getUTCSeconds() !== 0 ||
+  istDate.getUTCMilliseconds() !== 0
+) {
+      return res.status(400).json({
+        message:
+          "This appointment time is outside working hours or does not match the service's available time intervals.",
+      });
+    }
+
+
     // --------------------------------------------------
     // BOOKING END TIME
     // --------------------------------------------------
@@ -490,14 +658,15 @@ if (
       status: { $in: ["pending", "confirmed"] },
     };
 
-    const existingBookings = await Booking.find(bookingQuery)
-      .populate("serviceId", "duration")
+const existingBookings = await Booking.find(bookingQuery)
+  .populate("serviceId", "duration bufferMinutes");
 
-    const hasConflict = hasBookingConflict({
-      bookings: existingBookings,
-      startTime,
-      endTime,
-    });
+const hasConflict = hasBookingConflict({
+  bookings: existingBookings,
+  startTime,
+  endTime,
+  bufferMinutes: Number(service.bufferMinutes ?? 0),
+});
 
     if (hasConflict) {
       return res.status(409).json({
@@ -600,7 +769,10 @@ router.get("/business/:businessId", authMiddleware,async (req, res) => {
 const bookings = await Booking.find({
   businessId: req.params.businessId,
 })
-  .populate("serviceId", "name price duration")
+  .populate(
+    "serviceId",
+    "name price duration slotIntervalMinutes bufferMinutes"
+  )
   .sort({ bookingDate: 1 });
 
     res.json(bookings);
@@ -632,11 +804,14 @@ router.get("/customer", async (req, res) => {
       });
     }
 
-    const bookings = await Booking.find({
-      customerPhone: cleanPhone,
-    })
-      .populate("serviceId", "name price duration")
-      .sort({ bookingDate: -1 });
+const bookings = await Booking.find({
+  customerPhone: cleanPhone,
+})
+  .populate(
+    "serviceId",
+    "name price duration slotIntervalMinutes bufferMinutes"
+  )
+  .sort({ bookingDate: -1 });
 
     res.json(bookings);
   } catch (error) {
@@ -1351,8 +1526,11 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
     // FIND BOOKING
     // --------------------------------------------------
 
-    const booking = await Booking.findById(req.params.id)
-      .populate("serviceId", "name price duration");
+const booking = await Booking.findById(req.params.id)
+  .populate(
+    "serviceId",
+    "name price duration slotIntervalMinutes bufferMinutes"
+  );
 
     if (!booking) {
       return res.status(404).json({
@@ -1473,19 +1651,44 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
     // CHECK WORKING HOURS
     // --------------------------------------------------
 
-    const endMinutes =
-      startMinutes +
-      booking.serviceId.duration;
 
-    if (
-      startMinutes < openMinutes ||
-      endMinutes > closeMinutes
-    ) {
-      return res.status(400).json({
-        message:
-          `Booking must be between ${hours.open} and ${hours.close}`,
-      });
-    }
+const durationMinutes = Number(
+  booking.serviceId.duration
+);
+
+const intervalMinutes = Number(
+  booking.serviceId.slotIntervalMinutes ?? 30
+);
+
+const bufferMinutes = Number(
+  booking.serviceId.bufferMinutes ?? 0
+);
+
+if (
+  ![15, 20, 30, 45, 60].includes(durationMinutes) ||
+  ![5, 10, 15, 20, 30].includes(intervalMinutes) ||
+  ![0, 5, 10, 15].includes(bufferMinutes)
+) {
+  return res.status(400).json({
+    message: "Invalid service scheduling settings",
+  });
+}
+
+const endMinutes = startMinutes + durationMinutes;
+
+if (
+  startMinutes < openMinutes ||
+  endMinutes + bufferMinutes > closeMinutes ||
+  (startMinutes - openMinutes) % intervalMinutes !== 0 ||
+  istDate.getUTCSeconds() !== 0 ||
+  istDate.getUTCMilliseconds() !== 0
+) {
+  return res.status(400).json({
+    message:
+      "This appointment time is outside working hours or does not match the service's available time intervals.",
+  });
+}
+
 
     // --------------------------------------------------
     // DON'T ALLOW PAST TIME
@@ -1513,29 +1716,29 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
     // FIND OTHER ACTIVE BOOKINGS
     // --------------------------------------------------
 
-    const existingBookings =
-      await Booking.find({
-        businessId: booking.businessId,
-        _id: {
-          $ne: booking._id,
-        },
-        status: {
-          $in: ["pending", "confirmed"],
-        },
-      }).populate(
-        "serviceId",
-        "duration"
-      );
+const existingBookings = await Booking.find({
+  businessId: booking.businessId,
+  _id: {
+    $ne: booking._id,
+  },
+  status: {
+    $in: ["pending", "confirmed"],
+  },
+}).populate(
+  "serviceId",
+  "duration bufferMinutes"
+);
 
     // --------------------------------------------------
     // CHECK TIME OVERLAP
     // --------------------------------------------------
 
 const hasConflict = hasBookingConflict({
-      bookings: existingBookings,
-      startTime: newStartTime,
-      endTime: newEndTime,
-    });
+  bookings: existingBookings,
+  startTime: newStartTime,
+  endTime: newEndTime,
+  bufferMinutes,
+});
 
     if (hasConflict) {
       return res.status(409).json({
@@ -1792,96 +1995,99 @@ await sendPushForNotification(cancelledNotification);
 });
 
 
-// Complete booking
+
+
+/**
+ * Complete a booking.
+ * Only the owning business can complete an active appointment.
+ */
 router.patch("/:id/complete", authMiddleware, async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
 
     if (!booking) {
       return res.status(404).json({
+        success: false,
         message: "Booking not found",
       });
     }
 
-if (booking.businessId.toString() !== req.user.id.toString()) {
-  return res.status(403).json({
-    message: "You are not allowed to modify this booking",
-  });
-}
-
-    if (booking.businessId.toString() !== req.user.id) {
+    // Verify business ownership once.
+    if (booking.businessId.toString() !== req.user.id.toString()) {
       return res.status(403).json({
+        success: false,
         message: "You are not allowed to modify this booking",
       });
     }
 
+    // Only active bookings can be completed.
+    if (!["pending", "confirmed"].includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Only pending or confirmed bookings can be completed",
+      });
+    }
 
-if (!["pending", "confirmed"].includes(booking.status)) {
-  return res.status(400).json({
-    message: "Only pending or confirmed bookings can be completed",
-  });
-}
+    // Do not complete an appointment before its scheduled start.
+    if (new Date(booking.bookingDate) > new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "A future appointment cannot be completed",
+      });
+    }
 
-if (new Date(booking.bookingDate) > new Date()) {
-  return res.status(400).json({
-    message: "A future appointment cannot be completed",
-  });
-}
+    if (!Array.isArray(booking.statusHistory)) {
+      booking.statusHistory = [];
+    }
 
-if (!Array.isArray(booking.statusHistory)) {
-  booking.statusHistory = [];
-}
+    // Update the status and history once.
+    booking.status = "completed";
 
-booking.status = "completed";
+    booking.statusHistory.push({
+      status: "completed",
+      changedBy: req.user.id,
+      changedByName: req.user.name || "Business owner",
+      changedAt: new Date(),
+    });
 
-booking.statusHistory.push({
-  status: "completed",
-  changedBy: req.user.id,
-  changedByName: req.user.name || "Business owner",
-  changedAt: new Date(),
-});
+    await booking.save();
 
-await booking.save();
+    // Notify the customer after saving the booking.
+    try {
+      const completedNotification = await Notification.create({
+        customerPhone: normalizePhone(booking.customerPhone),
+        type: "booking_completed",
+        title: "Booking completed",
+        message:
+          "Your booking has been completed. Thank you for choosing us!",
+        bookingId: booking._id,
+      });
 
-if (!Array.isArray(booking.statusHistory)) {
-  booking.statusHistory = [];
-}
+      await sendPushForNotification(completedNotification);
+    } catch (notificationError) {
+      // A notification failure must not undo the saved booking.
+      console.error(
+        "Booking completion notification error:",
+        notificationError
+      );
+    }
 
-booking.statusHistory.push({
-  status: "completed",
-  changedBy: req.user.id,
-  changedByName: req.user.name || "Business owner",
-  changedAt: new Date(),
-});
-
-await booking.save();
-
-const completedNotification =
-  await Notification.create({
-   customerPhone: normalizePhone(booking.customerPhone),
-    type: "booking_completed",
-    title: "Booking completed",
-    message:
-      "Your booking has been completed. Thank you for choosing us!",
-    bookingId: booking._id,
-  });
-
-await sendPushForNotification(
-  completedNotification
-);
-
-    res.json({
+    return res.json({
+      success: true,
       message: "Booking completed successfully",
       booking,
     });
   } catch (error) {
-    console.log(error);
+    console.error("Complete booking error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
+      success: false,
       message: "Server error",
     });
   }
 });
+
+
 
 
 
@@ -1915,13 +2121,22 @@ router.patch(
         });
       }
 
-      if (new Date(booking.bookingDate) > new Date()) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "An appointment cannot be marked as no-show before its scheduled time.",
-        });
-      }
+const now = new Date();
+const appointmentTime = new Date(booking.bookingDate);
+
+console.log("COMPLETE BOOKING TIME CHECK:", {
+  bookingId: booking._id.toString(),
+  bookingDateRaw: booking.bookingDate,
+  appointmentTimeISO: appointmentTime.toISOString(),
+  currentTimeISO: now.toISOString(),
+  isFuture: appointmentTime > now,
+});
+
+if (appointmentTime > now) {
+  return res.status(400).json({
+    message: "A future appointment cannot be completed",
+  });
+}
 
       booking.status = "no_show";
       await booking.save();

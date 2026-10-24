@@ -1438,12 +1438,20 @@ const [rescheduleLoading, setRescheduleLoading] =
   const [editDuration, setEditDuration] =
     useState("");
 
-  const [form, setForm] = useState({
-    name: "",
-    price: "",
-    duration: "30",
-    description: "",
-  });
+const [editSlotInterval, setEditSlotInterval] =
+  useState("30");
+
+const [editBuffer, setEditBuffer] =
+  useState("0");
+
+const [form, setForm] = useState({
+  name: "",
+  price: "",
+  duration: "30",
+  slotIntervalMinutes: "30",
+  bufferMinutes: "0",
+  description: "",
+});
 
   const [error, setError] =
     useState("");
@@ -1496,34 +1504,38 @@ localStorage.setItem(
 }, []);
 
 
-  const startEditService = (service) => {
-    setEditingService(service._id);
 
-    setEditName(service.name);
+const startEditService = (service) => {
+  setEditingService(service._id);
+  setEditName(service.name);
+  setEditDescription(service.description || "");
+  setEditPrice(String(service.price));
+  setEditDuration(String(service.duration ?? 30));
+  setEditSlotInterval(
+    String(service.slotIntervalMinutes ?? 30)
+  );
+  setEditBuffer(
+    String(service.bufferMinutes ?? 0)
+  );
+  setError("");
+};
 
-    setEditDescription(
-      service.description || ""
-    );
-
-    setEditPrice(service.price);
-
-    setEditDuration(service.duration);
-
-    setError("");
-  };
 
   // ===============================
   // CANCEL EDIT
   // ===============================
 
-  const cancelEditService = () => {
-    setEditingService(null);
 
-    setEditName("");
-    setEditDescription("");
-    setEditPrice("");
-    setEditDuration("");
-  };
+const cancelEditService = () => {
+  setEditingService(null);
+  setEditName("");
+  setEditDescription("");
+  setEditPrice("");
+  setEditDuration("30");
+  setEditSlotInterval("30");
+  setEditBuffer("0");
+};
+
 
   //notification loader
 
@@ -1586,18 +1598,16 @@ localStorage.setItem(
         {
           method: "PATCH",
 
-          body: JSON.stringify({
-            name: editName.trim(),
 
-            description:
-              editDescription.trim(),
+body: JSON.stringify({
+  name: editName.trim(),
+  description: editDescription.trim(),
+  price: Number(editPrice),
+  duration: Number(editDuration),
+  slotIntervalMinutes: Number(editSlotInterval),
+  bufferMinutes: Number(editBuffer),
+}),
 
-            price: Number(editPrice),
-
-            duration: Number(
-              editDuration
-            ),
-          }),
         }
       );
 
@@ -1823,12 +1833,16 @@ const markAllNotificationsRead = async () => {
         }),
       });
 
-      setForm({
-        name: "",
-        price: "",
-        duration: "30",
-        description: "",
-      });
+
+setForm({
+  name: "",
+  price: "",
+  duration: "30",
+  slotIntervalMinutes: "30",
+  bufferMinutes: "0",
+  description: "",
+});
+
 
       await load();
     } catch (e) {
@@ -2394,20 +2408,51 @@ const rescheduleBooking = async () => {
                 required
               />
 
-              <input
-                type="number"
-                min="5"
-                placeholder="Duration (minutes)"
-                value={form.duration}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    duration:
-                      e.target.value,
-                  })
-                }
-                required
-              />
+
+<select
+  value={form.duration}
+  onChange={(e) =>
+    setForm({ ...form, duration: e.target.value })
+  }
+  required
+>
+  <option value="15">Duration: 15 minutes</option>
+  <option value="20">Duration: 20 minutes</option>
+  <option value="30">Duration: 30 minutes</option>
+  <option value="45">Duration: 45 minutes</option>
+  <option value="60">Duration: 60 minutes</option>
+</select>
+
+<select
+  value={form.slotIntervalMinutes}
+  onChange={(e) =>
+    setForm({
+      ...form,
+      slotIntervalMinutes: e.target.value,
+    })
+  }
+  required
+>
+  <option value="5">Slot interval: 5 minutes</option>
+  <option value="10">Slot interval: 10 minutes</option>
+  <option value="15">Slot interval: 15 minutes</option>
+  <option value="20">Slot interval: 20 minutes</option>
+  <option value="30">Slot interval: 30 minutes</option>
+</select>
+
+<select
+  value={form.bufferMinutes}
+  onChange={(e) =>
+    setForm({ ...form, bufferMinutes: e.target.value })
+  }
+  required
+>
+  <option value="0">Buffer after appointment: 0 minutes</option>
+  <option value="5">Buffer after appointment: 5 minutes</option>
+  <option value="10">Buffer after appointment: 10 minutes</option>
+  <option value="15">Buffer after appointment: 15 minutes</option>
+</select>
+
 
               <input
                 placeholder="Description (optional)"
@@ -2458,21 +2503,42 @@ const rescheduleBooking = async () => {
                         // ===============================
 
                         <div className="service-edit-form">
-                          <input
-                            type="text"
-                            value={
-                              editName
-                            }
-                            onChange={(
-                              e
-                            ) =>
-                              setEditName(
-                                e.target
-                                  .value
-                              )
-                            }
-                            placeholder="Service name"
-                          />
+
+<select
+  value={editDuration}
+  onChange={(e) => setEditDuration(e.target.value)}
+  required
+>
+  <option value="15">Duration: 15 minutes</option>
+  <option value="20">Duration: 20 minutes</option>
+  <option value="30">Duration: 30 minutes</option>
+  <option value="45">Duration: 45 minutes</option>
+  <option value="60">Duration: 60 minutes</option>
+</select>
+
+<select
+  value={editSlotInterval}
+  onChange={(e) => setEditSlotInterval(e.target.value)}
+  required
+>
+  <option value="5">Slot interval: 5 minutes</option>
+  <option value="10">Slot interval: 10 minutes</option>
+  <option value="15">Slot interval: 15 minutes</option>
+  <option value="20">Slot interval: 20 minutes</option>
+  <option value="30">Slot interval: 30 minutes</option>
+</select>
+
+<select
+  value={editBuffer}
+  onChange={(e) => setEditBuffer(e.target.value)}
+  required
+>
+  <option value="0">Buffer after appointment: 0 minutes</option>
+  <option value="5">Buffer after appointment: 5 minutes</option>
+  <option value="10">Buffer after appointment: 10 minutes</option>
+  <option value="15">Buffer after appointment: 15 minutes</option>
+</select>
+
 
                           <input
                             type="text"

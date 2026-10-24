@@ -21,6 +21,8 @@ type Service = {
   name: string;
   price: number;
   duration: number;
+  slotIntervalMinutes?: number;
+  bufferMinutes?: number;
   active?: boolean;
 };
 
@@ -35,9 +37,12 @@ export default function BusinessServices() {
   const [editingService, setEditingService] =
     useState<Service | null>(null);
 
-  const [serviceName, setServiceName] = useState("");
-  const [price, setPrice] = useState("");
-  const [duration, setDuration] = useState("");
+const [serviceName, setServiceName] = useState("");
+const [price, setPrice] = useState("");
+const [duration, setDuration] = useState("30");
+
+const [slotInterval, setSlotInterval] = useState("30");
+const [bufferMinutes, setBufferMinutes] = useState("0");
 
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -91,30 +96,74 @@ export default function BusinessServices() {
     loadServices();
   };
 
-  const openAddModal = () => {
-    setEditingService(null);
-    setServiceName("");
-    setPrice("");
-    setDuration("");
-    setModalVisible(true);
-  };
+  const renderOptions = (
+  value: string,
+  options: number[],
+  onSelect: (value: string) => void
+) => (
+  <View style={styles.optionRow}>
+    {options.map((option) => {
+      const selected = value === String(option);
 
-  const openEditModal = (service: Service) => {
-    setEditingService(service);
-    setServiceName(service.name);
-    setPrice(String(service.price));
-    setDuration(String(service.duration));
-    setModalVisible(true);
-  };
+      return (
+        <TouchableOpacity
+          key={option}
+          style={[
+            styles.optionButton,
+            selected && styles.optionButtonSelected,
+          ]}
+          onPress={() => onSelect(String(option))}
+        >
+          <Text
+            style={[
+              styles.optionText,
+              selected && styles.optionTextSelected,
+            ]}
+          >
+            {option}
+          </Text>
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+);
+
+const openAddModal = () => {
+  setEditingService(null);
+  setServiceName("");
+  setPrice("");
+  setDuration("30");
+  setSlotInterval("30");
+  setBufferMinutes("0");
+  setModalVisible(true);
+};
+
+const openEditModal = (service: Service) => {
+  setEditingService(service);
+  setServiceName(service.name);
+  setPrice(String(service.price));
+  setDuration(String(service.duration));
+  setSlotInterval(
+    String(service.slotIntervalMinutes ?? 30)
+  );
+  setBufferMinutes(
+    String(service.bufferMinutes ?? 0)
+  );
+  setModalVisible(true);
+};
 
   const closeModal = () => {
     if (saving) return;
 
-    setModalVisible(false);
-    setEditingService(null);
-    setServiceName("");
-    setPrice("");
-    setDuration("");
+setModalVisible(false);
+setEditingService(null);
+setServiceName("");
+setPrice("");
+setDuration("30");
+setSlotInterval("30");
+setBufferMinutes("0");
+setSlotInterval("30");
+setBufferMinutes("0");
   };
 const saveService = async () => {
   if (!serviceName.trim()) {
@@ -147,6 +196,14 @@ const saveService = async () => {
     );
     return;
   }
+
+  if (![15, 20, 30, 45, 60].includes(durationNumber)) {
+  Alert.alert(
+    "Invalid duration",
+    "Please select a supported duration."
+  );
+  return;
+}
 
   try {
     const token = await AsyncStorage.getItem("bookeasy_token");
@@ -186,18 +243,14 @@ const saveService = async () => {
 
     const method = editingService ? "PATCH" : "POST";
 
-    const body = editingService
-      ? {
-          name: serviceName.trim(),
-          price: priceNumber,
-          duration: durationNumber,
-        }
-      : {
-          businessId: user.id,
-          name: serviceName.trim(),
-          price: priceNumber,
-          duration: durationNumber,
-        };
+const body = {
+  ...(editingService ? {} : { businessId: user.id }),
+  name: serviceName.trim(),
+  price: priceNumber,
+  duration: Number(duration),
+  slotIntervalMinutes: Number(slotInterval),
+  bufferMinutes: Number(bufferMinutes),
+};
 
     console.log("SERVICE REQUEST:", {
       url,
@@ -437,9 +490,17 @@ const saveService = async () => {
                     {service.name}
                   </Text>
 
-                  <Text style={styles.serviceDuration}>
-                    ⏱️ {service.duration} minutes
-                  </Text>
+<Text style={styles.serviceDuration}>
+  ⏱️ {service.duration} min appointment
+</Text>
+
+<Text style={styles.serviceDuration}>
+  🗓️ Every {service.slotIntervalMinutes ?? 30} min
+</Text>
+
+<Text style={styles.serviceDuration}>
+  ⏳ {service.bufferMinutes ?? 0} min buffer
+</Text>
                 </View>
 
                 <View style={styles.priceBox}>
@@ -542,18 +603,43 @@ const saveService = async () => {
               keyboardType="numeric"
             />
 
-            <Text style={styles.label}>
-              Duration
-            </Text>
+<Text style={styles.label}>
+  Appointment Duration (minutes)
+</Text>
 
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. 30 minutes"
-              placeholderTextColor="#9ca3af"
-              value={duration}
-              onChangeText={setDuration}
-              keyboardType="numeric"
-            />
+{renderOptions(
+  duration,
+  [15, 20, 30, 45, 60],
+  setDuration
+)}
+
+<Text style={styles.label}>
+  Slot Interval (minutes)
+</Text>
+
+<Text style={styles.helperText}>
+  How often a new appointment can start.
+</Text>
+
+{renderOptions(
+  slotInterval,
+  [5, 10, 15, 20, 30],
+  setSlotInterval
+)}
+
+<Text style={styles.label}>
+  Buffer After Appointment (minutes)
+</Text>
+
+<Text style={styles.helperText}>
+  Extra time blocked after each appointment.
+</Text>
+
+{renderOptions(
+  bufferMinutes,
+  [0, 5, 10, 15],
+  setBufferMinutes
+)}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -926,4 +1012,46 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "800",
   },
+
+  helperText: {
+  fontSize: 12,
+  color: "#6b7280",
+  marginTop: -2,
+  marginBottom: 10,
+},
+
+optionRow: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: 8,
+  marginBottom: 18,
+},
+
+optionButton: {
+  minWidth: 48,
+  paddingHorizontal: 13,
+  paddingVertical: 11,
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: "#d1d5db",
+  backgroundColor: "#ffffff",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+optionButtonSelected: {
+  backgroundColor: "#2563eb",
+  borderColor: "#2563eb",
+},
+
+optionText: {
+  color: "#374151",
+  fontSize: 13,
+  fontWeight: "700",
+},
+
+optionTextSelected: {
+  color: "#ffffff",
+},
+
 });

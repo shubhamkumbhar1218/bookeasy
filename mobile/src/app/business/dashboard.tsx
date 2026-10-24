@@ -267,11 +267,16 @@ useFocusEffect(
           
 {/* Book as Customer */}
 <TouchableOpacity
-  style={styles.actionCard}
-  onPress={() => {
-    void AsyncStorage.setItem("bookeasy_role", "customer");
-    router.push("/customer" as any);
-  }}
+onPress={() => {
+  AsyncStorage.setItem("bookeasy_role", "customer")
+    .then(() => {
+      router.push("/customer/dashboard" as any);
+    })
+    .catch((error) => {
+      console.log("Customer navigation error:", error);
+      Alert.alert("Error", "Unable to open customer mode.");
+    });
+}}
   activeOpacity={0.8}
 >
   <View style={styles.actionIconBox}>
@@ -367,26 +372,6 @@ useFocusEffect(
 
   <Text style={styles.actionDescription}>
     View trends, customer retention and service performance
-  </Text>
-</TouchableOpacity>
-
-
-{/* Customer Retention */}
-<TouchableOpacity
-  style={styles.actionCard}
-  onPress={() => router.push("/business/customer-retention" as any)}
-  activeOpacity={0.8}
->
-  <View style={styles.actionIconBox}>
-    <Text style={styles.actionIcon}>🔄</Text>
-  </View>
-
-  <Text style={styles.actionTitle}>
-    Customer Retention
-  </Text>
-
-  <Text style={styles.actionDescription}>
-    Track repeat customers and inactive visits
   </Text>
 </TouchableOpacity>
 

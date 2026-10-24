@@ -12,28 +12,51 @@ const router = express.Router();
 // ======================================================
 router.post("/", authMiddleware, async (req, res) => {
   try {
-    const {
-      businessId,
-      name,
-      description,
-      price,
-      duration,
-    } = req.body;
 
-    if (!businessId || !name || !price || !duration) {
-      return res.status(400).json({
-        message:
-          "businessId, name, price and duration are required",
-      });
-    }
+const {
+  businessId,
+  name,
+  description,
+  price,
+  duration,
+  slotIntervalMinutes = 30,
+  bufferMinutes = 0,
+} = req.body;
 
-    const service = await Service.create({
-      businessId,
-      name,
-      description,
-      price,
-      duration,
-    });
+
+
+if (
+  !businessId ||
+  !name?.trim() ||
+  price === undefined ||
+  price === null ||
+  !Number.isFinite(Number(price)) ||
+  Number(price) < 0 ||
+  duration === undefined ||
+  duration === null ||
+  !Number.isFinite(Number(duration)) ||
+  ![15, 20, 30, 45, 60].includes(Number(duration)) ||
+  ![5, 10, 15, 20, 30].includes(Number(slotIntervalMinutes)) ||
+  ![0, 5, 10, 15].includes(Number(bufferMinutes))
+) {
+  return res.status(400).json({
+    message:
+      "Provide a valid businessId, name, price, duration, slot interval and buffer",
+  });
+}
+
+
+
+const service = await Service.create({
+  businessId,
+  name,
+  description,
+  price: Number(price),
+  duration: Number(duration),
+  slotIntervalMinutes: Number(slotIntervalMinutes),
+  bufferMinutes: Number(bufferMinutes),
+});
+
 
     res.status(201).json({
       message: "Service created successfully",
@@ -147,33 +170,55 @@ router.get("/:businessId", async (req, res) => {
 // ======================================================
 router.patch("/:id", authMiddleware, async (req, res) => {
   try {
-    const {
-      name,
-      description,
-      price,
-      duration,
-    } = req.body;
 
-    if (!name || !price || !duration) {
-      return res.status(400).json({
-        message:
-          "Name, price and duration are required",
-      });
-    }
+const {
+  name,
+  description,
+  price,
+  duration,
+  slotIntervalMinutes = 30,
+  bufferMinutes = 0,
+} = req.body;
 
-    const service = await Service.findByIdAndUpdate(
-      req.params.id,
-      {
-        name,
-        description,
-        price,
-        duration,
-      },
-      {
-        new: true,
-        runValidators: true,
-      }
-    );
+
+
+if (
+  !name?.trim() ||
+  price === undefined ||
+  price === null ||
+  !Number.isFinite(Number(price)) ||
+  Number(price) < 0 ||
+  duration === undefined ||
+  duration === null ||
+  !Number.isFinite(Number(duration)) ||
+  ![15, 20, 30, 45, 60].includes(Number(duration)) ||
+  ![5, 10, 15, 20, 30].includes(Number(slotIntervalMinutes)) ||
+  ![0, 5, 10, 15].includes(Number(bufferMinutes))
+) {
+  return res.status(400).json({
+    message:
+      "Provide a valid name, price, duration, slot interval and buffer",
+  });
+}
+
+
+
+const service = await Service.findByIdAndUpdate(
+  req.params.id,
+  {
+    name: name.trim(),
+    description,
+    price: Number(price),
+    duration: Number(duration),
+    slotIntervalMinutes: Number(slotIntervalMinutes),
+    bufferMinutes: Number(bufferMinutes),
+  },
+  {
+    new: true,
+    runValidators: true,
+  }
+);
+
 
     if (!service) {
       return res.status(404).json({
