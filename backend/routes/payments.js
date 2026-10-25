@@ -341,10 +341,7 @@ router.post("/verify", authMiddleware, async (req, res) => {
       });
     }
 
-    const response = await cashfree.PGFetchOrder(
-      API_VERSION,
-      payment.orderId
-    );
+    const response = await cashfree.PGFetchOrder(payment.orderId);
 
     const order = response.data;
 
@@ -531,13 +528,18 @@ if (error.message === "PAYMENT_ALREADY_PROCESSED") {
     }
 
   } catch (error) {
-    console.error("Cashfree payment verification error:", error.message);
+  console.error("[PAYMENT VERIFY ERROR]", {
+    message: error?.message,
+    code: error?.code,
+    status: error?.response?.status,
+    data: error?.response?.data,
+  });
 
-    return res.status(500).json({
-      success: false,
-      message: "Could not verify payment. Please try again.",
-    });
-  }
+  return res.status(500).json({
+    success: false,
+    message: "Could not verify payment. Please try again.",
+  });
+}
 });
 
 // ============================================================
