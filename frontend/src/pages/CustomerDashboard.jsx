@@ -289,16 +289,44 @@ const categories = [
     </div>
   </div>
 
-  <button
-    type="button"
-    className="outline"
-    onClick={() => {
-      navigate("/business/dashboard");
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      flexWrap: "wrap",
     }}
   >
-    <CalendarDays size={17} />
-    Back to Business Dashboard
-  </button>
+    <button
+      type="button"
+      className="outline"
+      onClick={() => {
+        const savedUser = JSON.parse(
+          localStorage.getItem("bookeasy_user") || "{}"
+        );
+
+        if (savedUser.businessSlug) {
+          navigate(`/book/${savedUser.businessSlug}/status`);
+        } else {
+          navigate("/customer/bookings");
+        }
+      }}
+    >
+      <CalendarDays size={17} />
+      My Bookings
+    </button>
+
+    <button
+      type="button"
+      className="outline"
+      onClick={() => {
+        navigate("/business/dashboard");
+      }}
+    >
+      <CalendarDays size={17} />
+      Back to Business Dashboard
+    </button>
+  </div>
 </header>
 
 

@@ -119,6 +119,7 @@ export default function CustomerBookingsScreen() {
           );
 
           const data = await response.json();
+          console.log("Review status for booking:", booking._id, data);
 
           if (!response.ok) {
             console.log(
@@ -794,9 +795,11 @@ export default function CustomerBookingsScreen() {
                         REVIEW SECTION
                     ====================================== */}
 
-                    {booking.status ===
-                      "completed" && (
-                      <View style={styles.reviewSection}>
+{booking.status === "completed" &&
+  reviewStatus !== undefined &&
+  (reviewStatus.canReview ||
+    reviewStatus.alreadyReviewed) && (
+  <View style={styles.reviewSection}>
 
                         <View
                           style={styles.reviewDivider}

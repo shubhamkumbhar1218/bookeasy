@@ -62,6 +62,7 @@ function Subscription({ user }) {
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutLoadingPlan, setCheckoutLoadingPlan] = useState("");
 
+  const [billingPeriod, setBillingPeriod] = useState("yearly");
   const loadSubscription = async () => {
     try {
       setLoading(true);
@@ -338,6 +339,79 @@ if (checkoutResult?.redirect) {
       setCheckoutLoadingPlan("");
     }
   };
+
+  const startOneTimePlanCheckout = async (plan) => {
+  if (checkoutLoadingPlan) return;
+
+  setCheckoutError("");
+  setCheckoutLoadingPlan(plan.id);
+
+  try {
+    const token = localStorage.getItem("bookeasy_token");
+
+    if (!token) {
+      throw new Error("Please log in again.");
+    }
+
+    const Cashfree = await loadCashfreeSDK();
+
+    const response = await fetch(`${API}/payments/create-order`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        plan: plan.id,
+        billingPeriod: "yearly",
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data.success === false) {
+      throw new Error(
+        data.message ||
+          `Unable to create payment order (HTTP ${response.status}).`
+      );
+    }
+
+    if (
+      !data.paymentSessionId ||
+      data.billingPeriod !== "yearly" ||
+      Number(data.amount) !== 2990
+    ) {
+      console.error("Unexpected one-time payment response:", data);
+      throw new Error(
+        "The server returned unexpected annual payment details. Please try again."
+      );
+    }
+
+    const cashfree = Cashfree({
+      mode:
+        import.meta.env.VITE_CASHFREE_MODE === "production"
+          ? "production"
+          : "sandbox",
+    });
+
+    const checkoutResult = await cashfree.checkout({
+      paymentSessionId: data.paymentSessionId,
+      redirectTarget: "_self",
+    });
+
+    if (checkoutResult?.error) {
+      throw new Error(
+        checkoutResult.error.message ||
+          "Unable to open Cashfree payment checkout."
+      );
+    }
+  } catch (err) {
+    console.error("Annual checkout failed:", err);
+    setCheckoutError(err.message || "Unable to start annual checkout.");
+  } finally {
+    setCheckoutLoadingPlan("");
+  }
+};
 
   useEffect(() => {
     loadSubscription();
@@ -761,6 +835,72 @@ if (checkoutResult?.redirect) {
             Customers can book appointments for free. Business plans
             are for business owners.
           </p>
+
+          <div
+  role="group"
+  aria-label="Premium billing period"
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    marginTop: 16,
+    marginBottom: 20,
+  }}
+>
+  <button
+    type="button"
+    aria-pressed={billingPeriod === "monthly"}
+    onClick={() => setBillingPeriod("monthly")}
+    style={{
+      ...styles.button,
+      background:
+        billingPeriod === "monthly" ? "#dbeafe" : "#ffffff",
+      borderColor:
+        billingPeriod === "monthly" ? "#2563eb" : "#cbd5e1",
+    }}
+  >
+    Monthly · ₹299
+  </button>
+
+  <button
+    type="button"
+    aria-pressed={billingPeriod === "yearly"}
+    onClick={() => setBillingPeriod("yearly")}
+    style={{
+      ...styles.button,
+      background:
+        billingPeriod === "yearly" ? "#dbeafe" : "#ffffff",
+      borderColor:
+        billingPeriod === "yearly" ? "#2563eb" : "#cbd5e1",
+    }}
+  >
+    Yearly · ₹2,990
+  </button>
+
+
+  {billingPeriod === "yearly" && (
+    <span
+      style={{
+        display: "inline-flex",
+        padding: "6px 10px",
+        borderRadius: 20,
+        background: "#dcfce7",
+        color: "#166534",
+        fontWeight: 700,
+        fontSize: 13,
+      }}
+    >
+      Save ₹598 · 16.7% off
+    </span>
+  )}
+
+</div>
+
+<p style={{ ...styles.muted, marginTop: -8, marginBottom: 20 }}>
+  Yearly billing is one payment of ₹2,990 for 12 months.
+  The monthly option is ₹299 per month.
+</p>
         </div>
 
         <div
@@ -816,12 +956,61 @@ if (checkoutResult?.redirect) {
                     {plan.name}
                   </h2>
 
-                  <div style={{ margin: "10px 0 18px" }}>
-                    <strong style={{ fontSize: 30 }}>
-                      ₹{plan.price}
-                    </strong>
-                    <span style={styles.muted}> / month</span>
-                  </div>
+<div style={{ margin: "10px 0 18px" }}>
+  {String(plan.id).toUpperCase() === "STARTER" &&
+  billingPeriod === "yearly" ? (
+    <>
+      <div>
+        <strong style={{ fontSize: 30 }}>₹2,990</strong>
+        <span style={styles.muted}> / year</span>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 8,
+          marginTop: 6,
+        }}
+      >
+        <span
+          style={{
+            color: "#64748b",
+            textDecoration: "line-through",
+            fontSize: 14,
+          }}
+        >
+          ₹3,588
+        </span>
+
+        <span
+          style={{
+            color: "#15803d",
+            background: "#dcfce7",
+            padding: "4px 8px",
+            borderRadius: 6,
+            fontWeight: 700,
+            fontSize: 12,
+          }}
+        >
+          SAVE ₹598 · 16.7% OFF
+        </span>
+      </div>
+
+      <p style={{ ...styles.muted, marginTop: 8 }}>
+        Just ₹249.17/month, billed once annually
+      </p>
+    </>
+  ) : (
+    <div>
+      <strong style={{ fontSize: 30 }}>₹{plan.price}</strong>
+<span style={styles.muted}>
+  {Number(plan.price) === 0 ? " / month" : " / month"}
+</span>
+    </div>
+  )}
+</div>
 
                   <p style={styles.muted}>
                     {plan.bookingLimit == null
@@ -866,7 +1055,16 @@ if (checkoutResult?.redirect) {
                   <button
                     type="button"
                     disabled={isCurrent || anyCheckoutRunning}
-                    onClick={() => startPlanCheckout(plan)}
+                    onClick={() => {
+  if (
+    String(plan.id).toUpperCase() === "STARTER" &&
+    billingPeriod === "yearly"
+  ) {
+    startOneTimePlanCheckout(plan);
+  } else {
+    startPlanCheckout(plan);
+  }
+}}
                     style={{
                       ...styles.primary,
                       marginTop: 16,
@@ -883,10 +1081,13 @@ if (checkoutResult?.redirect) {
                     {isCurrent
                       ? "Current Plan"
                       : isProcessing
-                        ? "Opening checkout..."
-                        : Number(plan.price) === 0
-                          ? "Switch to Free"
-                          : `Upgrade to ${plan.name}`}
+  ? "Opening checkout..."
+  : Number(plan.price) === 0
+    ? "Switch to Free"
+    : String(plan.id).toUpperCase() === "STARTER" &&
+      billingPeriod === "yearly"
+      ? "Get Premium — ₹2,990/year"
+      : `Upgrade to ${plan.name}`}
                   </button>
                 </section>
               );

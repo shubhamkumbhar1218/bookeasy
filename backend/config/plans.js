@@ -1,3 +1,4 @@
+
 const PLANS = {
   FREE: {
     name: "Free",
@@ -48,13 +49,9 @@ const PLANS = {
       "staff_management",
       "automated_reminders",
       "advanced_analytics",
-      // "payment_features",
-      // "customer_retention",
     ],
   },
 
-  // Keep PRO here for existing accounts if needed,
-  // but hide it from the customer-facing plan list.
   PRO: {
     name: "Pro",
     price: 999,
@@ -73,7 +70,6 @@ const PLANS = {
       "automated_reminders",
       "advanced_analytics",
       "payment_features",
-      // "customer_retention",
       "multiple_branches",
       "advanced_marketing",
       "loyalty_program",

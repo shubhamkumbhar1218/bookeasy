@@ -434,20 +434,26 @@ if (
       // 3. No review exists
       // --------------------------------------------------
 
-      const canReview =
-        booking.status === "completed" &&
-        phoneMatches &&
-        !existingReview;
 
-      return res.json({
-        canReview,
-        alreadyReviewed: Boolean(
-          existingReview
-        ),
-        bookingStatus: booking.status,
-        serviceId: booking.serviceId || null,
-        review: existingReview || null,
-      });
+const reviewAccess = await hasReviewAccess(
+  booking.businessId
+);
+
+const canReview =
+  reviewAccess &&
+  booking.status === "completed" &&
+  phoneMatches &&
+  !existingReview;
+
+return res.json({
+  canReview,
+  reviewAccess,
+  alreadyReviewed: Boolean(existingReview),
+  bookingStatus: booking.status,
+  serviceId: booking.serviceId || null,
+  review: existingReview || null,
+});
+
 
     } catch (error) {
       console.log(

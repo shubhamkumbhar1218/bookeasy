@@ -49,32 +49,66 @@ function CustomerBookings() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState("");
 
-  const [reviewedBookings, setReviewedBookings] = useState({});
+  const [reviewStatuses, setReviewStatuses] = useState({});
 
   // ================================
   // CHECK REVIEW STATUS
   // ================================
 
-  const checkReviewStatus = async (booking) => {
+
+  // ================================
+  // CHECK REVIEW STATUS
+  // ================================
+
+  const checkReviewStatus = async (booking, customerPhone) => {
     try {
       const response = await fetch(
         `${API}/reviews/booking/${booking._id}?phone=${encodeURIComponent(
-          phone.trim()
+          customerPhone.trim()
         )}`
       );
 
       const data = await response.json();
 
-      if (response.ok) {
-        setReviewedBookings((current) => ({
+      if (!response.ok) {
+        setReviewStatuses((current) => ({
           ...current,
-          [booking._id]: Boolean(data.alreadyReviewed),
+          [booking._id]: {
+            canReview: false,
+            alreadyReviewed: false,
+            review: null,
+          },
         }));
+        return;
       }
+
+      setReviewStatuses((current) => ({
+        ...current,
+        [booking._id]: {
+          canReview:
+            data.canReview === true &&
+            data.reviewAccess === true &&
+            data.alreadyReviewed !== true,
+          alreadyReviewed: data.alreadyReviewed === true,
+          review: data.review || null,
+        },
+      }));
     } catch (error) {
       console.log("Review status error:", error);
+
+      // Fail closed: never show the review button
+      // if eligibility could not be verified.
+      setReviewStatuses((current) => ({
+        ...current,
+        [booking._id]: {
+          canReview: false,
+          alreadyReviewed: false,
+          review: null,
+        },
+      }));
     }
   };
+
 
   // ================================
   // OPEN REVIEW MODAL
@@ -224,10 +258,14 @@ function CustomerBookings() {
         );
       }
 
-      setReviewedBookings((current) => ({
-        ...current,
-        [reviewBooking._id]: true,
-      }));
+setReviewStatuses((current) => ({
+  ...current,
+  [reviewBooking._id]: {
+    canReview: false,
+    alreadyReviewed: true,
+    review: data.review || null,
+  },
+}));
 
       closeReviewModal();
 
@@ -258,7 +296,7 @@ function CustomerBookings() {
     setError("");
     setBookings([]);
     setNotifications([]);
-    setReviewedBookings({});
+    setReviewStatuses({});
     setSearched(false);
 
     if (!phone.trim()) {
@@ -317,11 +355,13 @@ function CustomerBookings() {
       // CHECK REVIEW STATUS
       // --------------------------------
 
-      for (const booking of data) {
-        if (booking.status === "completed") {
-          await checkReviewStatus(booking);
-        }
-      }
+await Promise.all(
+  data
+    .filter((booking) => booking.status === "completed")
+    .map((booking) =>
+      checkReviewStatus(booking, phone.trim())
+    )
+);
 
       // --------------------------------
       // LOAD NOTIFICATIONS
@@ -667,39 +707,35 @@ function CustomerBookings() {
                     REVIEW BUTTON
                 ========================= */}
 
-                {booking.status === "completed" &&
-                  !reviewedBookings[
-                    booking._id
-                  ] && (
-                    <button
-                      type="button"
-                      className="review-service-button"
-                      onClick={() =>
-                        openReviewModal(booking)
-                      }
-                    >
-                      <Star size={17} />
 
-                      Rate & Review
-                    </button>
-                  )}
+  {/* =========================
+      REVIEW BUTTON
+  ========================= */}
 
-                {/* =========================
-                    REVIEW SUBMITTED
-                ========================= */}
+  {booking.status === "completed" &&
+    reviewStatuses[booking._id]?.canReview === true && (
+      <button
+        type="button"
+        className="review-service-button"
+        onClick={() => openReviewModal(booking)}
+      >
+        <Star size={17} />
+        Rate & Review
+      </button>
+    )}
 
-                {booking.status === "completed" &&
-                  reviewedBookings[
-                    booking._id
-                  ] && (
-                    <div className="review-submitted">
-                      <CheckCircle2 size={16} />
+  {/* =========================
+      REVIEW SUBMITTED
+  ========================= */}
 
-                      <span>
-                        Review submitted
-                      </span>
-                    </div>
-                  )}
+  {booking.status === "completed" &&
+    reviewStatuses[booking._id]?.alreadyReviewed === true && (
+      <div className="review-submitted">
+        <CheckCircle2 size={16} />
+        <span>Review submitted</span>
+      </div>
+    )}
+
               </article>
             ))}
           </section>

@@ -8,48 +8,63 @@ const API = (
 
 export default function PaymentReturn() {
   const [searchParams] = useSearchParams();
-  const subscriptionId =
-    searchParams.get("subscription_id") ||
-    searchParams.get("subscriptionId");
+const subscriptionId =
+  searchParams.get("subscription_id") ||
+  searchParams.get("subscriptionId");
+
+const orderId =
+  searchParams.get("order_id") ||
+  searchParams.get("orderId");
 
   const [status, setStatus] = useState("VERIFYING");
   const [message, setMessage] = useState(
-    "Checking your subscription status with Cashfree..."
+    "Checking your payment status with Cashfree..."
   );
 
   const [checking, setChecking] = useState(false);
 
 
   
+
 async function verifySubscription() {
   const token = localStorage.getItem("bookeasy_token");
 
   if (!token) {
     setStatus("LOGIN_REQUIRED");
-    setMessage("Please log in to check your subscription status.");
+    setMessage("Please log in to check your payment status.");
     return;
   }
 
-  if (!subscriptionId) {
+  if (!subscriptionId && !orderId) {
     setStatus("NO_REFERENCE");
     setMessage(
-      "Cashfree did not return a subscription reference. Open your subscription page to check the status."
+      "Cashfree did not return a payment or subscription reference. Open your subscription page to check your plan."
     );
     return;
   }
 
   setChecking(true);
   setStatus("VERIFYING");
-  setMessage("Checking your subscription status with Cashfree...");
+  setMessage("Verifying your payment with Cashfree...");
 
   try {
-    const response = await fetch(`${API}/payments/verify-subscription`, {
+    const isAnnualPayment = Boolean(orderId);
+
+    const endpoint = isAnnualPayment
+      ? `${API}/payments/verify`
+      : `${API}/payments/verify-subscription`;
+
+    const body = isAnnualPayment
+      ? { orderId }
+      : { subscriptionId };
+
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ subscriptionId }),
+      body: JSON.stringify(body),
     });
 
     const data = await response.json().catch(() => ({}));
@@ -62,10 +77,30 @@ async function verifySubscription() {
 
     if (!response.ok || !data.success) {
       throw new Error(
-        data.message || "Unable to verify your subscription right now."
+        data.message || "Unable to verify your payment right now."
       );
     }
 
+    // Annual one-time payment verification
+    if (isAnnualPayment) {
+      if (data.paid === true) {
+        setStatus("AUTHORIZED");
+        setMessage(
+          `Payment verified successfully. Your ${data.plan || "paid"} plan has been activated. Open your subscription page to confirm your updated plan.`
+        );
+      } else {
+        setStatus("PENDING");
+        setMessage(
+          `Cashfree has not yet confirmed the payment as paid. Status: ${
+            data.paymentStatus || "Pending"
+          }. Please check again shortly.`
+        );
+      }
+
+      return;
+    }
+
+    // Existing monthly recurring subscription verification
     if (
       data.authorizationStatus === "ACTIVE" &&
       data.subscriptionStatus === "ACTIVE" &&
@@ -73,7 +108,7 @@ async function verifySubscription() {
     ) {
       setStatus("AUTHORIZED");
       setMessage(
-        "Your BookEasy paid plan is active. Open your dashboard to confirm your updated plan."
+        "Your BookEasy paid plan is active. Open your subscription page to confirm your updated plan."
       );
     } else if (
       data.authorizationStatus === "FAILURE" ||
@@ -92,12 +127,13 @@ async function verifySubscription() {
   } catch (error) {
     setStatus("ERROR");
     setMessage(
-      error.message || "Could not verify the subscription. Please try again."
+      error.message || "Could not verify the payment. Please try again."
     );
   } finally {
     setChecking(false);
   }
 }
+
 
 
   useEffect(() => {

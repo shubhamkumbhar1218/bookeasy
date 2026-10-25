@@ -20,6 +20,7 @@ import {
 
 import {
   CFEnvironment,
+  CFSession,
   CFSubscriptionSession,
 } from "cashfree-pg-api-contract";
 
@@ -100,7 +101,11 @@ export default function BusinessSubscription() {
   const [refreshing, setRefreshing] = useState(false);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
 
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">(
+  "yearly"
+);
   const PENDING_SUBSCRIPTION_KEY = "bookeasy_pending_subscription_id";
+
 
 useEffect(() => {
   let previousState = AppState.currentState;
@@ -118,23 +123,31 @@ useEffect(() => {
       if (!returnedToApp || navigating) return;
 
       try {
-        const pendingId = await AsyncStorage.getItem(
+        const pendingOrderId = await AsyncStorage.getItem(
+          "bookeasy_pending_order_id"
+        );
+
+        const pendingSubscriptionId = await AsyncStorage.getItem(
           PENDING_SUBSCRIPTION_KEY
         );
 
-        if (!pendingId) return;
+        if (!pendingOrderId && !pendingSubscriptionId) return;
 
         navigating = true;
 
-        console.log(
-          "PAYMENT RETURN RECOVERED:",
-          pendingId
-        );
-
-        router.replace({
-          pathname: "/business/paymentReturn",
-          params: { subscription_id: pendingId },
-        });
+        if (pendingOrderId) {
+          router.replace({
+            pathname: "/business/orderPaymentReturn",
+            params: { order_id: pendingOrderId },
+          });
+        } else if (pendingSubscriptionId) {
+          router.replace({
+            pathname: "/business/paymentReturn",
+            params: {
+              subscription_id: pendingSubscriptionId,
+            },
+          });
+        }
       } catch (error) {
         navigating = false;
         console.log("Payment return recovery error:", error);
@@ -144,6 +157,7 @@ useEffect(() => {
 
   return () => subscription.remove();
 }, []);
+
 
 
   const loadSubscription = useCallback(async () => {
@@ -209,114 +223,159 @@ useEffect(() => {
     void loadSubscription();
   };
 
+
   const handleUpgrade = async (plan: Plan) => {
-  if (upgradingPlan) return;
+    if (upgradingPlan) return;
 
-  if (plan.price <= 0) {
-    Alert.alert("Plan", "This plan does not require a payment.");
-    return;
-  }
-
-  setUpgradingPlan(plan.id);
-
-  try {
-    const token = await AsyncStorage.getItem("bookeasy_token");
-
-    if (!token) {
-      setUpgradingPlan(null);
-      router.replace("/business/login");
+    if (plan.price <= 0) {
+      Alert.alert("Plan", "This plan does not require a payment.");
       return;
     }
 
-    const response = await fetch(
-      `${API_URL}/payments/create-subscription`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ plan: plan.id }),
+    const selectedBillingPeriod =
+      plan.id === "STARTER" ? billingPeriod : "monthly";
+
+    setUpgradingPlan(plan.id);
+
+    try {
+      const token = await AsyncStorage.getItem("bookeasy_token");
+
+      if (!token) {
+        setUpgradingPlan(null);
+        router.replace("/business/login");
+        return;
       }
-    );
 
-    const result = await response.json();
+      const isYearly = selectedBillingPeriod === "yearly";
 
-    if (!response.ok) {
-      throw new Error(
-        result.message || "Unable to start the subscription checkout."
+      const response = await fetch(
+        `${API_URL}/payments/${
+          isYearly ? "create-order" : "create-subscription"
+        }`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            plan: plan.id,
+            billingPeriod: selectedBillingPeriod,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.message || "Unable to start checkout."
+        );
+      }
+
+      const environment =
+        String(result.cashfreeMode).toLowerCase() === "production"
+          ? CFEnvironment.PRODUCTION
+          : CFEnvironment.SANDBOX;
+
+      if (isYearly) {
+        if (!result.paymentSessionId || !result.orderId) {
+          throw new Error(
+            "Cashfree did not return a valid order payment session."
+          );
+        }
+
+        await AsyncStorage.setItem(
+          "bookeasy_pending_order_id",
+          result.orderId
+        );
+
+        CFPaymentGatewayService.setCallback({
+          onVerify: (orderID: string) => {
+            setUpgradingPlan(null);
+
+            router.replace({
+              pathname: "/business/orderPaymentReturn",
+              params: { order_id: orderID || result.orderId },
+            });
+          },
+
+          onError: (
+            error: import("react-native-cashfree-pg-sdk").CFErrorResponse
+          ) => {
+            setUpgradingPlan(null);
+
+            Alert.alert(
+              "Checkout not completed",
+              error.getMessage() || "Please try again."
+            );
+          },
+        });
+
+        const session = new CFSession(
+          result.paymentSessionId,
+          result.orderId,
+          environment
+        );
+
+        CFPaymentGatewayService.doWebPayment(session);
+        return;
+      }
+
+      if (!result.subscriptionSessionId || !result.subscriptionId) {
+        throw new Error(
+          "Cashfree did not return a valid subscription session."
+        );
+      }
+
+      await AsyncStorage.setItem(
+        "bookeasy_pending_subscription_id",
+        result.subscriptionId
+      );
+
+      CFPaymentGatewayService.setCallback({
+        onVerify: (subscriptionId: string) => {
+          setUpgradingPlan(null);
+
+          router.replace({
+            pathname: "/business/paymentReturn",
+            params: {
+              subscription_id: result.subscriptionId,
+            },
+          });
+        },
+
+        onError: (
+          error: import("react-native-cashfree-pg-sdk").CFErrorResponse
+        ) => {
+          setUpgradingPlan(null);
+
+          Alert.alert(
+            "Checkout not completed",
+            error.getMessage() || "Please try again."
+          );
+        },
+      });
+
+      const session = new CFSubscriptionSession(
+        result.subscriptionSessionId,
+        result.subscriptionId,
+        environment
+      );
+
+      CFPaymentGatewayService.doSubscriptionPayment(session);
+    } catch (error) {
+      setUpgradingPlan(null);
+
+      Alert.alert(
+        "Checkout",
+        error instanceof Error
+          ? error.message
+          : "Unable to start checkout. Please try again."
       );
     }
+  };
 
-    if (!result.subscriptionSessionId || !result.subscriptionId) {
-      throw new Error("Cashfree did not return a valid subscription session.");
-    }
-
-    const environment =
-      String(result.cashfreeMode).toLowerCase() === "production"
-        ? CFEnvironment.PRODUCTION
-        : CFEnvironment.SANDBOX;
-
-    const session = new CFSubscriptionSession(
-      result.subscriptionSessionId,
-      result.subscriptionId,
-      environment
-    );
-await AsyncStorage.setItem(
-  "bookeasy_pending_subscription_id",
-  result.subscriptionId
-);
-
-console.log(
-  "PENDING SUBSCRIPTION SAVED:",
-  await AsyncStorage.getItem("bookeasy_pending_subscription_id")
-);
-
-CFPaymentGatewayService.setCallback({
-  onVerify: (verifyResult: any) => {
-    console.log("CASHFREE onVerify CALLBACK FIRED", {
-      subscriptionId: result.subscriptionId,
-      verifyResult,
-    });
-
-    setUpgradingPlan(null);
-
-    router.replace({
-      pathname: "/business/paymentReturn",
-      params: {
-        subscription_id: result.subscriptionId,
-      },
-    });
-  },
-
-  onError: (
-    error: import("react-native-cashfree-pg-sdk").CFErrorResponse
-  ) => {
-    console.log("CASHFREE onError CALLBACK FIRED", {
-      subscriptionId: result.subscriptionId,
-      message: error.getMessage(),
-    });
-
-    setUpgradingPlan(null);
-
-    Alert.alert(
-      "Checkout not completed",
-      error.getMessage() || "Please try again."
-    );
-  },
-});
-
-    CFPaymentGatewayService.doSubscriptionPayment(session);
-  } catch (error) {
-    setUpgradingPlan(null);
-    Alert.alert(
-      "Subscription",
-      error instanceof Error
-        ? error.message
-        : "Unable to start checkout. Please try again."
-    );
-  }
-};
 
   if (loading) {
     return (
@@ -378,13 +437,16 @@ CFPaymentGatewayService.setCallback({
     usage.bookingsUsed < usage.bookingLimit!;
 
 
+
   const resetDate = usage.resetsAt
     ? new Date(usage.resetsAt).toLocaleDateString("en-IN", {
         day: "numeric",
         month: "short",
         year: "numeric",
+        timeZone: "Asia/Kolkata",
       })
     : "Not available";
+
 
   return (
     <View style={styles.container}>
@@ -582,6 +644,51 @@ CFPaymentGatewayService.setCallback({
           Find the right plan for your business.
         </Text>
 
+        
+<View style={styles.billingToggle}>
+  <TouchableOpacity
+    accessibilityRole="button"
+    accessibilityState={{ selected: billingPeriod === "monthly" }}
+    style={[
+      styles.billingOption,
+      billingPeriod === "monthly" && styles.billingOptionSelected,
+    ]}
+    onPress={() => setBillingPeriod("monthly")}
+  >
+    <Text
+      style={[
+        styles.billingOptionText,
+        billingPeriod === "monthly" && styles.billingOptionTextSelected,
+      ]}
+    >
+      Monthly
+    </Text>
+    <Text style={styles.billingPrice}>₹299/month</Text>
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    accessibilityRole="button"
+    accessibilityState={{ selected: billingPeriod === "yearly" }}
+    style={[
+      styles.billingOption,
+      billingPeriod === "yearly" && styles.billingOptionSelected,
+    ]}
+    onPress={() => setBillingPeriod("yearly")}
+  >
+    <Text
+      style={[
+        styles.billingOptionText,
+        billingPeriod === "yearly" && styles.billingOptionTextSelected,
+      ]}
+    >
+      Yearly
+    </Text>
+    <Text style={styles.billingPrice}>₹2,990/year</Text>
+    <Text style={styles.savingsBadge}>SAVE ₹598 · 16.7% OFF</Text>
+  </TouchableOpacity>
+</View>
+
+
         {/* {data.availablePlans?.map((plan) => { */}
 
 {data.availablePlans
@@ -615,12 +722,25 @@ CFPaymentGatewayService.setCallback({
                 </View>
 
                 <View style={styles.priceContainer}>
-                  <Text style={styles.planPrice}>
-                    ₹{plan.price}
-                  </Text>
-                  <Text style={styles.pricePeriod}>
-                    {plan.price === 0 ? "forever" : "/ month"}
-                  </Text>
+                  
+<Text style={styles.planPrice}>
+  ₹{plan.id === "STARTER" && billingPeriod === "yearly"
+    ? "2,990"
+    : plan.price}
+</Text>
+
+<Text style={styles.pricePeriod}>
+  {plan.price === 0
+    ? "forever"
+    : plan.id === "STARTER" && billingPeriod === "yearly"
+      ? "/ year"
+      : "/ month"}
+</Text>
+
+{plan.id === "STARTER" && billingPeriod === "yearly" ? (
+  <Text style={styles.savingsBadge}>Save ₹598 · 16.7% off</Text>
+) : null}
+
                 </View>
               </View>
 
@@ -950,4 +1070,54 @@ const styles = StyleSheet.create({
     color: "#2F4F43",
     fontWeight: "700",
   },
+
+  
+billingToggle: {
+  flexDirection: "row",
+  gap: 10,
+  marginBottom: 18,
+},
+billingOption: {
+  flex: 1,
+  padding: 14,
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: "#E5E7DF",
+  backgroundColor: "#FFFFFF",
+  alignItems: "center",
+  justifyContent: "center",
+},
+billingOptionSelected: {
+  borderColor: "#2F4F43",
+  borderWidth: 2,
+  backgroundColor: "#E9F0E8",
+},
+billingOptionText: {
+  color: "#64766A",
+  fontSize: 14,
+  fontWeight: "700",
+},
+billingOptionTextSelected: {
+  color: "#243B35",
+},
+billingPrice: {
+  color: "#243B35",
+  fontSize: 13,
+  fontWeight: "800",
+  marginTop: 5,
+},
+savingsBadge: {
+  color: "#166534",
+  backgroundColor: "#DCFCE7",
+  fontSize: 9,
+  fontWeight: "800",
+  paddingHorizontal: 7,
+  paddingVertical: 5,
+  borderRadius: 8,
+  overflow: "hidden",
+  marginTop: 8,
+  textAlign: "center",
+},
+
+
 });

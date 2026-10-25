@@ -103,8 +103,8 @@ const monthKey = `${start.toISOString()}_${end.toISOString()}`;
     await createBusinessReminder({
       business,
       type: "booking_limit_reached",
-      title: "Monthly booking limit reached",
-      message: `You've used ${bookingsUsed} of ${limit} bookings this month. Upgrade your plan to accept more bookings.`,
+      title: "Booking limit reached",
+      message: `You've used ${bookingsUsed} of ${limit} bookings in your current booking cycle. Upgrade your plan to accept more bookings.`,
       dedupeKey: `booking-limit:${business._id}:${monthKey}`,
     });
 
@@ -116,7 +116,7 @@ const monthKey = `${start.toISOString()}_${end.toISOString()}`;
       business,
       type: "booking_usage_41",
       title: "You're approaching your booking limit",
-      message: `You've used ${bookingsUsed} of ${limit} bookings this month. Upgrade now to avoid interruptions.`,
+      message: `You've used ${bookingsUsed} of ${limit} bookings in your current booking cycle. Upgrade now to avoid interruptions.`,
       dedupeKey: `booking-usage-41:${business._id}:${monthKey}`,
     });
   }
@@ -165,14 +165,24 @@ async function checkSubscriptionExpiry(business, now) {
       dedupeKey: `subscription-expired:${business._id}:${expiryKey}`,
     });
 
-    await User.updateOne(
-      {
-        _id: business._id,
-        subscriptionEndDate: business.subscriptionEndDate,
-        plan: business.plan,
-      },
-      { $set: { subscriptionStatus: "EXPIRED" } }
-    );
+
+await User.updateOne(
+  {
+    _id: business._id,
+    subscriptionEndDate: {
+      $eq: business.subscriptionEndDate,
+      $lte: now,
+    },
+    plan: business.plan,
+  },
+  {
+    $set: {
+      plan: "FREE",
+      subscriptionStatus: "EXPIRED",
+    },
+  }
+);
+
   }
 }
 
@@ -189,8 +199,8 @@ async function runSubscriptionReminderCheck() {
       accountStatus: "ACTIVE",
       isActive: { $ne: false },
     }).select(
-      "_id plan subscriptionEndDate subscriptionStatus"
-    );
+  "_id createdAt plan subscriptionEndDate subscriptionStatus"
+);
 
     for (const business of businesses) {
       try {

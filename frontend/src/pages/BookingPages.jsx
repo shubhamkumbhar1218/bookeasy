@@ -47,6 +47,8 @@ function BookingPages() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const [reviewAccess, setReviewAccess] = useState(false);
+
   // ==========================================
   // REVIEW STATES
   // ==========================================

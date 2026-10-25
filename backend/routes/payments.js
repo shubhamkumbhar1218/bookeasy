@@ -13,9 +13,9 @@ const router = express.Router();
 const API_VERSION = "2025-01-01";
 
 const PLAN_PRICES = {
-  STARTER: 299,
-  BUSINESS: 499,
-  PRO: 999,
+  STARTER: { monthly: 299, yearly: 2990 },
+  BUSINESS: { monthly: 499, yearly: 4990 },
+  PRO: { monthly: 999, yearly: 9990 },
 };
 
 function addOneCalendarMonth(value) {
@@ -35,6 +35,31 @@ function addOneCalendarMonth(value) {
   const lastDayOfMonth = new Date(
     date.getFullYear(),
     date.getMonth() + 1,
+    0
+  ).getDate();
+
+  date.setDate(Math.min(originalDay, lastDayOfMonth));
+
+  return date;
+}
+
+function addOneCalendarYear(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Invalid subscription date.");
+  }
+
+  const originalMonth = date.getMonth();
+  const originalDay = date.getDate();
+
+  date.setDate(1);
+  date.setFullYear(date.getFullYear() + 1);
+  date.setMonth(originalMonth);
+
+  const lastDayOfMonth = new Date(
+    date.getFullYear(),
+    originalMonth + 1,
     0
   ).getDate();
 
@@ -145,7 +170,14 @@ router.post("/create-order", authMiddleware, async (req, res) => {
     ensureCashfreeCredentials();
 
     const userId = getUserId(req);
-    const { plan } = req.body;
+const { plan, billingPeriod = "monthly" } = req.body;
+
+if (!["monthly", "yearly"].includes(billingPeriod)) {
+  return res.status(400).json({
+    success: false,
+    message: "Choose monthly or yearly billing.",
+  });
+}
 
     if (!userId || !mongoose.isValidObjectId(userId)) {
       return res.status(401).json({
@@ -188,18 +220,19 @@ router.post("/create-order", authMiddleware, async (req, res) => {
 
     const frontendUrl = getFrontendUrl();
     const orderId = `be_${randomUUID().replace(/-/g, "")}`;
-    const amount = PLAN_PRICES[plan];
+    const amount = PLAN_PRICES[plan][billingPeriod];
 
     payment = await Payment.create({
       userId: user._id,
       orderId,
       plan,
+      billingPeriod,
       amount,
       currency: "INR",
       status: "PENDING",
     });
 
-    const response = await cashfree.PGCreateOrder(API_VERSION, {
+    const response = await cashfree.PGCreateOrder({
       order_id: orderId,
       order_amount: amount,
       order_currency: "INR",
@@ -216,7 +249,7 @@ router.post("/create-order", authMiddleware, async (req, res) => {
       order_meta: {
         return_url: `${frontendUrl}/payment/return?order_id={order_id}`,
       },
-      order_note: `BookEasy ${plan} plan`,
+      order_note: `BookEasy ${plan} ${billingPeriod} plan`,
     });
 
     const order = response.data;
@@ -233,13 +266,27 @@ router.post("/create-order", authMiddleware, async (req, res) => {
       billingMode: "ONE_TIME",
       orderId,
       plan,
+      billingPeriod,
       amount,
       currency: "INR",
       paymentSessionId: order.payment_session_id,
       cashfreeMode: isProduction ? "production" : "sandbox",
     });
   } catch (error) {
-    console.error("Cashfree create-order error:", getSafeErrorMessage(error));
+console.error(
+  "Cashfree create-order error:",
+  JSON.stringify(
+    {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      details: error.response?.data?.message,
+      code: error.code,
+    },
+    null,
+    2
+  )
+);
 
     if (payment && payment.status === "PENDING") {
       payment.status = "FAILED";
@@ -336,44 +383,153 @@ router.post("/verify", authMiddleware, async (req, res) => {
       });
     }
 
-    const now = new Date();
-    const endDate = addOneCalendarMonth(now);
 
-    const claimedPayment = await Payment.findOneAndUpdate(
-      { _id: payment._id, status: "PENDING" },
-      { $set: { status: "PAID", paidAt: now } },
-      { new: true }
-    );
+    // Atomically mark the payment PAID and activate the business plan.
+    // If either database write fails, the transaction rolls back both.
+    const session = await mongoose.startSession();
 
-    if (!claimedPayment) {
-      const latestPayment = await Payment.findById(payment._id);
+    let activationResult;
+
+    try {
+      await session.withTransaction(async () => {
+        const claimedPayment = await Payment.findOneAndUpdate(
+          {
+            _id: payment._id,
+            userId,
+            status: "PENDING",
+          },
+          {
+            $set: {
+              status: "PAID",
+              paidAt: new Date(),
+            },
+          },
+          {
+            new: true,
+            session,
+          }
+        );
+
+        if (!claimedPayment) {
+          // Another request may have processed this order already.
+          // Handle that after the transaction.
+          throw new Error("PAYMENT_ALREADY_PROCESSED");
+        }
+
+        const billingPeriod =
+          claimedPayment.billingPeriod || "monthly";
+
+        const now = claimedPayment.paidAt || new Date();
+
+        const endDate =
+          billingPeriod === "yearly"
+            ? addOneCalendarYear(now)
+            : addOneCalendarMonth(now);
+
+        const updatedUser = await User.findOneAndUpdate(
+          {
+            _id: userId,
+            role: "BUSINESS",
+            accountStatus: "ACTIVE",
+            isActive: { $ne: false },
+          },
+          {
+            $set: {
+              plan: claimedPayment.plan,
+              subscriptionStatus: "ACTIVE",
+              subscriptionStartDate: now,
+              subscriptionEndDate: endDate,
+              subscriptionPaymentId: claimedPayment.orderId,
+              ...(billingPeriod === "yearly"
+                ? { subscriptionBillingMode: "ONE_TIME" }
+                : {}),
+            },
+          },
+          {
+            new: true,
+            runValidators: true,
+            session,
+          }
+        );
+
+        if (!updatedUser) {
+          throw new Error("USER_ACTIVATION_FAILED");
+        }
+
+        activationResult = {
+          plan: claimedPayment.plan,
+          billingPeriod,
+          subscriptionStartDate: updatedUser.subscriptionStartDate,
+          subscriptionEndDate: updatedUser.subscriptionEndDate,
+        };
+      });
 
       return res.json({
-        success: latestPayment?.status === "PAID",
-        paid: latestPayment?.status === "PAID",
-        plan: latestPayment?.plan,
-        message:
-          latestPayment?.status === "PAID"
-            ? "This payment has already been processed."
-            : "Payment is being processed. Check again shortly.",
+        success: true,
+        paid: true,
+        ...activationResult,
+        message: "Payment verified and your plan is active.",
       });
-    }
+    } catch (error) {
+if (error.message === "PAYMENT_ALREADY_PROCESSED") {
+  const latestPayment = await Payment.findOne({
+    _id: payment._id,
+    userId,
+  });
 
-    user.plan = claimedPayment.plan;
-    user.subscriptionStatus = "ACTIVE";
-    user.subscriptionStartDate = now;
-    user.subscriptionEndDate = endDate;
-    user.subscriptionPaymentId = claimedPayment.orderId;
+  const latestUser = await User.findOne({
+    _id: userId,
+    role: "BUSINESS",
+    accountStatus: "ACTIVE",
+    isActive: { $ne: false },
+  });
 
-    await user.save();
+  const isActivated =
+    latestPayment?.status === "PAID" &&
+    latestUser?.plan === latestPayment.plan &&
+    latestUser?.subscriptionStatus === "ACTIVE" &&
+    latestUser?.subscriptionPaymentId === latestPayment.orderId &&
+    latestUser?.subscriptionEndDate &&
+    new Date(latestUser.subscriptionEndDate) > new Date();
 
+  if (isActivated) {
     return res.json({
       success: true,
       paid: true,
-      plan: claimedPayment.plan,
-      subscriptionEndDate: user.subscriptionEndDate,
+      plan: latestPayment.plan,
+      billingPeriod: latestPayment.billingPeriod || "monthly",
+      subscriptionStartDate: latestUser.subscriptionStartDate,
+      subscriptionEndDate: latestUser.subscriptionEndDate,
       message: "Payment verified and your plan is active.",
     });
+  }
+
+  console.error(
+    "Payment is paid but activation needs recovery:",
+    latestPayment?.orderId
+  );
+
+  return res.status(500).json({
+    success: false,
+    paid: true,
+    activationPending: true,
+    message:
+      "Payment is recorded, but plan activation needs recovery. Please contact support.",
+  });
+}
+
+
+      console.error("Payment activation transaction failed:", error);
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Payment could not be fully activated. Please retry verification.",
+      });
+    } finally {
+      await session.endSession();
+    }
+
   } catch (error) {
     console.error("Cashfree payment verification error:", error.message);
 
@@ -440,7 +596,7 @@ router.post("/create-subscription", authMiddleware, async (req, res) => {
     const backendUrl = getBackendUrl();
 
     const subscriptionId = `be_sub_${randomUUID().replace(/-/g, "")}`;
-    const amount = PLAN_PRICES[plan];
+    const amount = PLAN_PRICES[plan].monthly;
 
     localSubscription = await Subscription.create({
       userId: user._id,

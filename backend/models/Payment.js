@@ -22,6 +22,12 @@ const paymentSchema = new mongoose.Schema(
       required: true,
     },
 
+    billingPeriod: {
+  type: String,
+  enum: ["monthly", "yearly"],
+  default: "monthly",
+  required: true,
+},
 
     amount: {
       type: Number,
