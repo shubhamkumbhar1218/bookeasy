@@ -200,10 +200,10 @@ cashfreeSubscriptionStatus: {
   default: "",
 },
 
-// Automatic renewal tracking
+// Subscription billing mode
 subscriptionBillingMode: {
   type: String,
-  enum: ["MANUAL", "AUTOMATIC"],
+  enum: ["MANUAL", "AUTOMATIC", "ONE_TIME"],
   default: "MANUAL",
 },
 
