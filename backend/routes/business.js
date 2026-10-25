@@ -7,6 +7,7 @@ import multer from "multer";
 import cloudinary from "../config/cloudinary.js";
 import Booking from "../models/Booking.js";
 import PLANS from "../config/plans.js";
+import { getBookingQuotaCycle } from "../utils/bookingQuota.js";
 
 const router = express.Router();
 
@@ -555,13 +556,15 @@ router.get(
   async (req, res) => {
     try {
       const user = await User.findById(req.user.id)
-       .select(
-  "role accountStatus isActive plan subscriptionStatus " +
+
+.select(
+  "createdAt role accountStatus isActive plan subscriptionStatus " +
   "subscriptionStartDate subscriptionEndDate " +
   "subscriptionBillingMode subscriptionNextBillingDate " +
   "subscriptionLastPaymentAt subscriptionLastPaymentId " +
   "cashfreeSubscriptionStatus"
 );
+
       if (!user) {
         return res.status(404).json({
           message: "User not found",
@@ -608,41 +611,26 @@ if (
           message: "Invalid subscription plan",
         });
       }
+      // Free plan usage: registration-anniversary cycle.
+      // Paid plans have unlimited bookings.
+      const { start: monthStart, end: nextMonthStart } =
+        plan.bookingLimit === null
+          ? { start: null, end: null }
+          : getBookingQuotaCycle(user.createdAt, now);
 
-      // Current calendar month in India
-      const parts = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Asia/Kolkata",
-        year: "numeric",
-        month: "numeric",
-      }).formatToParts(now);
-
-      const year = Number(
-        parts.find((part) => part.type === "year").value
-      );
-
-      const month = Number(
-        parts.find((part) => part.type === "month").value
-      );
-
-      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-
-      const monthStart = new Date(
-        Date.UTC(year, month - 1, 1) - IST_OFFSET_MS
-      );
-
-      const nextMonthStart = new Date(
-        Date.UTC(year, month, 1) - IST_OFFSET_MS
-      );
-
-      const bookingsUsed = await Booking.countDocuments({
-        businessId: user._id,
-        createdAt: {
-          $gte: monthStart,
-          $lt: nextMonthStart,
-        },
-      });
+      const bookingsUsed =
+        plan.bookingLimit === null
+          ? 0
+          : await Booking.countDocuments({
+              businessId: user._id,
+              createdAt: {
+                $gte: monthStart,
+                $lt: nextMonthStart,
+              },
+            });
 
       const bookingLimit = plan.bookingLimit;
+
 
       return res.json({
         plan: effectivePlan,

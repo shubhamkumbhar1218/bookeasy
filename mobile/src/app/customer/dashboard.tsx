@@ -276,7 +276,7 @@ if (selectedCategory !== "All") {
     borderColor: "#D8E3D7",
   }}
   onPress={() => {
-    router.replace("/business" as any);
+    router.replace("/business/dashboard" as any);
   }}
   activeOpacity={0.8}
 >

@@ -293,7 +293,7 @@ const categories = [
     type="button"
     className="outline"
     onClick={() => {
-      navigate("/business");
+      navigate("/business/dashboard");
     }}
   >
     <CalendarDays size={17} />

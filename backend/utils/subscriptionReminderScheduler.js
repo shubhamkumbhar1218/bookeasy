@@ -1,9 +1,9 @@
-
 import Booking from "../models/Booking.js";
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import PLANS from "../config/plans.js";
 import { sendPushForNotification } from "./sendPushNotification.js";
+import { getBookingQuotaCycle } from "./bookingQuota.js";
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -86,8 +86,12 @@ async function checkBookingUsage(business, now) {
     return;
   }
 
-  const { start, end, monthKey } = getCurrentISTMonthRange(now);
+const { start, end } = getBookingQuotaCycle(
+  business.createdAt,
+  now
+);
 
+const monthKey = `${start.toISOString()}_${end.toISOString()}`;
   const bookingsUsed = await Booking.countDocuments({
     businessId: business._id,
     createdAt: { $gte: start, $lt: end },

@@ -11,6 +11,7 @@ import { requireFeature } from "../middleware/requireFeature.js";
 import {
   sendPushForNotification,
 } from "../utils/sendPushNotification.js";
+import { getBookingQuotaCycle } from "../utils/bookingQuota.js";
 
 const router = express.Router();
 
@@ -489,42 +490,23 @@ if (
       });
     }
 
-    // Free plan monthly booking limit
+
+    // -----------------------------------------------
+    // FREE PLAN BOOKING LIMIT — REGISTRATION ANNIVERSARY
+    // -----------------------------------------------
     if (plan.bookingLimit !== null) {
-      // Get the current calendar month in India.
-      const now = new Date();
-
-      const parts = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Asia/Kolkata",
-        year: "numeric",
-        month: "numeric",
-      }).formatToParts(now);
-
-      const year = Number(
-        parts.find((part) => part.type === "year").value
+      const { start, end } = getBookingQuotaCycle(
+        business.createdAt,
+        new Date()
       );
 
-      const month = Number(
-        parts.find((part) => part.type === "month").value
-      );
-
-      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-
-      const monthStart = new Date(
-        Date.UTC(year, month - 1, 1) - IST_OFFSET_MS
-      );
-
-      const nextMonthStart = new Date(
-        Date.UTC(year, month, 1) - IST_OFFSET_MS
-      );
-
-      // Count all bookings created this month,
+      // Count all bookings created during this cycle,
       // including cancelled bookings.
       const bookingsUsed = await Booking.countDocuments({
         businessId,
         createdAt: {
-          $gte: monthStart,
-          $lt: nextMonthStart,
+          $gte: start,
+          $lt: end,
         },
       });
 
@@ -532,11 +514,11 @@ if (
         return res.status(403).json({
           code: "BOOKING_LIMIT_REACHED",
           message:
-            "Your Free plan monthly booking limit has been reached. Upgrade your plan to accept more bookings.",
+            "Your Free plan booking limit has been reached for this monthly cycle. Upgrade your plan to accept more bookings.",
           currentPlan: effectivePlan,
           bookingLimit: plan.bookingLimit,
           bookingsUsed,
-          resetsAt: nextMonthStart,
+          resetsAt: end,
         });
       }
     }
