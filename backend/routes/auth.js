@@ -6,6 +6,7 @@ import crypto from "crypto";
 import User from "../models/User.js";
 import createSlug from "../utils/createSlug.js";
 import sendEmail from "../utils/sendEmail.js";
+import { normalizeBusinessType } from "../utils/businessTypes.js";
 
 const router = express.Router();
 
@@ -29,6 +30,19 @@ router.post("/register", async (req, res) => {
           "Name, email, password and business name are required",
       });
     }
+
+    
+const normalizedBusinessType =
+  normalizeBusinessType(businessType);
+
+if (!normalizedBusinessType) {
+  return res.status(400).json({
+    success: false,
+    message: "Please select a valid business category.",
+    field: "businessType",
+  });
+}
+
 
     const existingUser = await User.findOne({
       email,
@@ -61,7 +75,7 @@ router.post("/register", async (req, res) => {
       password: hashedPassword,
       businessName,
       businessSlug,
-      businessType,
+      businessType: normalizedBusinessType,
       phone,
       address,
     });

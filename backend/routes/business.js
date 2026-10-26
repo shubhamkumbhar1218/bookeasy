@@ -8,6 +8,7 @@ import cloudinary from "../config/cloudinary.js";
 import Booking from "../models/Booking.js";
 import PLANS from "../config/plans.js";
 import { getBookingQuotaCycle } from "../utils/bookingQuota.js";
+import { normalizeBusinessType } from "../utils/businessTypes.js";
 
 const router = express.Router();
 
@@ -94,16 +95,47 @@ router.get("/search", async (req, res) => {
       }
     }
 
-    if (
-      category &&
-      category.trim() &&
-      category.toLowerCase() !== "all"
-    ) {
-      query.businessType = {
-        $regex: `^${category.trim()}$`,
-        $options: "i",
-      };
+    if (category !== undefined) {
+  const requestedCategory =
+    typeof category === "string"
+      ? category.trim()
+      : "";
+
+  if (
+    requestedCategory &&
+    requestedCategory.toLowerCase() !== "all"
+  ) {
+    const normalizedCategory =
+      normalizeBusinessType(requestedCategory);
+
+    if (!normalizedCategory) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid business category.",
+      });
     }
+
+    query.businessType = normalizedCategory;
+  }
+}
+
+// if (category && category.trim() &&
+//     category.trim().toLowerCase() !== "all") {
+//   const normalizeCategory = (value) =>
+//     String(value || "")
+//       .trim()
+//       .toLowerCase()
+//       .replace(/\s+/g, " ");
+
+//   const requestedCategory = normalizeCategory(category);
+
+//   query.businessType = {
+//     $in: [
+//       requestedCategory,
+//       category.trim(),
+//     ],
+//   };
+// }
 
     const businesses = await User.find(query)
       .select(
@@ -301,7 +333,20 @@ router.patch("/profile/me", authMiddleware, async (req, res) => {
 
     user.name = name.trim();
     user.businessName = businessName.trim();
-    user.businessType = businessType || "other";
+if (businessType !== undefined) {
+  const normalizedBusinessType =
+    normalizeBusinessType(businessType);
+
+  if (!normalizedBusinessType) {
+    return res.status(400).json({
+      success: false,
+      message: "Please select a valid business category.",
+      field: "businessType",
+    });
+  }
+
+  user.businessType = normalizedBusinessType;
+}
     user.phone = phone?.trim() || "";
     user.address = address?.trim() || "";
 
