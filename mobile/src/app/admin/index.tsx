@@ -1,4 +1,3 @@
-
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -47,6 +46,80 @@ type BusinessBookingStat = {
   completed: number;
   cancelled: number;
 };
+
+
+type RevenueStats = {
+  totalRevenue: number;
+  successfulPayments: number;
+  monthlyRevenue: number;
+  yearlyRevenue: number;
+};
+
+const BUSINESS_CATEGORIES = [
+  "salon",
+  "barber",
+  "tutor",
+  "gym",
+  "repair shop",
+  "hospital",
+  "dental clinic",
+  "doctor / clinic",
+  "physiotherapy",
+  "spa & wellness",
+  "yoga & meditation",
+  "pet clinic / veterinary",
+  "car & bike service",
+  "photography studio",
+  "coaching classes",
+  "makeup artist",
+  "tailor",
+  "plumber",
+  "electrician",
+  "computer repair",
+  "consultant",
+  "driving school",
+  "diagnostic lab",
+  "nutritionist / dietitian",
+  "laundry & dry cleaning",
+  "other",
+] as const;
+
+type OwnerStatusFilter = "all" | "active" | "suspended";
+
+const normalizeCategory = (value?: string) =>
+  (value || "other")
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\/\s*/g, " / ")
+    .replace(/\s+/g, " ");
+
+const formatCategory = (value?: string) =>
+  normalizeCategory(value)
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const formatDate = (value?: string) => {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleDateString("en-IN");
+};
+
+
+const formatStatus = (value?: string) =>
+  value === "PAST_DUE"
+    ? "Past Due"
+    : value
+      ? value.charAt(0) + value.slice(1).toLowerCase()
+      : "Active";
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
+
+
 
 
 type SubscriptionPlan = "FREE" | "STARTER" | "BUSINESS" | "PRO";
@@ -106,11 +179,27 @@ export default function AdminPanel() {
     categories: 0,
   });
 
-  const [owners, setOwners] = useState<Owner[]>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+const [owners, setOwners] = useState<Owner[]>([]);
+const [search, setSearch] = useState("");
+const [ownerSearchDraft, setOwnerSearchDraft] = useState("");
+
+const [ownerCategoryFilter, setOwnerCategoryFilter] =
+  useState<string>("all");
+
+const [ownerStatusFilter, setOwnerStatusFilter] =
+  useState<OwnerStatusFilter>("all");
+
+const [ownerError, setOwnerError] = useState<string | null>(null);
+const [bookingError, setBookingError] = useState<string | null>(null);
+const [subscriptionError, setSubscriptionError] =
+  useState<string | null>(null);
+
+const [loading, setLoading] = useState(true);
+const [refreshing, setRefreshing] = useState(false);
+const [updatingId, setUpdatingId] = useState<string | null>(null);
+const [savingOwnerId, setSavingOwnerId] = useState<string | null>(null);
+
 
   const [bookingStats, setBookingStats] = useState<BusinessBookingStat[]>(
     []
@@ -122,6 +211,15 @@ export default function AdminPanel() {
   const [appliedStartDate, setAppliedStartDate] = useState("");
   const [appliedEndDate, setAppliedEndDate] = useState("");
   const [totalBookings, setTotalBookings] = useState(0);
+  const [revenueStats, setRevenueStats] = useState<RevenueStats>({
+  totalRevenue: 0,
+  successfulPayments: 0,
+  monthlyRevenue: 0,
+  yearlyRevenue: 0,
+});
+
+const [revenueLoading, setRevenueLoading] = useState(false);
+const [revenueError, setRevenueError] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
   
 const [subscriptions, setSubscriptions] = useState<
@@ -310,6 +408,8 @@ const [statusDrafts, setStatusDrafts] = useState<
       plan?: SubscriptionPlan | "";
       status?: SubscriptionStatus | "";
     }) => {
+      setSubscriptionError(null);
+setSubscriptionLoading(true);
       try {
         setSubscriptionLoading(true);
 
@@ -367,29 +467,35 @@ const [statusDrafts, setStatusDrafts] = useState<
         setSubscriptions(businesses);
         setSubscriptionPlans(data.plans || []);
 
-        setPlanDrafts((previous) => {
-          const next = { ...previous };
-          businesses.forEach((business) => {
-            next[business._id] = business.plan || "FREE";
-          });
-          return next;
-        });
 
-        setStatusDrafts((previous) => {
-          const next = { ...previous };
-          businesses.forEach((business) => {
-            next[business._id] =
-              business.subscriptionStatus || "ACTIVE";
-          });
-          return next;
-        });
-      } catch (error) {
-        Alert.alert(
-          "Subscription error",
-          error instanceof Error
-            ? error.message
-            : "Unable to load subscriptions."
-        );
+setPlanDrafts((previous) => {
+  const next = { ...previous };
+
+  businesses.forEach((business) => {
+    if (next[business._id] === undefined) {
+      next[business._id] = business.plan || "FREE";
+    }
+  });
+
+  return next;
+});
+
+setStatusDrafts((previous) => {
+  const next = { ...previous };
+
+  businesses.forEach((business) => {
+    if (next[business._id] === undefined) {
+      next[business._id] =
+        business.subscriptionStatus || "ACTIVE";
+    }
+  });
+
+  return next;
+});
+
+      } catch (error) {setSubscriptionError(
+  getErrorMessage(error, "Unable to load subscriptions.")
+);
       } finally {
         setSubscriptionLoading(false);
       }
@@ -398,11 +504,59 @@ const [statusDrafts, setStatusDrafts] = useState<
   );
 
 
+  const loadRevenueStats = useCallback(async () => {
+  setRevenueLoading(true);
+  setRevenueError("");
+
+  try {
+    const token = await AsyncStorage.getItem("bookeasy_token");
+
+    if (!token) {
+      throw new Error("Please log in again.");
+    }
+
+    const response = await fetch(`${API_URL}/admin/revenue`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to load revenue.");
+    }
+
+    setRevenueStats({
+      totalRevenue: Number(data.totalRevenue) || 0,
+      successfulPayments: Number(data.successfulPayments) || 0,
+      monthlyRevenue: Number(data.monthlyRevenue) || 0,
+      yearlyRevenue: Number(data.yearlyRevenue) || 0,
+    });
+  } catch (error) {
+    setRevenueError(
+      error instanceof Error
+        ? error.message
+        : "Unable to load revenue statistics."
+    );
+  } finally {
+    setRevenueLoading(false);
+  }
+}, []);
+
+
   useFocusEffect(
     useCallback(() => {
       loadAdminData();
     }, [loadAdminData])
   );
+
+  useFocusEffect(
+  useCallback(() => {
+    loadRevenueStats();
+  }, [loadRevenueStats])
+);
 
   
   useFocusEffect(
@@ -597,16 +751,26 @@ const [statusDrafts, setStatusDrafts] = useState<
                 );
               }
 
-              Alert.alert(
-                "Success",
-                data.message || "Subscription updated successfully."
-              );
+setPlanDrafts((previous) => ({
+  ...previous,
+  [business._id]: plan,
+}));
 
-              await loadSubscriptions({
-                search: subscriptionSearch,
-                plan: subscriptionPlanFilter,
-                status: subscriptionStatusFilter,
-              });
+setStatusDrafts((previous) => ({
+  ...previous,
+  [business._id]: subscriptionStatus,
+}));
+
+Alert.alert(
+  "Success",
+  data.message || "Subscription updated successfully."
+);
+
+await loadSubscriptions({
+  search: subscriptionSearch,
+  plan: subscriptionPlanFilter,
+  status: subscriptionStatusFilter,
+});
             } catch (error) {
               Alert.alert(
                 "Update failed",
@@ -632,6 +796,22 @@ const [statusDrafts, setStatusDrafts] = useState<
     ]);
     router.replace("/business/login");
   };
+
+  
+const filteredOwners = owners.filter((owner) => {
+  const categoryMatches =
+    ownerCategoryFilter === "all" ||
+    normalizeCategory(owner.businessType) === ownerCategoryFilter;
+
+  const statusMatches =
+    ownerStatusFilter === "all" ||
+    (ownerStatusFilter === "active"
+      ? owner.isActive !== false
+      : owner.isActive === false);
+
+  return categoryMatches && statusMatches;
+});
+
 
   const renderOwner = ({ item }: { item: Owner }) => {
     const active = item.isActive !== false;
@@ -670,11 +850,13 @@ const [statusDrafts, setStatusDrafts] = useState<
           <Text style={styles.ownerDetail}>{item.phone}</Text>
         )}
 
-        {!!item.businessType && (
-          <Text style={styles.ownerDetail}>
-            Category: {item.businessType}
-          </Text>
-        )}
+<Text style={styles.ownerDetail}>
+  Category: {formatCategory(item.businessType)}
+</Text>
+
+<Text style={styles.ownerDetail}>
+  Registered: {formatDate(item.createdAt)}
+</Text>
 
         {!!item.address && (
           <Text style={styles.ownerDetail}>Address: {item.address}</Text>
@@ -728,13 +910,41 @@ const [statusDrafts, setStatusDrafts] = useState<
           Plan changes do not process payments.
         </Text>
 
+        {subscriptionError && (
+  <View style={styles.errorBox}>
+    <Text style={styles.errorText}>{subscriptionError}</Text>
+
+    <TouchableOpacity
+      onPress={() =>
+        loadSubscriptions({
+          search: subscriptionSearch,
+          plan: subscriptionPlanFilter,
+          status: subscriptionStatusFilter,
+        })
+      }
+    >
+      <Text style={styles.retryText}>Try Again</Text>
+    </TouchableOpacity>
+  </View>
+)}
+
         <View style={styles.subscriptionPlanGrid}>
           {subscriptionPlans.map((plan) => (
             <View key={plan.id} style={styles.subscriptionPlanCard}>
               <Text style={styles.subscriptionPlanName}>{plan.name}</Text>
-              <Text style={styles.subscriptionPlanPrice}>
-                {plan.price === 0 ? "₹0" : `₹${plan.price}/mo`}
-              </Text>
+<Text style={styles.subscriptionPlanPrice}>
+  {plan.id === "FREE"
+    ? "₹0"
+    : plan.id === "STARTER"
+      ? "₹299/mo"
+      : `₹${plan.price}/mo`}
+</Text>
+
+{plan.id === "STARTER" && (
+  <Text style={styles.ownerDetail}>
+    ₹2,990/year
+  </Text>
+)}
               <Text style={styles.ownerDetail}>
                 {plan.count} business{plan.count === 1 ? "" : "es"}
               </Text>
@@ -849,6 +1059,15 @@ const [statusDrafts, setStatusDrafts] = useState<
               statusDrafts[business._id] ||
               business.subscriptionStatus ||
               "ACTIVE";
+
+            const effectiveStatus: SubscriptionStatus =
+  selectedPlan === "FREE"
+    ? "ACTIVE"
+    : selectedStatus;
+
+const hasUnsavedChanges =
+  selectedPlan !== (business.plan || "FREE") ||
+  effectiveStatus !== (business.subscriptionStatus || "ACTIVE");
 
             const updating =
               updatingSubscriptionId === business._id;
@@ -978,23 +1197,23 @@ const [statusDrafts, setStatusDrafts] = useState<
                   </>
                 )}
 
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    styles.subscriptionSaveButton,
-                    updating && styles.disabledButton,
-                  ]}
-                  disabled={updating}
-                  onPress={() => updateSubscription(business)}
-                >
-                  {updating ? (
-                    <ActivityIndicator color="#ffffff" />
-                  ) : (
-                    <Text style={styles.statusButtonText}>
-                      Save Plan
-                    </Text>
-                  )}
-                </TouchableOpacity>
+<TouchableOpacity
+  style={[
+    styles.statusButton,
+    styles.subscriptionSaveButton,
+    (!hasUnsavedChanges || updating) && styles.disabledButton,
+  ]}
+  disabled={!hasUnsavedChanges || updating}
+  onPress={() => updateSubscription(business)}
+>
+  {updating ? (
+    <ActivityIndicator color="#ffffff" />
+  ) : (
+    <Text style={styles.statusButtonText}>
+      {hasUnsavedChanges ? "Save Changes" : "No Changes"}
+    </Text>
+  )}
+</TouchableOpacity>
               </View>
             );
           })
@@ -1130,7 +1349,7 @@ const [statusDrafts, setStatusDrafts] = useState<
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={owners}
+        data={filteredOwners}
         keyExtractor={(item) => item._id}
         renderItem={renderOwner}
         contentContainerStyle={styles.listContent}
@@ -1163,49 +1382,195 @@ const [statusDrafts, setStatusDrafts] = useState<
               </TouchableOpacity>
             </View>
 
-            <View style={styles.statsGrid}>
-              <StatCard
-                label="Total Owners"
-                value={overview.totalOwners}
-              />
-              <StatCard label="Active" value={overview.activeOwners} />
-              <StatCard
-                label="Suspended"
-                value={overview.suspendedOwners}
-              />
-              <StatCard
-                label="Categories"
-                value={overview.categories}
-              />
-            </View>
+<View style={styles.statsGrid}>
+  <StatCard
+    label="Total Owners"
+    value={overview.totalOwners}
+  />
+
+  <StatCard
+    label="Active"
+    value={overview.activeOwners}
+  />
+
+  <StatCard
+    label="Suspended"
+    value={overview.suspendedOwners}
+  />
+
+  <StatCard
+    label="Categories"
+    value={overview.categories}
+  />
+
+  <StatCard
+    label="Total Bookings"
+    value={totalBookings}
+  />
+
+  <View style={styles.statCard}>
+    <Text style={styles.statValue}>
+      {revenueLoading
+        ? "..."
+        : `₹${revenueStats.totalRevenue.toLocaleString("en-IN")}`}
+    </Text>
+
+    <Text style={styles.statLabel}>
+      Total BookEasy Revenue
+    </Text>
+
+    <Text style={styles.ownerDetail}>
+      {revenueStats.successfulPayments} successful payments
+    </Text>
+
+    {revenueError !== "" && (
+      <TouchableOpacity onPress={loadRevenueStats}>
+        <Text style={styles.retryText}>Retry revenue</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+</View>
+
+
+<View style={styles.revenueBreakdown}>
+  <View style={styles.revenueItem}>
+    <Text style={styles.ownerDetail}>Monthly revenue</Text>
+    <Text style={styles.revenueValue}>
+      {revenueLoading
+        ? "Loading..."
+        : `₹${revenueStats.monthlyRevenue.toLocaleString("en-IN")}`}
+    </Text>
+  </View>
+
+  <View style={styles.revenueItem}>
+    <Text style={styles.ownerDetail}>Yearly revenue</Text>
+    <Text style={styles.revenueValue}>
+      {revenueLoading
+        ? "Loading..."
+        : `₹${revenueStats.yearlyRevenue.toLocaleString("en-IN")}`}
+    </Text>
+  </View>
+</View>
 
             {renderBookingStats()}
 
             {renderSubscriptions()}
 
+            
+<Text style={styles.filterLabel}>Filter by category</Text>
+
+<View style={styles.periodButtons}>
+  <TouchableOpacity
+    style={[
+      styles.periodButton,
+      ownerCategoryFilter === "all" && styles.selectedPeriodButton,
+    ]}
+    onPress={() => setOwnerCategoryFilter("all")}
+  >
+    <Text
+      style={[
+        styles.periodButtonText,
+        ownerCategoryFilter === "all" &&
+          styles.selectedPeriodButtonText,
+      ]}
+    >
+      All Categories
+    </Text>
+  </TouchableOpacity>
+
+  {BUSINESS_CATEGORIES.map((category) => (
+    <TouchableOpacity
+      key={category}
+      style={[
+        styles.periodButton,
+        ownerCategoryFilter === category &&
+          styles.selectedPeriodButton,
+      ]}
+      onPress={() => setOwnerCategoryFilter(category)}
+    >
+      <Text
+        style={[
+          styles.periodButtonText,
+          ownerCategoryFilter === category &&
+            styles.selectedPeriodButtonText,
+        ]}
+      >
+        {formatCategory(category)}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
+
+<Text style={styles.filterLabel}>Filter by account status</Text>
+
+<View style={styles.periodButtons}>
+  {(
+    [
+      { label: "All", value: "all" },
+      { label: "Active", value: "active" },
+      { label: "Suspended", value: "suspended" },
+    ] as const
+  ).map((option) => (
+    <TouchableOpacity
+      key={option.value}
+      style={[
+        styles.periodButton,
+        ownerStatusFilter === option.value &&
+          styles.selectedPeriodButton,
+      ]}
+      onPress={() => setOwnerStatusFilter(option.value)}
+    >
+      <Text
+        style={[
+          styles.periodButtonText,
+          ownerStatusFilter === option.value &&
+            styles.selectedPeriodButtonText,
+        ]}
+      >
+        {option.label}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
+
+
             <Text style={styles.sectionTitle}>Business Owners</Text>
 
-            <TextInput
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search name, email, business..."
-              placeholderTextColor="#9ca3af"
-              autoCapitalize="none"
-              returnKeyType="search"
-              onSubmitEditing={loadAdminData}
-            />
 
-            <TouchableOpacity
-              style={styles.searchButton}
-              onPress={loadAdminData}
-            >
-              <Text style={styles.searchButtonText}>Search Owners</Text>
-            </TouchableOpacity>
+<TextInput
+  style={styles.searchInput}
+  value={ownerSearchDraft}
+  onChangeText={setOwnerSearchDraft}
+  placeholder="Search name, email, business..."
+  placeholderTextColor="#9ca3af"
+  autoCapitalize="none"
+  autoCorrect={false}
+  returnKeyType="search"
+  onSubmitEditing={() => {
+    setSearch(ownerSearchDraft.trim());
+  }}
+/>
 
-            <Text style={styles.resultsText}>
-              {owners.length} owner{owners.length === 1 ? "" : "s"} found
-            </Text>
+<TouchableOpacity
+  style={[
+    styles.searchButton,
+    loading && styles.disabledButton,
+  ]}
+  disabled={loading}
+  onPress={() => {
+    setSearch(ownerSearchDraft.trim());
+  }}
+>
+  <Text style={styles.searchButtonText}>Search Owners</Text>
+</TouchableOpacity>
+
+
+<Text style={styles.resultsText}>
+  {filteredOwners.length} owner
+  {filteredOwners.length === 1 ? "" : "s"} shown
+  {" · "}
+  {owners.length} loaded
+</Text>
           </View>
         }
         ListEmptyComponent={
@@ -1587,5 +1952,58 @@ const styles = StyleSheet.create({
   subscriptionSaveButton: {
     backgroundColor: "#2563eb",
   },
+
+  unsavedChangesText: {
+  color: "#b45309",
+  backgroundColor: "#fef3c7",
+  alignSelf: "flex-start",
+  paddingHorizontal: 10,
+  paddingVertical: 5,
+  borderRadius: 8,
+  fontSize: 11,
+  fontWeight: "800",
+  marginTop: 10,
+},
+
+
+errorBox: {
+  backgroundColor: "#fef2f2",
+  borderWidth: 1,
+  borderColor: "#fecaca",
+  borderRadius: 10,
+  padding: 12,
+  marginTop: 10,
+},
+errorText: {
+  color: "#b91c1c",
+  fontSize: 13,
+},
+retryText: {
+  color: "#1d4ed8",
+  fontWeight: "800",
+  marginTop: 8,
+},
+
+revenueBreakdown: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: 10,
+  marginBottom: 24,
+},
+revenueItem: {
+  flex: 1,
+  minWidth: 140,
+  backgroundColor: "#ffffff",
+  borderRadius: 14,
+  padding: 14,
+  borderWidth: 1,
+  borderColor: "#e2e8f0",
+},
+revenueValue: {
+  fontSize: 20,
+  fontWeight: "900",
+  color: "#0f172a",
+  marginTop: 6,
+},
 
 });

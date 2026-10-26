@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import adminMiddleware from "../middleware/adminMiddleware.js";
 import Booking from "../models/Booking.js";
+import Payment from "../models/Payment.js";
 
 const router = express.Router();
 
@@ -37,6 +38,97 @@ router.get("/overview", async (req, res) => {
     res.status(500).json({ message: "Unable to load admin overview" });
   }
 });
+
+
+/**
+ * GET /api/admin/revenue
+ * Revenue actually recorded as paid to BookEasy.
+ */
+router.get("/revenue", async (req, res) => {
+  try {
+    const [summary, monthly] = await Promise.all([
+      Payment.aggregate([
+        {
+          $match: {
+            status: "PAID",
+            currency: "INR",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: "$amount" },
+            successfulPayments: { $sum: 1 },
+            monthlyRevenue: {
+              $sum: {
+                $cond: [
+                  { $eq: ["$billingPeriod", "monthly"] },
+                  "$amount",
+                  0,
+                ],
+              },
+            },
+            yearlyRevenue: {
+              $sum: {
+                $cond: [
+                  { $eq: ["$billingPeriod", "yearly"] },
+                  "$amount",
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      Payment.aggregate([
+        {
+          $match: {
+            status: "PAID",
+            currency: "INR",
+            paidAt: { $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: { date: "$paidAt", timezone: "Asia/Kolkata" } },
+              month: { $month: { date: "$paidAt", timezone: "Asia/Kolkata" } },
+            },
+            revenue: { $sum: "$amount" },
+            payments: { $sum: 1 },
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
+      ]),
+    ]);
+
+    const totals = summary[0] || {
+      totalRevenue: 0,
+      successfulPayments: 0,
+      monthlyRevenue: 0,
+      yearlyRevenue: 0,
+    };
+
+    res.json({
+      totalRevenue: totals.totalRevenue,
+      successfulPayments: totals.successfulPayments,
+      monthlyRevenue: totals.monthlyRevenue,
+      yearlyRevenue: totals.yearlyRevenue,
+      monthlyBreakdown: monthly.map((item) => ({
+        year: item._id.year,
+        month: item._id.month,
+        revenue: item.revenue,
+        payments: item.payments,
+      })),
+    });
+  } catch (error) {
+    console.error("Admin revenue error:", error);
+    res.status(500).json({
+      message: "Unable to load admin revenue.",
+    });
+  }
+});
+
 
 // GET /api/admin/owners?search=salon
 router.get("/owners", async (req, res) => {
@@ -319,12 +411,37 @@ router.get("/business-booking-stats", async (req, res) => {
 });
 
 
+
 const ADMIN_SUBSCRIPTION_PLANS = {
-  FREE: { name: "Free", price: 0, bookingLimit: 30 },
-  STARTER: { name: "Starter", price: 299, bookingLimit: null },
-  BUSINESS: { name: "Business", price: 499, bookingLimit: null },
-  PRO: { name: "Pro", price: 999, bookingLimit: null },
+  FREE: {
+    name: "Free",
+    price: 0,
+    billingPeriod: "free",
+    bookingLimit: 100,
+  },
+  STARTER: {
+    name: "Premium",
+    price: 299,
+    billingPeriod: "monthly",
+    yearlyPrice: 2990,
+    bookingLimit: null,
+  },
+
+  // Retained for existing legacy subscriptions.
+  BUSINESS: {
+    name: "Business (Legacy)",
+    price: 499,
+    billingPeriod: "monthly",
+    bookingLimit: null,
+  },
+  PRO: {
+    name: "Pro (Legacy)",
+    price: 999,
+    billingPeriod: "monthly",
+    bookingLimit: null,
+  },
 };
+
 
 // GET /api/admin/subscriptions
 // View subscription records and plan counts.
