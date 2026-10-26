@@ -376,11 +376,11 @@ if (checkoutResult?.redirect) {
       );
     }
 
-    if (
-      !data.paymentSessionId ||
-      data.billingPeriod !== "yearly" ||
-      Number(data.amount) !== 2990
-    ) {
+if (
+  !data.paymentSessionId ||
+  data.billingPeriod !== "yearly" ||
+  Number(data.amount) !== Number(plan.yearlyPrice)
+) {
       console.error("Unexpected one-time payment response:", data);
       throw new Error(
         "The server returned unexpected annual payment details. Please try again."
