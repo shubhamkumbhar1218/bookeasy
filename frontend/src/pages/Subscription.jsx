@@ -340,78 +340,149 @@ if (checkoutResult?.redirect) {
     }
   };
 
-  const startOneTimePlanCheckout = async (plan) => {
-  if (checkoutLoadingPlan) return;
 
-  setCheckoutError("");
-  setCheckoutLoadingPlan(plan.id);
+async function startOneTimePlanCheckout(plan, billingPeriod = "yearly") {
+  const token = localStorage.getItem("bookeasy_token");
+
+  if (!token) {
+    alert("Please log in before purchasing a plan.");
+    return;
+  }
+
+  if (plan.id !== "STARTER") {
+    alert("Razorpay checkout is currently available for STARTER only.");
+    return;
+  }
+
+  if (!["monthly", "yearly"].includes(billingPeriod)) {
+    alert("Invalid billing period.");
+    return;
+  }
+
+  const expectedAmount = billingPeriod === "monthly" ? 299 : 2990;
 
   try {
-    const token = localStorage.getItem("bookeasy_token");
-
-    if (!token) {
-      throw new Error("Please log in again.");
+    // Load Razorpay Checkout only when needed.
+    if (!window.Razorpay) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error("Could not load Razorpay Checkout."));
+        document.body.appendChild(script);
+      });
     }
 
-    const Cashfree = await loadCashfreeSDK();
-
-    const response = await fetch(`${API}/payments/create-order`, {
+    const response = await fetch(`${API}/payments/razorpay/create-order`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        plan: plan.id,
-        billingPeriod: "yearly",
+        plan: "STARTER",
+        billingPeriod,
       }),
     });
 
-    const data = await response.json().catch(() => ({}));
+    const order = await response.json();
 
-    if (!response.ok || data.success === false) {
-      throw new Error(
-        data.message ||
-          `Unable to create payment order (HTTP ${response.status}).`
-      );
+    if (!response.ok || !order.success) {
+      throw new Error(order.message || "Could not create payment order.");
     }
 
-if (
-  !data.paymentSessionId ||
-  data.billingPeriod !== "yearly" ||
-  Number(data.amount) !== Number(plan.yearlyPrice)
-) {
-      console.error("Unexpected one-time payment response:", data);
-      throw new Error(
-        "The server returned unexpected annual payment details. Please try again."
-      );
+    if (
+      order.amount !== expectedAmount * 100 ||
+      order.currency !== "INR" ||
+      !order.keyId ||
+      !order.razorpayOrderId ||
+      !order.orderId
+    ) {
+      throw new Error("The payment order details are invalid.");
     }
 
-    const cashfree = Cashfree({
-      mode:
-        import.meta.env.VITE_CASHFREE_MODE === "production"
-          ? "production"
-          : "sandbox",
+    const checkout = new window.Razorpay({
+      key: order.keyId,
+      amount: order.amount,
+      currency: order.currency,
+      name: "BookEasy",
+      description:
+        billingPeriod === "monthly"
+          ? "STARTER Plan — Monthly"
+          : "STARTER Plan — Yearly",
+      order_id: order.razorpayOrderId,
+
+      handler: async (paymentResult) => {
+        try {
+          const verifyResponse = await fetch(
+            `${API}/payments/razorpay/verify`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                orderId: order.orderId,
+                razorpay_order_id: paymentResult.razorpay_order_id,
+                razorpay_payment_id: paymentResult.razorpay_payment_id,
+                razorpay_signature: paymentResult.razorpay_signature,
+              }),
+            }
+          );
+
+          const verification = await verifyResponse.json();
+
+          if (
+            !verifyResponse.ok ||
+            !verification.success ||
+            verification.paid !== true
+          ) {
+            throw new Error(
+              verification.message ||
+                "Payment verification failed. Please check your subscription status."
+            );
+          }
+
+          // Navigate only after backend verification succeeds.
+          window.location.assign(
+            `/payment/return?provider=razorpay&order_id=${encodeURIComponent(
+              order.orderId
+            )}&verified=1`
+          );
+        } catch (error) {
+          alert(
+            error.message ||
+              "Payment was submitted, but verification could not be completed. Please check your subscription status before paying again."
+          );
+        }
+      },
+
+      modal: {
+        ondismiss: () => {
+          console.log("Razorpay checkout was closed.");
+        },
+      },
+
+      theme: {
+        color: "#2563eb",
+      },
     });
 
-    const checkoutResult = await cashfree.checkout({
-      paymentSessionId: data.paymentSessionId,
-      redirectTarget: "_self",
+    checkout.on("payment.failed", (event) => {
+      alert(
+        event.error?.description ||
+          "Payment failed. Please try again."
+      );
     });
 
-    if (checkoutResult?.error) {
-      throw new Error(
-        checkoutResult.error.message ||
-          "Unable to open Cashfree payment checkout."
-      );
-    }
-  } catch (err) {
-    console.error("Annual checkout failed:", err);
-    setCheckoutError(err.message || "Unable to start annual checkout.");
-  } finally {
-    setCheckoutLoadingPlan("");
+    checkout.open();
+  } catch (error) {
+    alert(error.message || "Unable to start Razorpay checkout.");
   }
-};
+}
+
 
   useEffect(() => {
     loadSubscription();

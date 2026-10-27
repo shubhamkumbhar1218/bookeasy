@@ -16,9 +16,11 @@ const orderId =
   searchParams.get("order_id") ||
   searchParams.get("orderId");
 
+  const provider = searchParams.get("provider");
+
   const [status, setStatus] = useState("VERIFYING");
   const [message, setMessage] = useState(
-    "Checking your payment status with Cashfree..."
+    "Checking your payment status..."
   );
 
   const [checking, setChecking] = useState(false);
@@ -34,6 +36,64 @@ async function verifySubscription() {
     setMessage("Please log in to check your payment status.");
     return;
   }
+
+  
+if (provider === "razorpay") {
+  if (!orderId) {
+    setStatus("NO_REFERENCE");
+    setMessage("The BookEasy payment reference is missing.");
+    return;
+  }
+
+  setChecking(true);
+  setStatus("VERIFYING");
+  setMessage("Checking your Razorpay payment with BookEasy...");
+
+  try {
+    const response = await fetch(`${API}/payments/razorpay/status`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ orderId }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (response.status === 401) {
+      setStatus("LOGIN_REQUIRED");
+      setMessage("Your session has expired. Please log in again.");
+      return;
+    }
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || "Could not check payment status.");
+    }
+
+    if (data.paid === true) {
+      setStatus("AUTHORIZED");
+      setMessage(
+        `Your Razorpay payment was verified. Your ${data.plan} plan (${data.billingPeriod}) is active.`
+      );
+    } else {
+      setStatus("PENDING");
+      setMessage(
+        `Your Razorpay payment is not confirmed yet. Current status: ${data.paymentStatus || "Pending"}. Please check again shortly.`
+      );
+    }
+  } catch (error) {
+    setStatus("ERROR");
+    setMessage(
+      error.message || "Could not check payment status."
+    );
+  } finally {
+    setChecking(false);
+  }
+
+  return;
+}
+
 
   if (!subscriptionId && !orderId) {
     setStatus("NO_REFERENCE");

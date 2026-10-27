@@ -1,8 +1,6 @@
-
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -57,9 +55,14 @@ export default function OrderPaymentReturn() {
 
         const result = await response.json();
 
-        if (!response.ok || result.success !== true || result.paid !== true) {
+        if (
+          !response.ok ||
+          result.success !== true ||
+          result.paid !== true ||
+          result.planActivated !== true
+        ) {
           throw new Error(
-            result.message || "Payment has not been confirmed yet."
+            result.message || "Payment has not been confirmed and activated yet."
           );
         }
 
@@ -67,16 +70,17 @@ export default function OrderPaymentReturn() {
 
         setVerified(true);
         setMessage(
-          result.message || "Your yearly plan is now active."
+          result.message ||
+            "Your payment was verified and your plan is active."
         );
       } catch (error) {
-        const message =
+        const errorText =
           error instanceof Error
             ? error.message
             : "Unable to verify your payment.";
 
-        setErrorMessage(message);
-        setMessage("We couldn't confirm your payment.");
+        setErrorMessage(errorText);
+        setMessage("We couldn't confirm your plan activation.");
       } finally {
         setLoading(false);
       }
@@ -94,9 +98,7 @@ export default function OrderPaymentReturn() {
       {loading ? (
         <ActivityIndicator size="large" color="#2F4F43" />
       ) : (
-        <Text style={styles.icon}>
-          {verified ? "✓" : "!"}
-        </Text>
+        <Text style={styles.icon}>{verified ? "✓" : "!"}</Text>
       )}
 
       <Text style={styles.title}>
