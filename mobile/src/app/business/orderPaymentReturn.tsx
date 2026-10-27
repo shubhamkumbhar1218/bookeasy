@@ -16,7 +16,7 @@ export default function OrderPaymentReturn() {
   }>();
 
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("Verifying your payment...");
+  const [message, setMessage] = useState("Verifying your Razorpay payment...");
   const [verified, setVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const started = useRef(false);
@@ -35,22 +35,42 @@ export default function OrderPaymentReturn() {
         }
 
         const orderId =
-          order_id ||
+          (typeof order_id === "string" ? order_id : undefined) ||
           (await AsyncStorage.getItem("bookeasy_pending_order_id"));
 
-        if (!orderId) {
+        const razorpayOrderId = await AsyncStorage.getItem(
+          "bookeasy_razorpay_order_id"
+        );
+        const razorpayPaymentId = await AsyncStorage.getItem(
+          "bookeasy_razorpay_payment_id"
+        );
+        const razorpaySignature = await AsyncStorage.getItem(
+          "bookeasy_razorpay_signature"
+        );
+
+        if (
+          !orderId ||
+          !razorpayOrderId ||
+          !razorpayPaymentId ||
+          !razorpaySignature
+        ) {
           throw new Error(
-            "Payment order ID was not found. Please refresh your subscription page."
+            "Razorpay verification details are missing. Return to subscriptions and try again."
           );
         }
 
-        const response = await fetch(`${API_URL}/payments/verify`, {
+        const response = await fetch(`${API_URL}/payments/razorpay/verify`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ orderId }),
+          body: JSON.stringify({
+            orderId,
+            razorpay_order_id: razorpayOrderId,
+            razorpay_payment_id: razorpayPaymentId,
+            razorpay_signature: razorpaySignature,
+          }),
         });
 
         const result = await response.json();
@@ -62,24 +82,28 @@ export default function OrderPaymentReturn() {
           result.planActivated !== true
         ) {
           throw new Error(
-            result.message || "Payment has not been confirmed and activated yet."
+            result.message ||
+              "Razorpay has not confirmed payment and plan activation."
           );
         }
 
-        await AsyncStorage.removeItem("bookeasy_pending_order_id");
+        await AsyncStorage.multiRemove([
+          "bookeasy_pending_order_id",
+          "bookeasy_razorpay_order_id",
+          "bookeasy_razorpay_payment_id",
+          "bookeasy_razorpay_signature",
+        ]);
 
         setVerified(true);
         setMessage(
-          result.message ||
-            "Your payment was verified and your plan is active."
+          result.message || "Your payment is verified and your plan is active."
         );
       } catch (error) {
-        const errorText =
+        setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Unable to verify your payment.";
-
-        setErrorMessage(errorText);
+            : "Unable to verify your Razorpay payment."
+        );
         setMessage("We couldn't confirm your plan activation.");
       } finally {
         setLoading(false);
@@ -116,10 +140,7 @@ export default function OrderPaymentReturn() {
       ) : null}
 
       {!loading ? (
-        <TouchableOpacity
-          style={styles.button}
-          onPress={goToSubscription}
-        >
+        <TouchableOpacity style={styles.button} onPress={goToSubscription}>
           <Text style={styles.buttonText}>
             {verified ? "View my plan" : "Return to subscription"}
           </Text>

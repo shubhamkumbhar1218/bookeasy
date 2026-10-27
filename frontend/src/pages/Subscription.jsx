@@ -1127,11 +1127,8 @@ async function startOneTimePlanCheckout(plan, billingPeriod = "yearly") {
                     type="button"
                     disabled={isCurrent || anyCheckoutRunning}
                     onClick={() => {
-  if (
-    String(plan.id).toUpperCase() === "STARTER" &&
-    billingPeriod === "yearly"
-  ) {
-    startOneTimePlanCheckout(plan);
+  if (Number(plan.price) > 0) {
+    startOneTimePlanCheckout(plan, billingPeriod);
   } else {
     startPlanCheckout(plan);
   }
@@ -1183,12 +1180,11 @@ async function startOneTimePlanCheckout(plan, billingPeriod = "yearly") {
 
           <div>
             <strong>Subscription payment protection</strong>
-            <p style={styles.muted}>
-              Paid access is not granted by clicking Upgrade. BookEasy
-              must verify subscription status with Cashfree on the
-              backend before activating a paid plan. Use sandbox mode
-              while testing.
-            </p>
+<p style={styles.muted}>
+  Paid access is not granted simply by clicking Upgrade.
+  BookEasy verifies payments with Razorpay on the backend
+  before activating a paid plan.
+</p>
           </div>
         </div>
 
@@ -1211,3 +1207,4 @@ async function startOneTimePlanCheckout(plan, billingPeriod = "yearly") {
 }
 
 export default Subscription;
+

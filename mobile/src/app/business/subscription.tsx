@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useState } from "react";
 
 import {
   ActivityIndicator,
@@ -14,15 +14,7 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API_URL from "../../api";
-import {
-  CFPaymentGatewayService,
-} from "react-native-cashfree-pg-sdk";
-
-import {
-  CFEnvironment,
-  CFSession,
-  CFSubscriptionSession,
-} from "cashfree-pg-api-contract";
+import RazorpayCheckout from "react-native-razorpay";
 
 type Plan = {
   id: string;
@@ -104,59 +96,6 @@ export default function BusinessSubscription() {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">(
   "yearly"
 );
-  const PENDING_SUBSCRIPTION_KEY = "bookeasy_pending_subscription_id";
-
-
-useEffect(() => {
-  let previousState = AppState.currentState;
-  let navigating = false;
-
-  const subscription = AppState.addEventListener(
-    "change",
-    async (nextState) => {
-      const returnedToApp =
-        previousState.match(/inactive|background/) &&
-        nextState === "active";
-
-      previousState = nextState;
-
-      if (!returnedToApp || navigating) return;
-
-      try {
-        const pendingOrderId = await AsyncStorage.getItem(
-          "bookeasy_pending_order_id"
-        );
-
-        const pendingSubscriptionId = await AsyncStorage.getItem(
-          PENDING_SUBSCRIPTION_KEY
-        );
-
-        if (!pendingOrderId && !pendingSubscriptionId) return;
-
-        navigating = true;
-
-        if (pendingOrderId) {
-          router.replace({
-            pathname: "/business/orderPaymentReturn",
-            params: { order_id: pendingOrderId },
-          });
-        } else if (pendingSubscriptionId) {
-          router.replace({
-            pathname: "/business/paymentReturn",
-            params: {
-              subscription_id: pendingSubscriptionId,
-            },
-          });
-        }
-      } catch (error) {
-        navigating = false;
-        console.log("Payment return recovery error:", error);
-      }
-    }
-  );
-
-  return () => subscription.remove();
-}, []);
 
 
 
@@ -180,6 +119,14 @@ useEffect(() => {
       );
 
       const result = await response.json();
+
+      console.log("Razorpay order check:", {
+  success: result.success,
+  keyPrefix: String(result.keyId || "").slice(0, 8),
+  hasOrderId: Boolean(result.razorpayOrderId),
+  amount: result.amount,
+  currency: result.currency,
+});
 
       if (response.status === 401) {
         await AsyncStorage.multiRemove([
@@ -224,6 +171,7 @@ useEffect(() => {
   };
 
 
+
   const handleUpgrade = async (plan: Plan) => {
     if (upgradingPlan) return;
 
@@ -232,26 +180,34 @@ useEffect(() => {
       return;
     }
 
-    const selectedBillingPeriod =
-      plan.id === "STARTER" ? billingPeriod : "monthly";
+    if (plan.id !== "STARTER") {
+      Alert.alert(
+        "Plan unavailable",
+        "Razorpay checkout currently supports the STARTER plan only."
+      );
+      return;
+    }
 
+    const selectedBillingPeriod = billingPeriod;
     setUpgradingPlan(plan.id);
+
+    const pendingKeys = [
+      "bookeasy_pending_order_id",
+      "bookeasy_razorpay_order_id",
+      "bookeasy_razorpay_payment_id",
+      "bookeasy_razorpay_signature",
+    ];
 
     try {
       const token = await AsyncStorage.getItem("bookeasy_token");
 
       if (!token) {
-        setUpgradingPlan(null);
         router.replace("/business/login");
         return;
       }
 
-      const isYearly = selectedBillingPeriod === "yearly";
-
       const response = await fetch(
-        `${API_URL}/payments/${
-          isYearly ? "create-order" : "create-subscription"
-        }`,
+        `${API_URL}/payments/razorpay/create-order`,
         {
           method: "POST",
           headers: {
@@ -259,7 +215,7 @@ useEffect(() => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            plan: plan.id,
+            plan: "STARTER",
             billingPeriod: selectedBillingPeriod,
           }),
         }
@@ -267,114 +223,86 @@ useEffect(() => {
 
       const result = await response.json();
 
-      if (!response.ok) {
+      console.log("Razorpay create-order response:", {
+  success: result.success,
+  keyPrefix: String(result.keyId || "").slice(0, 8),
+  hasOrderId: Boolean(result.razorpayOrderId),
+  amount: result.amount,
+  currency: result.currency,
+  message: result.message,
+}); 
+      if (!response.ok || !result.success) {
         throw new Error(
-          result.message || "Unable to start checkout."
+          result.message || "Unable to create a Razorpay order."
         );
       }
 
-      const environment =
-        String(result.cashfreeMode).toLowerCase() === "production"
-          ? CFEnvironment.PRODUCTION
-          : CFEnvironment.SANDBOX;
-
-      if (isYearly) {
-        if (!result.paymentSessionId || !result.orderId) {
-          throw new Error(
-            "Cashfree did not return a valid order payment session."
-          );
-        }
-
-        await AsyncStorage.setItem(
-          "bookeasy_pending_order_id",
-          result.orderId
-        );
-
-        CFPaymentGatewayService.setCallback({
-          onVerify: (orderID: string) => {
-            setUpgradingPlan(null);
-
-            router.replace({
-              pathname: "/business/orderPaymentReturn",
-              params: { order_id: orderID || result.orderId },
-            });
-          },
-
-          onError: (
-            error: import("react-native-cashfree-pg-sdk").CFErrorResponse
-          ) => {
-            setUpgradingPlan(null);
-
-            Alert.alert(
-              "Checkout not completed",
-              error.getMessage() || "Please try again."
-            );
-          },
-        });
-
-        const session = new CFSession(
-          result.paymentSessionId,
-          result.orderId,
-          environment
-        );
-
-        CFPaymentGatewayService.doWebPayment(session);
-        return;
+      if (
+        !result.orderId ||
+        !result.razorpayOrderId ||
+        !result.keyId ||
+        !Number.isFinite(result.amount) ||
+        result.amount <= 0
+      ) {
+        throw new Error("The server returned an invalid Razorpay order.");
       }
 
-      if (!result.subscriptionSessionId || !result.subscriptionId) {
-        throw new Error(
-          "Cashfree did not return a valid subscription session."
-        );
-      }
-
+      // Save the internal BookEasy order ID before opening checkout.
+      await AsyncStorage.multiRemove(pendingKeys);
       await AsyncStorage.setItem(
-        "bookeasy_pending_subscription_id",
-        result.subscriptionId
+        "bookeasy_pending_order_id",
+        result.orderId
       );
 
-      CFPaymentGatewayService.setCallback({
-        onVerify: (subscriptionId: string) => {
-          setUpgradingPlan(null);
-
-          router.replace({
-            pathname: "/business/paymentReturn",
-            params: {
-              subscription_id: result.subscriptionId,
-            },
-          });
-        },
-
-        onError: (
-          error: import("react-native-cashfree-pg-sdk").CFErrorResponse
-        ) => {
-          setUpgradingPlan(null);
-
-          Alert.alert(
-            "Checkout not completed",
-            error.getMessage() || "Please try again."
-          );
-        },
+      const paymentData = await RazorpayCheckout.open({
+        description: `BookEasy STARTER ${selectedBillingPeriod} plan`,
+        name: "BookEasy",
+        currency: result.currency || "INR",
+        key: result.keyId,
+        amount: result.amount,
+        order_id: result.razorpayOrderId,
+        prefill: {},
+        theme: { color: "#2F4F43" },
       });
 
-      const session = new CFSubscriptionSession(
-        result.subscriptionSessionId,
-        result.subscriptionId,
-        environment
-      );
+      if (
+        !paymentData.razorpay_order_id ||
+        !paymentData.razorpay_payment_id ||
+        !paymentData.razorpay_signature
+      ) {
+        throw new Error(
+          "Razorpay did not return all payment verification details."
+        );
+      }
 
-      CFPaymentGatewayService.doSubscriptionPayment(session);
-    } catch (error) {
-      setUpgradingPlan(null);
+      await AsyncStorage.multiSet([
+        ["bookeasy_razorpay_order_id", paymentData.razorpay_order_id],
+        ["bookeasy_razorpay_payment_id", paymentData.razorpay_payment_id],
+        ["bookeasy_razorpay_signature", paymentData.razorpay_signature],
+      ]);
 
-      Alert.alert(
-        "Checkout",
+      router.replace({
+        pathname: "/business/orderPaymentReturn",
+        params: { order_id: result.orderId },
+      });
+    } catch (error: unknown) {
+      // A user closing checkout is not proof of payment failure.
+      const message =
         error instanceof Error
           ? error.message
-          : "Unable to start checkout. Please try again."
+          : "Checkout was not completed.";
+
+      console.log("Razorpay checkout result:", message);
+
+      Alert.alert(
+        "Razorpay checkout",
+        message || "Checkout was closed or could not be completed."
       );
+    } finally {
+      setUpgradingPlan(null);
     }
   };
+
 
 
   if (loading) {
@@ -465,7 +393,7 @@ useEffect(() => {
             onPress={() => router.back()}
             accessibilityLabel="Go back"
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <Text style={styles.backCircleText}>Back</Text>
           </TouchableOpacity>
 
           <View style={styles.headerText}>
@@ -474,7 +402,7 @@ useEffect(() => {
               Manage your BookEasy plan
             </Text>
           </View>
-          <Text style={styles.crown}>👑</Text>
+          <Text style={styles.crown}>*</Text>
         </View>
 
         <View style={styles.currentCard}>
@@ -485,12 +413,12 @@ useEffect(() => {
                 {data.planName || data.plan}
               </Text>
               <Text style={styles.status}>
-                ● {data.subscriptionStatus || "ACTIVE"}
+                Status: {data.subscriptionStatus || "ACTIVE"}
               </Text>
             </View>
             <View style={styles.priceContainer}>
               <Text style={styles.currentPrice}>
-                ₹{data.price}
+                Rs.{data.price}
               </Text>
               <Text style={styles.pricePeriod}>
                 {data.price === 0 ? "forever" : "/ month"}
@@ -553,7 +481,7 @@ useEffect(() => {
             {usage.bookingsUsed}{" "}
             <Text style={styles.usageTotal}>
               {usage.unlimited || !usage.bookingLimit
-                ? "bookings used · Unlimited"
+                ? "bookings used - Unlimited"
                 : `of ${usage.bookingLimit} bookings`}
             </Text>
           </Text>
@@ -573,7 +501,7 @@ useEffect(() => {
           <Text style={styles.resetText}>
             {usage.unlimited || !usage.bookingLimit
               ? "Your plan includes unlimited bookings."
-              : `${usage.remaining ?? 0} bookings remaining · Resets ${resetDate}`}
+              : `${usage.remaining ?? 0} bookings remaining - Resets ${resetDate}`}
           </Text>
 
           {limitReached ? (
@@ -663,7 +591,7 @@ useEffect(() => {
     >
       Monthly
     </Text>
-    <Text style={styles.billingPrice}>₹299/month</Text>
+    <Text style={styles.billingPrice}>Rs. 299/month</Text>
   </TouchableOpacity>
 
   <TouchableOpacity
@@ -683,8 +611,8 @@ useEffect(() => {
     >
       Yearly
     </Text>
-    <Text style={styles.billingPrice}>₹2,990/year</Text>
-    <Text style={styles.savingsBadge}>SAVE ₹598 · 16.7% OFF</Text>
+    <Text style={styles.billingPrice}>Rs. 2,990/year</Text>
+    <Text style={styles.savingsBadge}>SAVE Rs. 598 - 16.7% OFF</Text>
   </TouchableOpacity>
 </View>
 
@@ -724,7 +652,7 @@ useEffect(() => {
                 <View style={styles.priceContainer}>
                   
 <Text style={styles.planPrice}>
-  ₹{plan.id === "STARTER" && billingPeriod === "yearly"
+  Rs.{plan.id === "STARTER" && billingPeriod === "yearly"
     ? "2,990"
     : plan.price}
 </Text>
@@ -738,7 +666,7 @@ useEffect(() => {
 </Text>
 
 {plan.id === "STARTER" && billingPeriod === "yearly" ? (
-  <Text style={styles.savingsBadge}>Save ₹598 · 16.7% off</Text>
+  <Text style={styles.savingsBadge}>Save Rs.598 - 16.7% off</Text>
 ) : null}
 
                 </View>
@@ -791,8 +719,8 @@ useEffect(() => {
         <View style={styles.noteCard}>
           <Text style={styles.noteTitle}>Secure subscription checkout</Text>
 <Text style={styles.noteText}>
-  Complete checkout through Cashfree. Your plan will update
-  after BookEasy verifies the subscription authorization.
+  Complete your payment securely through Razorpay. Your plan will
+  update after BookEasy verifies the payment.
 </Text>
         </View>
       </ScrollView>
@@ -830,11 +758,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#E9F0E8",
   },
-  backCircleText: {
-    fontSize: 30,
-    color: "#243B35",
-    lineHeight: 34,
-  },
+backCircleText: {
+  fontSize: 12,
+  fontWeight: "700",
+  color: "#243B35",
+},
   headerText: {
     flex: 1,
   },
@@ -1121,3 +1049,4 @@ savingsBadge: {
 
 
 });
+

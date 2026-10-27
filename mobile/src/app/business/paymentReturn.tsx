@@ -115,16 +115,27 @@ export default function PaymentReturnScreen() {
         setPlan(data.plan);
       }
 
+
       // Only the backend can confirm plan activation.
-if (
-  data.authorizationStatus === "ACTIVE" &&
-  data.subscriptionStatus === "ACTIVE" &&
-  data.planActivated === true
-) {
+      const authorizationStatus = String(
+        data.authorizationStatus || ""
+      ).toUpperCase();
+
+      const subscriptionStatus = String(
+        data.subscriptionStatus || ""
+      ).toUpperCase();
+
+      if (
+        authorizationStatus === "ACTIVE" &&
+        subscriptionStatus === "ACTIVE" &&
+        data.planActivated === true
+      ) {
         setScreenStatus("active");
+
         await AsyncStorage.removeItem(
-    "bookeasy_pending_subscription_id"
-  );
+          "bookeasy_pending_subscription_id"
+        );
+
         setMessage(
           data.message ||
             "Your subscription is active. You can continue to your dashboard."
@@ -156,26 +167,27 @@ if (
         return;
       }
 
-      const authorizationStatus = String(
-        data.authorizationStatus || ""
-      ).toUpperCase();
-
-      const subscriptionStatus = String(
-        data.subscriptionStatus || ""
-      ).toUpperCase();
-
       const cashfreeStatus = String(
         data.cashfreeSubscriptionStatus || ""
       ).toUpperCase();
 
       const isFailed =
         ["FAILED", "FAILURE"].includes(authorizationStatus) ||
-        ["FAILED", "CANCELLED", "CUSTOMER_CANCELLED", "EXPIRED", "COMPLETED", "ON_HOLD"].includes(
-          subscriptionStatus
-        ) ||
-        ["CANCELLED", "CUSTOMER_CANCELLED", "EXPIRED", "COMPLETED", "ON_HOLD"].includes(
-          cashfreeStatus
-        );
+        [
+          "FAILED",
+          "CANCELLED",
+          "CUSTOMER_CANCELLED",
+          "EXPIRED",
+          "COMPLETED",
+          "ON_HOLD",
+        ].includes(subscriptionStatus) ||
+        [
+          "CANCELLED",
+          "CUSTOMER_CANCELLED",
+          "EXPIRED",
+          "COMPLETED",
+          "ON_HOLD",
+        ].includes(cashfreeStatus);
 
       if (isFailed) {
         setScreenStatus("failed");
