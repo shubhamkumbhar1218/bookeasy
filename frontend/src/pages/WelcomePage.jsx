@@ -2,6 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Store, UserRound, ArrowRight } from "lucide-react";
 import "../styles/WelcomePage.css";
+import BookEasyContact from "./BookEasyContact";
 
 function WelcomePage() {
   const navigate = useNavigate();
@@ -113,12 +114,22 @@ function WelcomePage() {
 
         </div>
 
-        <p className="welcome-footer">
-          No account needed to book an appointment.
-        </p>
+
+<p className="welcome-footer">
+  No account needed to book an appointment.
+</p>
+
+<div className="legal-links">
+  <a href="/terms">Terms &amp; Conditions</a>
+  <a href="/privacy">Privacy Policy</a>
+  <a href="/refund-policy">Cancellation &amp; Refund Policy</a>
+</div>
+<BookEasyContact />
+
+</div>
+
 
       </div>
-    </div>
   );
 }
 

@@ -7,7 +7,11 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-
+import {
+  // Keep all your existing icons
+  HelpCircle,
+  ChevronDown,
+} from "lucide-react";
 import BookingPages from "./pages/BookingPages";
 import CustomerBookings from "./CustomerBookings";
 import CustomerDashboard from "./pages/CustomerDashboard";
@@ -18,6 +22,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Subscription from "./pages/Subscription";
 import PaymentReturn from "./pages/PaymentReturn";
 import AdvancedAnalytics from "./pages/AdvancedAnalytics";
+import LegalPages from "./pages/LegalPages";
 import {
   CalendarDays,
   CheckCircle2,
@@ -1466,6 +1471,72 @@ const [form, setForm] = useState({
   const [profilePhoto, setProfilePhoto] = useState(
   user?.profilePhoto || ""
 );
+
+const [showHelpFaq, setShowHelpFaq] = useState(false);
+const [expandedHelpFaq, setExpandedHelpFaq] = useState(null);
+
+const businessFaqs = [
+  {
+    question: "How do I add or edit a service?",
+    answer:
+      "Use the Add Service section to enter a service name, price, duration, and description. Existing services can be edited or deleted from the service list.",
+  },
+  {
+    question: "How do I manage appointments?",
+    answer:
+      "Use the Appointments section to review customer bookings. Pending appointments can be confirmed or cancelled. Confirmed appointments can be rescheduled, completed, or cancelled.",
+  },
+  {
+    question: "How can I reschedule an appointment?",
+    answer:
+      "Find a confirmed appointment and click Reschedule. Select a new date, choose an available time slot, and click Confirm Reschedule. The new time must be available.",
+  },
+  {
+    question: "How do I assign staff to an appointment?",
+    answer:
+      "If Staff Management is included in your plan, use the staff assignment option on the relevant booking to select an active staff member. If you do not see this option, check your plan and staff management access.",
+  },
+  {
+    question: "How do customers book my services online?",
+    answer:
+      "Open Settings and find the Booking Link section. Copy your booking link and share it with customers. Customers can also scan your downloadable QR code to open your booking page.",
+  },
+  {
+    question: "How do I change my business information?",
+    answer:
+      "Open Settings to update your business name, owner name, business type, phone number, address, profile photo, and working hours. Save your changes when finished.",
+  },
+  {
+    question: "Where can I see business reports?",
+    answer:
+      "Use Reports & Analytics to view the reports available to your account. Advanced Analytics is available separately, subject to your plan's feature access.",
+  },
+  {
+    question: "How do I manage my subscription?",
+    answer:
+      "Open the Subscription page from your dashboard to review your plan and subscription options. Features available to you depend on your current plan.",
+  },
+  {
+    question: "Why can't I access a feature?",
+    answer:
+      "Some features require a specific subscription plan. Check your current plan and the feature's requirements. If you believe you should already have access, contact BookEasy support through your established support channel.",
+  },
+  {
+    question: "What should I do if a booking is missing?",
+    answer:
+      "Refresh the dashboard and check the appointment date filter. Choose All bookings to remove the date filter. If the appointment is still missing, contact BookEasy support.",
+  },
+  {
+    question: "How do I refresh my dashboard?",
+    answer:
+      "Click the Refresh button near the top of the dashboard to reload your services and appointments.",
+  },
+  {
+    question: "How can I get further help?",
+    answer:
+      "Review the questions above first. For account-specific issues, contact BookEasy support using your existing support contact details.",
+  },
+];
 
 useEffect(() => {
   const loadBusinessPhoto = async () => {
@@ -3096,6 +3167,114 @@ const rescheduleBooking = async () => {
           </div>
         </div>
       )}
+
+      {/* BUSINESS HELP & FAQ */}
+
+<div className="business-help-widget">
+  {showHelpFaq && (
+    <section
+      className="business-help-panel"
+      aria-label="Business Help and FAQs"
+    >
+      <div className="business-help-header">
+        <div className="business-help-heading">
+          <HelpCircle size={23} />
+
+          <div>
+            <h2>Business Help</h2>
+            <p>Answers for your business</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="business-help-close"
+          onClick={() => setShowHelpFaq(false)}
+          aria-label="Close help panel"
+        >
+          <XCircle size={20} />
+        </button>
+      </div>
+
+      <div className="business-help-intro">
+        Find quick answers about managing your BookEasy business.
+      </div>
+
+      <div className="business-help-faq-list">
+        {businessFaqs.map((faq, index) => {
+          const isExpanded = expandedHelpFaq === index;
+
+          return (
+            <div
+              className={`business-help-faq ${
+                isExpanded ? "expanded" : ""
+              }`}
+              key={faq.question}
+            >
+              <button
+                type="button"
+                className="business-help-question"
+                aria-expanded={isExpanded}
+                onClick={() =>
+                  setExpandedHelpFaq(
+                    isExpanded ? null : index
+                  )
+                }
+              >
+                <span>{faq.question}</span>
+
+                <ChevronDown
+                  size={18}
+                  className={
+                    isExpanded
+                      ? "business-help-chevron open"
+                      : "business-help-chevron"
+                  }
+                />
+              </button>
+
+              {isExpanded && (
+                <div className="business-help-answer">
+                  {faq.answer}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="business-help-footer">
+        <strong>Still need help?</strong>
+        <p>
+          Contact BookEasy support through your existing
+          support channel for account-specific assistance.
+        </p>
+      </div>
+    </section>
+  )}
+
+  <button
+    type="button"
+    className={`business-help-toggle ${
+      showHelpFaq ? "active" : ""
+    }`}
+    onClick={() => setShowHelpFaq((current) => !current)}
+    aria-expanded={showHelpFaq}
+    aria-label={
+      showHelpFaq
+        ? "Close business help"
+        : "Open business help and FAQs"
+    }
+  >
+    {showHelpFaq ? (
+      <XCircle size={22} />
+    ) : (
+      <HelpCircle size={23} />
+    )}
+
+    <span>{showHelpFaq ? "Close Help" : "Help & FAQ"}</span>
+  </button>
+</div>
     </div>
   );
 }
@@ -3292,6 +3471,10 @@ function App() {
   path="/payment/return"
   element={<PaymentReturn />}
 />
+
+<Route path="/terms" element={<LegalPages />} />
+<Route path="/privacy" element={<LegalPages />} />
+<Route path="/refund-policy" element={<LegalPages />} />
 
 {/* Unknown route */}
 <Route

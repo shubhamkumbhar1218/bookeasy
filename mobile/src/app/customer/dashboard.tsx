@@ -8,6 +8,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Linking,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import API_URL from "../../api";
@@ -80,6 +82,44 @@ const categories = [
   { label: "Other", value: "other" },
 ];
 
+const faqs = [
+  {
+    question: "How do I book an appointment?",
+    answer:
+      "Choose a business, open its details, select a service, choose an available date and time, and follow the steps to confirm your booking.",
+  },
+  {
+    question: "Where can I see my bookings?",
+    answer:
+      "Tap My Bookings on your Customer Dashboard to view your appointments and their current statuses.",
+  },
+  {
+    question: "Can I cancel or reschedule an appointment?",
+    answer:
+      "Open My Bookings and check the actions available for your appointment. The options depend on its current status and the booking rules.",
+  },
+  {
+    question: "How do I search for a business?",
+    answer:
+      "Use the search box to search for a business or location. You can also select a category such as Salon, Gym, Hospital, or Dental Clinic.",
+  },
+  {
+    question: "What if my booking is not confirmed?",
+    answer:
+      "Open My Bookings to check the latest status. If you need assistance, contact the business or BookEasy Management.",
+  },
+  {
+    question: "Do I need to register to book?",
+    answer:
+      "BookEasy supports customer bookings without requiring a customer account. Follow the booking instructions shown for the selected business.",
+  },
+  {
+    question: "How do I contact BookEasy support?",
+    answer:
+      "Email support.bookeasy@gmail.com or call +91 9022284532 for help.",
+  },
+];
+
 export default function CustomerDashboard() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [search, setSearch] = useState("");
@@ -87,6 +127,20 @@ const [selectedCategory, setSelectedCategory] =
   useState("All");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+    const [helpVisible, setHelpVisible] = useState(false);
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+
+  const handleContact = async (url: string) => {
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert(
+      "Unable to open",
+      "Please try again or contact BookEasy Management directly."
+    );
+  }
+};
 
   const loadBusinesses = async () => {
     try {
@@ -243,25 +297,118 @@ if (selectedCategory !== "All") {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <>
-            {/* Header */}
+<View style={styles.topHeader}>
+  <View>
+    <Text style={styles.logo}>BookEasy</Text>
 
-            <View style={styles.topHeader}>
-              <View>
-                <Text style={styles.logo}>
-                  BookEasy
-                </Text>
+    <Text style={styles.headerSubtitle}>
+      Customer Dashboard
+    </Text>
+  </View>
 
-                <Text style={styles.headerSubtitle}>
-                  Customer Dashboard
-                </Text>
-              </View>
+  <View style={styles.headerActions}>
+    <TouchableOpacity
+      style={styles.helpButton}
+      onPress={() => {
+        setHelpVisible((previous) => !previous);
+        setExpandedFaq(null);
+      }}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel="Open Help and Frequently Asked Questions"
+    >
+      <Text style={styles.helpButtonText}>?</Text>
+    </TouchableOpacity>
 
-              <View style={styles.headerIcon}>
-                <Text style={styles.headerIconText}>
-                  👤
-                </Text>
-              </View>
+    <View style={styles.headerIcon}>
+      <Text style={styles.headerIconText}>👤</Text>
+    </View>
+  </View>
+</View>
+
+{/* Help & FAQ Panel */}
+
+{helpVisible && (
+  <View style={styles.faqCard}>
+    <View style={styles.faqHeader}>
+      <View style={styles.faqHeading}>
+        <Text style={styles.faqTitle}>
+          How can we help?
+        </Text>
+
+        <Text style={styles.faqSubtitle}>
+          Frequently asked questions
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.faqCloseButton}
+        onPress={() => {
+          setHelpVisible(false);
+          setExpandedFaq(null);
+        }}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="Close help"
+      >
+        <Text style={styles.faqCloseText}>✕</Text>
+      </TouchableOpacity>
+    </View>
+
+    {faqs.map((faq, index) => {
+      const isExpanded = expandedFaq === index;
+
+      return (
+        <View key={faq.question} style={styles.faqItem}>
+          <TouchableOpacity
+            style={styles.faqQuestion}
+            onPress={() =>
+              setExpandedFaq(isExpanded ? null : index)
+            }
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isExpanded }}
+          >
+            <Text style={styles.faqQuestionText}>
+              {faq.question}
+            </Text>
+
+            <Text style={styles.faqToggle}>
+              {isExpanded ? "−" : "+"}
+            </Text>
+          </TouchableOpacity>
+
+          {isExpanded && (
+            <View style={styles.faqAnswerBox}>
+              <Text style={styles.faqAnswer}>
+                {faq.answer}
+              </Text>
             </View>
+          )}
+        </View>
+      );
+    })}
+
+    <View style={styles.faqSupport}>
+      <Text style={styles.faqSupportText}>
+        Still need help?
+      </Text>
+
+      <TouchableOpacity
+        onPress={() =>
+          handleContact("mailto:support.bookeasy@gmail.com")
+        }
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel="Email BookEasy support"
+      >
+        <Text style={styles.faqSupportLink}>
+          Contact BookEasy Support
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+)}
 
             {/* Back to Business Dashboard */}
 
@@ -381,6 +528,135 @@ if (selectedCategory !== "All") {
                 </View>
               </TouchableOpacity>
             </View>
+
+            
+{/* Legal & Policies */}
+
+<TouchableOpacity
+  onPress={() => router.push("/legal" as any)}
+  activeOpacity={0.8}
+  style={{
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 18,
+    flexDirection: "row",
+    alignItems: "center",
+  }}
+>
+  <Text style={{ fontSize: 22, marginRight: 12 }}>
+    📄
+  </Text>
+
+  <View style={{ flex: 1 }}>
+    <Text
+      style={{
+        fontSize: 14,
+        fontWeight: "700",
+        color: "#111827",
+      }}
+    >
+      Legal & Policies
+    </Text>
+
+    <Text
+      style={{
+        fontSize: 12,
+        color: "#6b7280",
+        marginTop: 4,
+      }}
+    >
+      Terms, privacy and cancellation/refunds
+    </Text>
+  </View>
+
+  <Text style={{ fontSize: 20, color: "#6b7280" }}>
+    ›
+  </Text>
+</TouchableOpacity>
+
+{/* BookEasy Management Support */}
+
+<View style={styles.contactCard}>
+  <View style={styles.contactTop}>
+    <View style={styles.contactIconBox}>
+      <Text style={styles.contactMainIcon}>💬</Text>
+    </View>
+
+    <View style={styles.contactHeadingContainer}>
+      <Text style={styles.contactEyebrow}>
+        BOOKEASY SUPPORT
+      </Text>
+
+      <Text style={styles.contactTitle}>
+        Need a hand?
+      </Text>
+
+      <Text style={styles.contactDescription}>
+        Questions about booking or using BookEasy? Our management team is here to help.
+      </Text>
+    </View>
+  </View>
+
+  <TouchableOpacity
+    style={styles.contactAction}
+    onPress={() =>
+      handleContact("mailto:support.bookeasy@gmail.com")
+    }
+    activeOpacity={0.75}
+    accessibilityRole="button"
+    accessibilityLabel="Email BookEasy Management"
+  >
+    <View style={styles.contactActionIconBox}>
+      <Text style={styles.contactActionIcon}>✉️</Text>
+    </View>
+
+    <View style={styles.contactActionTextContainer}>
+      <Text style={styles.contactActionLabel}>
+        Email our team
+      </Text>
+      <Text style={styles.contactActionValue}>
+        support.bookeasy@gmail.com
+      </Text>
+    </View>
+
+    <Text style={styles.contactArrow}>↗</Text>
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={styles.contactAction}
+    onPress={() =>
+      handleContact("tel:+919022284532")
+    }
+    activeOpacity={0.75}
+    accessibilityRole="button"
+    accessibilityLabel="Call BookEasy Management"
+  >
+    <View style={styles.contactActionIconBox}>
+      <Text style={styles.contactActionIcon}>📞</Text>
+    </View>
+
+    <View style={styles.contactActionTextContainer}>
+      <Text style={styles.contactActionLabel}>
+        Give us a call
+      </Text>
+      <Text style={styles.contactActionValue}>
+        +91 9022284532
+      </Text>
+    </View>
+
+    <Text style={styles.contactArrow}>↗</Text>
+  </TouchableOpacity>
+
+  <View style={styles.contactFooter}>
+    <View style={styles.contactStatusDot} />
+    <Text style={styles.contactFooterText}>
+      Here to make your BookEasy experience easier
+    </Text>
+  </View>
+</View>
 
             {/* Search */}
 
@@ -929,6 +1205,321 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginTop: 6,
   },
+
+  contactCard: {
+  backgroundColor: "#FFFFFF",
+  borderRadius: 22,
+  padding: 18,
+  marginBottom: 20,
+  borderWidth: 1,
+  borderColor: "#DCE7F8",
+  elevation: 2,
+  shadowColor: "#2563EB",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.06,
+  shadowRadius: 12,
+},
+
+contactTop: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginBottom: 20,
+},
+
+contactIconBox: {
+  width: 54,
+  height: 54,
+  borderRadius: 17,
+  backgroundColor: "#2563EB",
+  justifyContent: "center",
+  alignItems: "center",
+  marginRight: 14,
+},
+
+contactMainIcon: {
+  fontSize: 26,
+},
+
+contactHeadingContainer: {
+  flex: 1,
+  minWidth: 0,
+},
+
+contactEyebrow: {
+  color: "#2563EB",
+  fontSize: 10,
+  fontWeight: "800",
+  letterSpacing: 1.5,
+  marginBottom: 5,
+},
+
+contactTitle: {
+  color: "#0F172A",
+  fontSize: 22,
+  fontWeight: "800",
+},
+
+contactDescription: {
+  color: "#64748B",
+  fontSize: 12,
+  lineHeight: 18,
+  marginTop: 5,
+},
+
+contactAction: {
+  flexDirection: "row",
+  alignItems: "center",
+  padding: 13,
+  marginBottom: 10,
+  borderRadius: 15,
+  backgroundColor: "#F8FAFF",
+  borderWidth: 1,
+  borderColor: "#E5EDFA",
+},
+
+contactActionIconBox: {
+  width: 42,
+  height: 42,
+  borderRadius: 13,
+  backgroundColor: "#EAF1FF",
+  justifyContent: "center",
+  alignItems: "center",
+  marginRight: 12,
+},
+
+contactActionIcon: {
+  fontSize: 19,
+},
+
+contactActionTextContainer: {
+  flex: 1,
+  minWidth: 0,
+},
+
+contactActionLabel: {
+  color: "#64748B",
+  fontSize: 11,
+  fontWeight: "600",
+  marginBottom: 5,
+},
+
+contactActionValue: {
+  color: "#1E293B",
+  fontSize: 12,
+  fontWeight: "800",
+},
+
+contactArrow: {
+  color: "#2563EB",
+  fontSize: 20,
+  marginLeft: 8,
+},
+
+contactFooter: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 7,
+  paddingTop: 17,
+  borderTopWidth: 1,
+  borderTopColor: "#E8EEF7",
+},
+
+contactStatusDot: {
+  width: 8,
+  height: 8,
+  borderRadius: 4,
+  backgroundColor: "#22C55E",
+  marginRight: 9,
+},
+
+contactFooterText: {
+  flex: 1,
+  color: "#64748B",
+  fontSize: 11,
+  lineHeight: 17,
+},
+
+  // Help icon beside the profile icon
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  helpButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#EAF1FF",
+    borderWidth: 1,
+    borderColor: "#C9D9FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  helpButtonText: {
+    color: "#2563EB",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+
+  // FAQ panel
+  faqCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#DCE7F8",
+    elevation: 2,
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+  },
+
+  faqHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+
+  faqHeading: {
+    flex: 1,
+  },
+
+  faqTitle: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+
+  faqSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 4,
+  },
+
+  faqCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+
+  faqCloseText: {
+    color: "#475569",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  faqItem: {
+    borderTopWidth: 1,
+    borderTopColor: "#E8EEF7",
+  },
+
+  faqQuestion: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 15,
+  },
+
+  faqQuestionText: {
+    flex: 1,
+    color: "#1E293B",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 20,
+    marginRight: 12,
+  },
+
+  faqToggle: {
+    color: "#2563EB",
+    fontSize: 24,
+    fontWeight: "500",
+  },
+
+  faqAnswerBox: {
+    backgroundColor: "#F8FAFF",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+
+  faqAnswer: {
+    color: "#475569",
+    fontSize: 13,
+    lineHeight: 21,
+  },
+
+  faqSupport: {
+    borderTopWidth: 1,
+    borderTopColor: "#E8EEF7",
+    marginTop: 8,
+    paddingTop: 14,
+  },
+
+  faqSupportText: {
+    color: "#64748B",
+    fontSize: 12,
+    marginBottom: 7,
+  },
+
+  faqSupportLink: {
+    color: "#2563EB",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+
+  helpFloatingButton: {
+  position: "absolute",
+  right: 20,
+  bottom: 24,
+  width: 56,
+  height: 56,
+  borderRadius: 28,
+  backgroundColor: "#2563EB",
+  alignItems: "center",
+  justifyContent: "center",
+  elevation: 8,
+  shadowColor: "#000000",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.25,
+  shadowRadius: 6,
+  zIndex: 100,
+},
+
+helpFloatingButtonText: {
+  color: "#FFFFFF",
+  fontSize: 28,
+  fontWeight: "800",
+},
+
+faqFloatingPanel: {
+  position: "absolute",
+  right: 16,
+  bottom: 92,
+  width: "90%",
+  maxWidth: 380,
+  maxHeight: "72%",
+  backgroundColor: "#FFFFFF",
+  borderRadius: 18,
+  padding: 16,
+  borderWidth: 1,
+  borderColor: "#DCE7F8",
+  elevation: 12,
+  shadowColor: "#000000",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.18,
+  shadowRadius: 8,
+  zIndex: 99,
+},
 });
 
 

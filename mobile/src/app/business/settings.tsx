@@ -1022,6 +1022,27 @@ const qrBookingLink = businessSlug
           </TouchableOpacity>
         </View>
 
+        
+<TouchableOpacity
+  onPress={() => router.push("/legal" as any)}
+  style={{
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+  }}
+>
+  <Text style={{ fontSize: 16, fontWeight: "700", color: "#111827" }}>
+    Legal & Policies
+  </Text>
+  <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 5 }}>
+    Read our terms, privacy policy and refund policy.
+  </Text>
+</TouchableOpacity>
+
+
         {/* Save Settings */}
         <TouchableOpacity
           style={[

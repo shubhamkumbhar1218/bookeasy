@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/CustomerDashboard.css";
+import BookEasyContact from "./BookEasyContact";
 
 import {
   Search,
@@ -30,6 +31,37 @@ function CustomerDashboard() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+
+  const [helpOpen, setHelpOpen] = useState(false);
+const [expandedFaq, setExpandedFaq] = useState(null);
+
+const faqs = [
+  {
+    question: "How do I book a service?",
+    answer:
+      "Search for a business, choose the service you want, and click Book Now to continue with the booking.",
+  },
+  {
+    question: "Where can I view my bookings?",
+    answer:
+      "Click My Bookings in the header to view your booking information.",
+  },
+  {
+    question: "Can I cancel or reschedule a booking?",
+    answer:
+      "Open your booking details and check the available actions for that appointment. Changes depend on the booking status and the business's available slots.",
+  },
+  {
+    question: "How do I find a business?",
+    answer:
+      "Enter a business name, location, or service in the search box. You can also filter by category and sort the results.",
+  },
+  {
+    question: "How do I contact BookEasy support?",
+    answer:
+      "Use the existing BookEasy contact section on this page to find the available support contact options.",
+  },
+];
 
 const categories = [
   { value: "all", label: "All Categories" },
@@ -947,10 +979,224 @@ const categories = [
 
         </section>
 
-      </main>
+
+</main>
+
+<BookEasyContact />
+
+{/* Floating Help / FAQ */}
+{helpOpen && (
+  <section
+    role="dialog"
+    aria-label="Help and frequently asked questions"
+    style={{
+      position: "fixed",
+      right: "20px",
+      bottom: "96px",
+      width: "min(380px, calc(100vw - 32px))",
+      maxHeight: "min(520px, calc(100vh - 130px))",
+      display: "flex",
+      flexDirection: "column",
+      background: "#ffffff",
+      border: "1px solid #dbe5f2",
+      borderRadius: "18px",
+      boxShadow: "0 12px 40px rgba(15, 23, 42, 0.20)",
+      zIndex: 1000,
+      overflow: "hidden",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "18px",
+        background: "#2563eb",
+        color: "#ffffff",
+      }}
+    >
+      <div>
+        <h3 style={{ margin: 0, fontSize: "18px" }}>
+          Help & FAQ
+        </h3>
+        <p style={{ margin: "5px 0 0", fontSize: "12px" }}>
+          How can we help you?
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setHelpOpen(false)}
+        aria-label="Close help"
+        style={{
+          border: "none",
+          background: "transparent",
+          color: "#ffffff",
+          cursor: "pointer",
+          padding: "5px",
+        }}
+      >
+        <X size={22} />
+      </button>
+    </div>
+
+    <div style={{ overflowY: "auto", padding: "12px 16px" }}>
+      {faqs.map((faq, index) => {
+        const isExpanded = expandedFaq === index;
+
+        return (
+          <div
+            key={faq.question}
+            style={{
+              borderBottom: "1px solid #e5e7eb",
+              padding: "13px 0",
+            }}
+          >
+            <button
+              type="button"
+              aria-expanded={isExpanded}
+              onClick={() =>
+                setExpandedFaq(isExpanded ? null : index)
+              }
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                textAlign: "left",
+                border: "none",
+                background: "transparent",
+                color: "#1e293b",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: "2px 0",
+              }}
+            >
+              <span>{faq.question}</span>
+              <span aria-hidden="true">
+                {isExpanded ? "−" : "+"}
+              </span>
+            </button>
+
+            {isExpanded && (
+              <p
+                style={{
+                  margin: "10px 0 2px",
+                  color: "#64748b",
+                  fontSize: "13px",
+                  lineHeight: 1.7,
+                }}
+              >
+                {faq.answer}
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  </section>
+)}
+
+<button
+  type="button"
+  onClick={() => setHelpOpen((open) => !open)}
+  aria-label={helpOpen ? "Close help and FAQ" : "Open help and FAQ"}
+  aria-expanded={helpOpen}
+  style={{
+    position: "fixed",
+    right: "20px",
+    bottom: "20px",
+    width: "58px",
+    height: "58px",
+    borderRadius: "50%",
+    border: "none",
+    background: "#2563eb",
+    color: "#ffffff",
+    fontSize: "30px",
+    fontWeight: 700,
+    cursor: "pointer",
+    boxShadow: "0 5px 18px rgba(37, 99, 235, 0.4)",
+    zIndex: 1001,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  {helpOpen ? <X size={25} /> : "?"}
+</button>
+
+
+      {/* Legal Policies Footer */}
+      <footer
+        aria-label="Legal policies"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "12px 22px",
+          padding: "22px 16px",
+          borderTop: "1px solid #e5e7eb",
+          background: "#ffffff",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => navigate("/terms")}
+          style={legalLinkStyle}
+        >
+          Terms &amp; Conditions
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("/privacy")}
+          style={legalLinkStyle}
+        >
+          Privacy Policy
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("/refund-policy")}
+          style={legalLinkStyle}
+        >
+          Cancellation &amp; Refund Policy
+        </button>
+
+        <span
+          style={{
+            width: "100%",
+            textAlign: "center",
+            color: "#9ca3af",
+            fontSize: "12px",
+          }}
+        >
+          © {new Date().getFullYear()} BookEasy
+        </span>
+      </footer>
 
     </div>
+
   );
 }
 
+const legalLinkStyle = {
+  border: "none",
+  background: "transparent",
+  color: "#64748b",
+  fontSize: "13px",
+  cursor: "pointer",
+  padding: "4px",
+};
+
 export default CustomerDashboard;
+
+
+    {/* </div>
+  );
+}
+
+export default CustomerDashboard; */}

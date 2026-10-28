@@ -1,0 +1,230 @@
+
+.bookeasy-contact {
+  --contact-blue: #2563eb;
+  --contact-dark: #0f172a;
+
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  width: min(100% - 32px, 760px);
+  margin: 36px auto;
+  padding: 36px 32px 26px;
+  overflow: hidden;
+
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(96, 165, 250, 0.15),
+      transparent 36%
+    ),
+    linear-gradient(145deg, #ffffff 0%, #f8fbff 100%);
+
+  border: 1px solid #dbeafe;
+  border-radius: 24px;
+  box-shadow:
+    0 12px 35px rgba(15, 23, 42, 0.06),
+    0 2px 8px rgba(37, 99, 235, 0.04);
+
+  text-align: center;
+  font-family: inherit;
+}
+
+.bookeasy-contact::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -65px;
+  right: -55px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.07);
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+.bookeasy-contact__icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 18px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 19px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.24);
+  font-size: 27px;
+}
+
+.bookeasy-contact__eyebrow {
+  display: inline-block;
+  margin-bottom: 10px;
+  color: var(--contact-blue);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.bookeasy-contact h2 {
+  margin: 0;
+  color: var(--contact-dark);
+  font-size: clamp(23px, 4vw, 32px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.8px;
+}
+
+.bookeasy-contact h2 span {
+  color: var(--contact-blue);
+}
+
+.bookeasy-contact__description {
+  max-width: 490px;
+  margin: 14px auto 26px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.bookeasy-contact__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  text-align: left;
+}
+
+.bookeasy-contact__action {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 16px;
+  color: inherit;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  text-decoration: none;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.bookeasy-contact__action:hover {
+  transform: translateY(-3px);
+  border-color: #93c5fd;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.1);
+}
+
+.bookeasy-contact__action:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.4);
+  outline-offset: 3px;
+}
+
+.bookeasy-contact__action-icon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+  color: #2563eb;
+  background: #eff6ff;
+  font-size: 21px;
+}
+
+.bookeasy-contact__action-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bookeasy-contact__action-text small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.bookeasy-contact__action-text strong {
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.bookeasy-contact__arrow {
+  align-self: center;
+  color: #94a3b8;
+  font-size: 18px;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.bookeasy-contact__action:hover .bookeasy-contact__arrow {
+  color: var(--contact-blue);
+  transform: translate(2px, -2px);
+}
+
+.bookeasy-contact__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e8eef7;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.bookeasy-contact__status-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+}
+
+@media (max-width: 560px) {
+  .bookeasy-contact {
+    width: calc(100% - 24px);
+    margin: 24px auto;
+    padding: 28px 18px 20px;
+    border-radius: 20px;
+  }
+
+  .bookeasy-contact__actions {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .bookeasy-contact__action {
+    padding: 14px;
+  }
+
+  .bookeasy-contact__action-text strong {
+    font-size: 13px;
+  }
+
+  .bookeasy-contact__footer {
+    align-items: flex-start;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bookeasy-contact__action,
+  .bookeasy-contact__arrow {
+    transition: none;
+  }
+
+  .bookeasy-contact__action:hover {
+    transform: none;
+  }
+}

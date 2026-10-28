@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -9,6 +8,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import BookEasyContact from "./BookEasyContact";
 
 const API = (
   import.meta.env.VITE_API_URL ||
@@ -1187,6 +1187,69 @@ async function startOneTimePlanCheckout(plan, billingPeriod = "yearly") {
 </p>
           </div>
         </div>
+
+        <BookEasyContact />
+{/* Legal Policies */}
+
+<nav
+  aria-label="Legal policies"
+  style={{
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "10px 20px",
+    marginTop: 28,
+    padding: "18px 0",
+    borderTop: "1px solid #e2e8f0",
+  }}
+>
+  <button
+    type="button"
+    onClick={() => navigate("/terms")}
+    style={{
+      border: "none",
+      background: "transparent",
+      color: "#64748b",
+      fontSize: 13,
+      cursor: "pointer",
+      padding: 4,
+    }}
+  >
+    Terms &amp; Conditions
+  </button>
+
+  <button
+    type="button"
+    onClick={() => navigate("/privacy")}
+    style={{
+      border: "none",
+      background: "transparent",
+      color: "#64748b",
+      fontSize: 13,
+      cursor: "pointer",
+      padding: 4,
+    }}
+  >
+    Privacy Policy
+  </button>
+
+  <button
+    type="button"
+    onClick={() => navigate("/refund-policy")}
+    style={{
+      border: "none",
+      background: "transparent",
+      color: "#64748b",
+      fontSize: 13,
+      cursor: "pointer",
+      padding: 4,
+    }}
+  >
+    Cancellation &amp; Refund Policy
+  </button>
+</nav>
+
 
         <p
           style={{

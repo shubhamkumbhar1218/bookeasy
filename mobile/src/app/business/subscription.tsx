@@ -1,9 +1,9 @@
 ﻿import { useCallback, useState } from "react";
-
 import {
   ActivityIndicator,
   Alert,
   AppState,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -305,7 +305,16 @@ export default function BusinessSubscription() {
     }
   };
 
-
+const handleContact = async (url: string) => {
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert(
+      "Unable to open",
+      "Please try again or contact BookEasy Management directly."
+    );
+  }
+};
 
   if (loading) {
     return (
@@ -725,6 +734,88 @@ export default function BusinessSubscription() {
   update after BookEasy verifies the payment.
 </Text>
         </View>
+
+        
+<View style={styles.contactCard}>
+  <View style={styles.contactTop}>
+    <View style={styles.contactIconBox}>
+      <Text style={styles.contactMainIcon}>💬</Text>
+    </View>
+
+    <View style={styles.contactHeadingContainer}>
+      <Text style={styles.contactEyebrow}>
+        BOOKEASY SUPPORT
+      </Text>
+
+      <Text style={styles.contactTitle}>
+        Need a hand?
+      </Text>
+
+      <Text style={styles.contactDescription}>
+        Questions about your plan or payment? Our management
+        team is here to help.
+      </Text>
+    </View>
+  </View>
+
+  <TouchableOpacity
+    style={styles.contactAction}
+    onPress={() =>
+      handleContact("mailto:support.bookeasy@gmail.com")
+    }
+    activeOpacity={0.75}
+    accessibilityRole="button"
+    accessibilityLabel="Email BookEasy Management"
+  >
+    <View style={styles.contactActionIconBox}>
+      <Text style={styles.contactActionIcon}>✉️</Text>
+    </View>
+
+    <View style={styles.contactActionTextContainer}>
+      <Text style={styles.contactActionLabel}>
+        Email our team
+      </Text>
+      <Text style={styles.contactActionValue}>
+        support.bookeasy@gmail.com
+      </Text>
+    </View>
+
+    <Text style={styles.contactArrow}>↗</Text>
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={styles.contactAction}
+    onPress={() =>
+      handleContact("tel:+919022284532")
+    }
+    activeOpacity={0.75}
+    accessibilityRole="button"
+    accessibilityLabel="Call BookEasy Management"
+  >
+    <View style={styles.contactActionIconBox}>
+      <Text style={styles.contactActionIcon}>📞</Text>
+    </View>
+
+    <View style={styles.contactActionTextContainer}>
+      <Text style={styles.contactActionLabel}>
+        Give us a call
+      </Text>
+      <Text style={styles.contactActionValue}>
+        +91 9022284532
+      </Text>
+    </View>
+
+    <Text style={styles.contactArrow}>↗</Text>
+  </TouchableOpacity>
+
+  <View style={styles.contactFooter}>
+    <View style={styles.contactStatusDot} />
+    <Text style={styles.contactFooterText}>
+      Here to make your BookEasy experience easier
+    </Text>
+  </View>
+</View>
+
       </ScrollView>
     </View>
   );
@@ -1047,6 +1138,142 @@ savingsBadge: {
   overflow: "hidden",
   marginTop: 8,
   textAlign: "center",
+},
+
+
+contactCard: {
+  backgroundColor: "#FFFFFF",
+  borderRadius: 22,
+  padding: 18,
+  marginTop: 18,
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: "#DCE7F8",
+  elevation: 2,
+  shadowColor: "#2563EB",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.06,
+  shadowRadius: 12,
+},
+
+contactTop: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginBottom: 20,
+},
+
+contactIconBox: {
+  width: 54,
+  height: 54,
+  borderRadius: 17,
+  backgroundColor: "#2563EB",
+  justifyContent: "center",
+  alignItems: "center",
+  marginRight: 14,
+},
+
+contactMainIcon: {
+  fontSize: 26,
+},
+
+contactHeadingContainer: {
+  flex: 1,
+  minWidth: 0,
+},
+
+contactEyebrow: {
+  color: "#2563EB",
+  fontSize: 10,
+  fontWeight: "800",
+  letterSpacing: 1.5,
+  marginBottom: 5,
+},
+
+contactTitle: {
+  color: "#0F172A",
+  fontSize: 22,
+  fontWeight: "800",
+},
+
+contactDescription: {
+  color: "#64748B",
+  fontSize: 12,
+  lineHeight: 18,
+  marginTop: 5,
+},
+
+contactAction: {
+  flexDirection: "row",
+  alignItems: "center",
+  padding: 13,
+  marginBottom: 10,
+  borderRadius: 15,
+  backgroundColor: "#F8FAFF",
+  borderWidth: 1,
+  borderColor: "#E5EDFA",
+},
+
+contactActionIconBox: {
+  width: 42,
+  height: 42,
+  borderRadius: 13,
+  backgroundColor: "#EAF1FF",
+  justifyContent: "center",
+  alignItems: "center",
+  marginRight: 12,
+},
+
+contactActionIcon: {
+  fontSize: 19,
+},
+
+contactActionTextContainer: {
+  flex: 1,
+  minWidth: 0,
+},
+
+contactActionLabel: {
+  color: "#64748B",
+  fontSize: 11,
+  fontWeight: "600",
+  marginBottom: 5,
+},
+
+contactActionValue: {
+  color: "#1E293B",
+  fontSize: 12,
+  fontWeight: "800",
+},
+
+contactArrow: {
+  color: "#2563EB",
+  fontSize: 20,
+  marginLeft: 8,
+},
+
+contactFooter: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 7,
+  paddingTop: 17,
+  borderTopWidth: 1,
+  borderTopColor: "#E8EEF7",
+},
+
+contactStatusDot: {
+  width: 8,
+  height: 8,
+  borderRadius: 4,
+  backgroundColor: "#22C55E",
+  marginRight: 9,
+},
+
+contactFooterText: {
+  flex: 1,
+  color: "#64748B",
+  fontSize: 11,
+  lineHeight: 17,
 },
 
 
