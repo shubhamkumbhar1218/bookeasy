@@ -178,6 +178,33 @@ onPress={async () => {
           </Text>
         </View>
 
+        {/* ================= LEGAL LINKS ================= */}
+        <View style={styles.legalLinksContainer}>
+          <TouchableOpacity
+            onPress={() => router.push("/legal" as any)}
+            activeOpacity={0.7}
+            accessibilityRole="link"
+            accessibilityLabel="Terms and Conditions"
+          >
+            <Text style={styles.legalLinkText}>
+              Terms & Conditions
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.legalLinkSeparator}>•</Text>
+
+          <TouchableOpacity
+            onPress={() => router.push("/legal" as any)}
+            activeOpacity={0.7}
+            accessibilityRole="link"
+            accessibilityLabel="Privacy Policy"
+          >
+            <Text style={styles.legalLinkText}>
+              Privacy Policy
+            </Text>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -499,4 +526,26 @@ const styles = StyleSheet.create({
 
     textAlign: "center",
   },
+
+  legalLinksContainer: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  flexWrap: "wrap",
+  marginTop: 20,
+  paddingHorizontal: 10,
+  gap: 12,
+},
+
+legalLinkText: {
+  color: "#5146E5",
+  fontSize: 13,
+  fontWeight: "600",
+  textDecorationLine: "underline",
+},
+
+legalLinkSeparator: {
+  color: "#94A3B8",
+  fontSize: 14,
+},
 });

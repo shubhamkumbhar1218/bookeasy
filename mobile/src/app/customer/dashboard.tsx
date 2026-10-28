@@ -127,7 +127,7 @@ const [selectedCategory, setSelectedCategory] =
   useState("All");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
+const [supportVisible, setSupportVisible] = useState(false);
     const [helpVisible, setHelpVisible] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
@@ -297,118 +297,26 @@ if (selectedCategory !== "All") {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <>
+
 <View style={styles.topHeader}>
   <View>
     <Text style={styles.logo}>BookEasy</Text>
-
     <Text style={styles.headerSubtitle}>
       Customer Dashboard
     </Text>
   </View>
 
-  <View style={styles.headerActions}>
-    <TouchableOpacity
-      style={styles.helpButton}
-      onPress={() => {
-        setHelpVisible((previous) => !previous);
-        setExpandedFaq(null);
-      }}
-      activeOpacity={0.8}
-      accessibilityRole="button"
-      accessibilityLabel="Open Help and Frequently Asked Questions"
-    >
-      <Text style={styles.helpButtonText}>?</Text>
-    </TouchableOpacity>
-
-    <View style={styles.headerIcon}>
-      <Text style={styles.headerIconText}>👤</Text>
-    </View>
-  </View>
+  <TouchableOpacity
+    style={styles.supportIconButton}
+   onPress={() => setSupportVisible((previous) => !previous)}
+    activeOpacity={0.8}
+    accessibilityRole="button"
+    accessibilityLabel="Customer support"
+  >
+    <Text style={styles.supportIconText}>🎧</Text>
+  </TouchableOpacity>
 </View>
 
-{/* Help & FAQ Panel */}
-
-{helpVisible && (
-  <View style={styles.faqCard}>
-    <View style={styles.faqHeader}>
-      <View style={styles.faqHeading}>
-        <Text style={styles.faqTitle}>
-          How can we help?
-        </Text>
-
-        <Text style={styles.faqSubtitle}>
-          Frequently asked questions
-        </Text>
-      </View>
-
-      <TouchableOpacity
-        style={styles.faqCloseButton}
-        onPress={() => {
-          setHelpVisible(false);
-          setExpandedFaq(null);
-        }}
-        activeOpacity={0.8}
-        accessibilityRole="button"
-        accessibilityLabel="Close help"
-      >
-        <Text style={styles.faqCloseText}>✕</Text>
-      </TouchableOpacity>
-    </View>
-
-    {faqs.map((faq, index) => {
-      const isExpanded = expandedFaq === index;
-
-      return (
-        <View key={faq.question} style={styles.faqItem}>
-          <TouchableOpacity
-            style={styles.faqQuestion}
-            onPress={() =>
-              setExpandedFaq(isExpanded ? null : index)
-            }
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: isExpanded }}
-          >
-            <Text style={styles.faqQuestionText}>
-              {faq.question}
-            </Text>
-
-            <Text style={styles.faqToggle}>
-              {isExpanded ? "−" : "+"}
-            </Text>
-          </TouchableOpacity>
-
-          {isExpanded && (
-            <View style={styles.faqAnswerBox}>
-              <Text style={styles.faqAnswer}>
-                {faq.answer}
-              </Text>
-            </View>
-          )}
-        </View>
-      );
-    })}
-
-    <View style={styles.faqSupport}>
-      <Text style={styles.faqSupportText}>
-        Still need help?
-      </Text>
-
-      <TouchableOpacity
-        onPress={() =>
-          handleContact("mailto:support.bookeasy@gmail.com")
-        }
-        activeOpacity={0.75}
-        accessibilityRole="button"
-        accessibilityLabel="Email BookEasy support"
-      >
-        <Text style={styles.faqSupportLink}>
-          Contact BookEasy Support
-        </Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-)}
 
             {/* Back to Business Dashboard */}
 
@@ -438,7 +346,6 @@ if (selectedCategory !== "All") {
     ← Back to Business Dashboard
   </Text>
 </TouchableOpacity>
-
             {/* Title */}
 
             <Text style={styles.title}>
@@ -576,87 +483,6 @@ if (selectedCategory !== "All") {
     ›
   </Text>
 </TouchableOpacity>
-
-{/* BookEasy Management Support */}
-
-<View style={styles.contactCard}>
-  <View style={styles.contactTop}>
-    <View style={styles.contactIconBox}>
-      <Text style={styles.contactMainIcon}>💬</Text>
-    </View>
-
-    <View style={styles.contactHeadingContainer}>
-      <Text style={styles.contactEyebrow}>
-        BOOKEASY SUPPORT
-      </Text>
-
-      <Text style={styles.contactTitle}>
-        Need a hand?
-      </Text>
-
-      <Text style={styles.contactDescription}>
-        Questions about booking or using BookEasy? Our management team is here to help.
-      </Text>
-    </View>
-  </View>
-
-  <TouchableOpacity
-    style={styles.contactAction}
-    onPress={() =>
-      handleContact("mailto:support.bookeasy@gmail.com")
-    }
-    activeOpacity={0.75}
-    accessibilityRole="button"
-    accessibilityLabel="Email BookEasy Management"
-  >
-    <View style={styles.contactActionIconBox}>
-      <Text style={styles.contactActionIcon}>✉️</Text>
-    </View>
-
-    <View style={styles.contactActionTextContainer}>
-      <Text style={styles.contactActionLabel}>
-        Email our team
-      </Text>
-      <Text style={styles.contactActionValue}>
-        support.bookeasy@gmail.com
-      </Text>
-    </View>
-
-    <Text style={styles.contactArrow}>↗</Text>
-  </TouchableOpacity>
-
-  <TouchableOpacity
-    style={styles.contactAction}
-    onPress={() =>
-      handleContact("tel:+919022284532")
-    }
-    activeOpacity={0.75}
-    accessibilityRole="button"
-    accessibilityLabel="Call BookEasy Management"
-  >
-    <View style={styles.contactActionIconBox}>
-      <Text style={styles.contactActionIcon}>📞</Text>
-    </View>
-
-    <View style={styles.contactActionTextContainer}>
-      <Text style={styles.contactActionLabel}>
-        Give us a call
-      </Text>
-      <Text style={styles.contactActionValue}>
-        +91 9022284532
-      </Text>
-    </View>
-
-    <Text style={styles.contactArrow}>↗</Text>
-  </TouchableOpacity>
-
-  <View style={styles.contactFooter}>
-    <View style={styles.contactStatusDot} />
-    <Text style={styles.contactFooterText}>
-      Here to make your BookEasy experience easier
-    </Text>
-  </View>
-</View>
 
             {/* Search */}
 
@@ -825,10 +651,207 @@ if (selectedCategory !== "All") {
             </View>
           ) : null
         }
+
       />
+
+      {/* Floating Help & FAQ Widget */}
+      <View style={styles.helpWidgetContainer}>
+
+
+        
+        {/* Customer Support Popup */}
+        {supportVisible && (
+          <View style={styles.supportPopup}>
+            <View style={styles.supportPopupHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.supportPopupTitle}>
+                  Customer Support
+                </Text>
+                <Text style={styles.supportPopupSubtitle}>
+                  We're here to help you
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setSupportVisible(false)}
+                style={styles.supportCloseButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close customer support"
+              >
+                <Text style={styles.supportCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.supportLabel}>EMAIL US</Text>
+
+            <TouchableOpacity
+              style={styles.supportContactRow}
+              onPress={() =>
+                handleContact("mailto:support.bookeasy@gmail.com")
+              }
+              accessibilityRole="button"
+            >
+              <Text style={styles.supportContactIcon}>✉️</Text>
+              <Text style={styles.supportContactText}>
+                support.bookeasy@gmail.com
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.supportLabel}>CALL US</Text>
+
+            <TouchableOpacity
+              style={styles.supportContactRow}
+              onPress={() =>
+                handleContact("tel:+919022284532")
+              }
+              accessibilityRole="button"
+            >
+              <Text style={styles.supportContactIcon}>📞</Text>
+              <Text style={styles.supportContactText}>
+                +91 9022284532
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {helpVisible && (
+          <View style={styles.faqFloatingPanel}>
+            <View style={styles.faqHeader}>
+              <View style={styles.faqHeading}>
+                <Text style={styles.faqTitle}>
+                  How can we help?
+                </Text>
+                <Text style={styles.faqSubtitle}>
+                  Frequently asked questions
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.faqCloseButton}
+                onPress={() => {
+                  setHelpVisible(false);
+                  setExpandedFaq(null);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Close help"
+              >
+                <Text style={styles.faqCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={faqs}
+              keyExtractor={(item) => item.question}
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item, index }) => {
+                const isExpanded = expandedFaq === index;
+
+                return (
+                  <View style={styles.faqItem}>
+                    <TouchableOpacity
+                      style={styles.faqQuestion}
+                      onPress={() =>
+                        setExpandedFaq(
+                          isExpanded ? null : index
+                        )
+                      }
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        expanded: isExpanded,
+                      }}
+                    >
+                      <Text style={styles.faqQuestionText}>
+                        {item.question}
+                      </Text>
+
+                      <Text style={styles.faqToggle}>
+                        {isExpanded ? "−" : "+"}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {isExpanded && (
+                      <View style={styles.faqAnswerBox}>
+                        <Text style={styles.faqAnswer}>
+                          {item.answer}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              }}
+            />
+
+            <View style={styles.faqSupport}>
+              <Text style={styles.faqSupportText}>
+                Still need help?
+              </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  handleContact(
+                    "mailto:support.bookeasy@gmail.com"
+                  )
+                }
+                accessibilityRole="button"
+              >
+                <Text style={styles.faqSupportLink}>
+                  Contact BookEasy Support
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() =>
+                  handleContact("tel:+919022284532")
+                }
+                accessibilityRole="button"
+                style={{ marginTop: 10 }}
+              >
+                <Text style={styles.faqSupportLink}>
+                  Call +91 9022284532
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        
+        <TouchableOpacity
+          style={styles.floatingSupportButton}
+          onPress={() =>
+            setSupportVisible((previous) => !previous)
+          }
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Open customer support"
+        >
+          <Text style={styles.floatingSupportButtonText}>
+            🎧
+          </Text>
+        </TouchableOpacity>
+
+
+        <TouchableOpacity
+          style={styles.helpFloatingButton}
+          onPress={() => {
+            setHelpVisible((previous) => !previous);
+            setExpandedFaq(null);
+          }}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={
+            helpVisible ? "Close help" : "Open help"
+          }
+        >
+          <Text style={styles.helpFloatingButtonText}>
+            {helpVisible ? "×" : "?"}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -860,6 +883,24 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginTop: 2,
   },
+
+  
+supportIconButton: {
+  width: 46,
+  height: 46,
+  borderRadius: 23,
+  backgroundColor: "#EAF1FF",
+  borderWidth: 1,
+  borderColor: "#DCE7F8",
+  alignItems: "center",
+  justifyContent: "center",
+  elevation: 3,
+},
+
+supportIconText: {
+  fontSize: 23,
+},
+
 
   headerIcon: {
     width: 42,
@@ -1333,51 +1374,6 @@ contactStatusDot: {
   marginRight: 9,
 },
 
-contactFooterText: {
-  flex: 1,
-  color: "#64748B",
-  fontSize: 11,
-  lineHeight: 17,
-},
-
-  // Help icon beside the profile icon
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  helpButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#EAF1FF",
-    borderWidth: 1,
-    borderColor: "#C9D9FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  helpButtonText: {
-    color: "#2563EB",
-    fontSize: 24,
-    fontWeight: "900",
-  },
-
-  // FAQ panel
-  faqCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#DCE7F8",
-    elevation: 2,
-    shadowColor: "#2563EB",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-  },
 
   faqHeader: {
     flexDirection: "row",
@@ -1477,6 +1473,20 @@ contactFooterText: {
   },
 
 
+  
+
+  helpWidgetContainer: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 100,
+    elevation: 100,
+    pointerEvents: "box-none",
+  },
+
+
   helpFloatingButton: {
   position: "absolute",
   right: 20,
@@ -1501,25 +1511,136 @@ helpFloatingButtonText: {
   fontWeight: "800",
 },
 
-faqFloatingPanel: {
-  position: "absolute",
-  right: 16,
-  bottom: 92,
-  width: "90%",
-  maxWidth: 380,
-  maxHeight: "72%",
-  backgroundColor: "#FFFFFF",
-  borderRadius: 18,
-  padding: 16,
-  borderWidth: 1,
-  borderColor: "#DCE7F8",
-  elevation: 12,
-  shadowColor: "#000000",
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.18,
-  shadowRadius: 8,
-  zIndex: 99,
-},
+
+  floatingSupportButton: {
+    position: "absolute",
+    right: 20,
+    bottom: 92,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DCE7F8",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 8,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    zIndex: 101,
+  },
+
+  floatingSupportButtonText: {
+    fontSize: 25,
+  },
+
+  supportPopup: {
+    position: "absolute",
+    right: 16,
+    bottom: 160,
+    width: "90%",
+    maxWidth: 360,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#DCE7F8",
+    elevation: 12,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    zIndex: 102,
+  },
+
+  supportPopupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 22,
+  },
+
+  supportPopupTitle: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+
+  supportPopupSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 5,
+  },
+
+  supportCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+
+  supportCloseText: {
+    color: "#475569",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  supportLabel: {
+    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+
+  supportContactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    marginBottom: 18,
+    borderRadius: 12,
+    backgroundColor: "#F8FAFF",
+    borderWidth: 1,
+    borderColor: "#E5EDFA",
+  },
+
+  supportContactIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+
+  supportContactText: {
+    flex: 1,
+    color: "#1E293B",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+
+  faqFloatingPanel: {
+    position: "absolute",
+    right: 16,
+    bottom: 92,
+    width: "90%",
+    maxWidth: 380,
+    height: "65%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#DCE7F8",
+    elevation: 12,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    zIndex: 99,
+  },
+
 });
 
 
