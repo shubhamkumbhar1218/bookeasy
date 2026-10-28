@@ -120,14 +120,18 @@ const amount =
       const keyId = process.env.RAZORPAY_KEY_ID;
       const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
+      const razorpayMode = process.env.RAZORPAY_MODE;
+      const expectedKeyPrefix =
+        razorpayMode === "live" ? "rzp_live_" : "rzp_test_";
+
       if (
-        process.env.RAZORPAY_MODE !== "test" ||
-        !keyId?.startsWith("rzp_test_") ||
+        !["test", "live"].includes(razorpayMode) ||
+        !keyId?.startsWith(expectedKeyPrefix) ||
         !keySecret
       ) {
         return res.status(503).json({
           success: false,
-          message: "Razorpay Test Mode is not configured correctly.",
+          message: "Razorpay configuration is invalid for the selected mode.",
         });
       }
 
@@ -247,14 +251,18 @@ router.post("/razorpay/verify", authMiddleware, async (req, res) => {
       });
     }
 
+    const razorpayMode = process.env.RAZORPAY_MODE;
+    const expectedKeyPrefix =
+      razorpayMode === "live" ? "rzp_live_" : "rzp_test_";
+
     if (
-      process.env.RAZORPAY_MODE !== "test" ||
-      !process.env.RAZORPAY_KEY_ID?.startsWith("rzp_test_") ||
+      !["test", "live"].includes(razorpayMode) ||
+      !process.env.RAZORPAY_KEY_ID?.startsWith(expectedKeyPrefix) ||
       !process.env.RAZORPAY_KEY_SECRET
     ) {
       return res.status(503).json({
         success: false,
-        message: "Razorpay Test Mode is not configured.",
+        message: "Razorpay configuration is invalid for the selected mode.",
       });
     }
 

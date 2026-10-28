@@ -120,14 +120,6 @@ export default function BusinessSubscription() {
 
       const result = await response.json();
 
-      console.log("Razorpay order check:", {
-  success: result.success,
-  keyPrefix: String(result.keyId || "").slice(0, 8),
-  hasOrderId: Boolean(result.razorpayOrderId),
-  amount: result.amount,
-  currency: result.currency,
-});
-
       if (response.status === 401) {
         await AsyncStorage.multiRemove([
           "bookeasy_token",
@@ -253,6 +245,16 @@ export default function BusinessSubscription() {
         "bookeasy_pending_order_id",
         result.orderId
       );
+
+      if (
+  !RazorpayCheckout ||
+  typeof RazorpayCheckout.open !== "function"
+) {
+  throw new Error(
+    "Razorpay native checkout is unavailable in this app build. " +
+    "Please install a development build containing the Razorpay native module."
+  );
+}
 
       const paymentData = await RazorpayCheckout.open({
         description: `BookEasy STARTER ${selectedBillingPeriod} plan`,
