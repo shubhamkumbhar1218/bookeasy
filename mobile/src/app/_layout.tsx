@@ -95,9 +95,13 @@ export default function RootLayout() {
     };
   }, []);
 
-  return (
-    <SafeAreaProvider>
-      <Stack />
-    </SafeAreaProvider>
-  );
+return (
+  <SafeAreaProvider>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+      }}
+    />
+  </SafeAreaProvider>
+);
 }
