@@ -305,16 +305,6 @@ if (selectedCategory !== "All") {
       Customer Dashboard
     </Text>
   </View>
-
-  <TouchableOpacity
-    style={styles.supportIconButton}
-   onPress={() => setSupportVisible((previous) => !previous)}
-    activeOpacity={0.8}
-    accessibilityRole="button"
-    accessibilityLabel="Customer support"
-  >
-    <Text style={styles.supportIconText}>🎧</Text>
-  </TouchableOpacity>
 </View>
 
 

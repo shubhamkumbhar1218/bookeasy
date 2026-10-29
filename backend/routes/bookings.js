@@ -2092,6 +2092,13 @@ router.patch(
         });
       }
 
+      if (booking.businessId.toString() !== req.user.id.toString()) {
+  return res.status(403).json({
+    success: false,
+    message: "You are not authorized to update this booking.",
+  });
+}
+
       if (
         booking.status !== "pending" &&
         booking.status !== "confirmed"
@@ -2106,17 +2113,10 @@ router.patch(
 const now = new Date();
 const appointmentTime = new Date(booking.bookingDate);
 
-console.log("COMPLETE BOOKING TIME CHECK:", {
-  bookingId: booking._id.toString(),
-  bookingDateRaw: booking.bookingDate,
-  appointmentTimeISO: appointmentTime.toISOString(),
-  currentTimeISO: now.toISOString(),
-  isFuture: appointmentTime > now,
-});
-
 if (appointmentTime > now) {
   return res.status(400).json({
-    message: "A future appointment cannot be completed",
+    success: false,
+    message: "A future appointment cannot be marked as a no-show.",
   });
 }
 
