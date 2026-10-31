@@ -811,12 +811,13 @@ router.get("/customer", async (req, res) => {
       bookingQuery.businessId = businessId;
     }
 
-    const bookings = await Booking.find(bookingQuery)
-      .populate(
-        "serviceId",
-        "name price duration slotIntervalMinutes bufferMinutes"
-      )
-      .sort({ bookingDate: -1 });
+const bookings = await Booking.find(bookingQuery)
+  .populate(
+    "serviceId",
+    "name price duration slotIntervalMinutes bufferMinutes"
+  )
+  .populate("businessId", "businessName businessSlug")
+  .sort({ bookingDate: -1 });
 
     return res.json(bookings);
   } catch (error) {

@@ -54,7 +54,7 @@ async function isBusinessEligible(businessId) {
     role: "BUSINESS",
     accountStatus: "ACTIVE",
     isActive: { $ne: false },
-    plan: { $in: ["BUSINESS", "PRO"] },
+    plan: { $in: ["STARTER", "BUSINESS", "PRO"] },
     subscriptionStatus: "ACTIVE",
     subscriptionEndDate: { $gt: now },
   }).select("_id plan");

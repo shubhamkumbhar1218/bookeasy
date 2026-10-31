@@ -28,6 +28,12 @@ type Service = {
   duration: number;
 };
 
+type Business = {
+  _id: string;
+  businessName?: string;
+  businessSlug?: string;
+};
+
 type Booking = {
   _id: string;
   customerName: string;
@@ -35,6 +41,7 @@ type Booking = {
   bookingDate: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
   serviceId: Service;
+  businessId: string | Business | null;
 };
 
 type ReviewStatus = {
@@ -102,11 +109,10 @@ export default function CustomerBookingsScreen() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
 
-  const [loyalty, setLoyalty] =
-  useState<CustomerLoyaltyData | null>(null);
-
-const [loyaltyLoading, setLoyaltyLoading] =
-  useState(false);
+const [loyaltyByBusiness, setLoyaltyByBusiness] = useState<
+  Record<string, CustomerLoyaltyData | null>
+>({});
+const [loyaltyLoading, setLoyaltyLoading] = useState(false);
   // ====================================================
   // REVIEW STATE
   // ====================================================
@@ -198,33 +204,71 @@ const [loyaltyLoading, setLoyaltyLoading] =
     );
   };
 
-const loadLoyalty = async (customerPhone: string) => {
-  if (!params.businessId) {
-    setLoyalty(null);
+const getBusinessId = (booking: Booking): string | null => {
+  if (!booking.businessId) return null;
+
+  return typeof booking.businessId === "string"
+    ? booking.businessId
+    : booking.businessId._id;
+};
+
+const loadLoyalty = async (
+  customerPhone: string,
+  bookingList: Booking[]
+) => {
+  const businessIds = [
+    ...new Set(
+      bookingList
+        .map(getBusinessId)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  if (params.businessId) {
+    businessIds.splice(
+      0,
+      businessIds.length,
+      String(params.businessId)
+    );
+  }
+
+  if (businessIds.length === 0) {
+    setLoyaltyByBusiness({});
+    setLoyaltyLoading(false);
     return;
   }
 
-  try {
-    setLoyaltyLoading(true);
+  setLoyaltyLoading(true);
 
-    const response = await fetch(
-      `${API_URL}/loyalty/customer?businessId=${encodeURIComponent(
-        params.businessId
-      )}&phone=${encodeURIComponent(customerPhone)}`
+  try {
+    const results = await Promise.all(
+      businessIds.map(async (businessId) => {
+        try {
+          const response = await fetch(
+            `${API_URL}/loyalty/customer?businessId=${encodeURIComponent(
+              businessId
+            )}&phone=${encodeURIComponent(customerPhone)}`
+          );
+
+          if (!response.ok) {
+            return [businessId, null] as const;
+          }
+
+          const data = await response.json();
+
+          return [
+            businessId,
+            data.success ? data : null,
+          ] as const;
+        } catch {
+          return [businessId, null] as const;
+        }
+      })
     );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data?.message || "Unable to load loyalty information"
-      );
-    }
-
-    setLoyalty(data);
-  } catch (error) {
-    console.log("Loyalty loading error:", error);
-    setLoyalty(null);
+    setLoyaltyByBusiness(
+      Object.fromEntries(results)
+    );
   } finally {
     setLoyaltyLoading(false);
   }
@@ -289,14 +333,14 @@ const loadLoyalty = async (customerPhone: string) => {
         cleanPhone
       );
 
-      await loadLoyalty(cleanPhone);
+      await loadLoyalty(cleanPhone, bookingList);
     } catch (error: any) {
       console.log("Bookings error:", error);
 
-      setBookings([]);
-      setReviewStatuses({});
-      setSearched(true);
-      setLoyalty(null);
+setBookings([]);
+setReviewStatuses({});
+setLoyaltyByBusiness({});
+setSearched(true);
 
       setError(
         error?.message ||
@@ -660,6 +704,10 @@ const loadLoyalty = async (customerPhone: string) => {
     ROYALTOI LOYALTY PROGRAM
 ====================================== */}
 
+{/* ======================================
+    ROYALTOI LOYALTY BY BUSINESS
+====================================== */}
+
 {loyaltyLoading && (
   <View style={styles.loyaltyCard}>
     <ActivityIndicator size="small" color="#2563eb" />
@@ -669,150 +717,202 @@ const loadLoyalty = async (customerPhone: string) => {
   </View>
 )}
 
-{!loyaltyLoading && loyalty?.program && (
-  <View style={styles.loyaltyCard}>
-    <View style={styles.loyaltyHeader}>
-      <View>
-        <Text style={styles.loyaltyTitle}>
-          {loyalty.program.name}
-        </Text>
-        <Text style={styles.loyaltySubtitle}>
-          Royaltoi Rewards
-        </Text>
-      </View>
-      <Text style={styles.loyaltyGift}>🎁</Text>
-    </View>
+{!loyaltyLoading &&
+  [...new Set(
+    bookings
+      .map(getBusinessId)
+      .filter((id): id is string => Boolean(id))
+  )].map((businessId) => {
+    const loyalty = loyaltyByBusiness[businessId];
 
-    {loyalty.program.isActive && loyalty.customer && (
-      <>
-        <View style={styles.loyaltyProgressRow}>
-          <Text style={styles.loyaltyProgressText}>
-            Completed visits
-          </Text>
-          <Text style={styles.loyaltyProgressText}>
-            {loyalty.customer.completedVisits}/
-            {loyalty.program.visitsRequired}
-          </Text>
-        </View>
+    const businessBooking = bookings.find(
+      (booking) => getBusinessId(booking) === businessId
+    );
 
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${
-                  Math.min(
-                    100,
-                    (loyalty.customer.completedVisits /
-                      loyalty.program.visitsRequired) * 100
-                  )
-                }%`,
-              },
-            ]}
-          />
-        </View>
+    const businessName =
+      typeof businessBooking?.businessId === "object"
+        ? businessBooking.businessId?.businessName
+        : undefined;
 
-        <Text style={styles.loyaltyHint}>
-          {loyalty.program.visitsRequired -
-            loyalty.customer.completedVisits}{" "}
-          more visit(s) to unlock your next reward.
-        </Text>
-      </>
-    )}
+    if (!loyalty?.program) {
+      return null;
+    }
 
-    {!loyalty.customer && (
-      <Text style={styles.loyaltyHint}>
-        Complete your appointments to start earning rewards.
-      </Text>
-    )}
+    const visitsRequired = Math.max(
+      1,
+      loyalty.program.visitsRequired || 1
+    );
 
-    {!loyalty.program.isActive && (
-      <Text style={styles.loyaltyHint}>
-        This rewards program is currently paused.
-        Previously earned rewards remain visible below.
-      </Text>
-    )}
+    const completedVisits =
+      loyalty.customer?.completedVisits || 0;
 
-    {loyalty.customer && (
-      <>
-        <View style={styles.loyaltyStatsRow}>
-          <View style={styles.loyaltyStatBox}>
-            <Text style={styles.loyaltyStatNumber}>
-              {loyalty.customer.lifetimeVisits}
+    const remainingVisits = Math.max(
+      0,
+      visitsRequired - completedVisits
+    );
+
+    return (
+      <View
+        key={businessId}
+        style={styles.loyaltyCard}
+      >
+        <View style={styles.loyaltyHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.loyaltyTitle}>
+              {loyalty.program.name}
             </Text>
-            <Text style={styles.loyaltyStatLabel}>
-              Total visits
+
+            <Text style={styles.loyaltySubtitle}>
+              Royaltoi Rewards
+              {businessName
+                ? ` · ${businessName}`
+                : ""}
             </Text>
           </View>
 
-          <View style={styles.loyaltyStatBox}>
-            <Text style={styles.loyaltyStatNumber}>
-              {loyalty.customer.totalRewardsEarned}
-            </Text>
-            <Text style={styles.loyaltyStatLabel}>
-              Rewards earned
-            </Text>
-          </View>
-
-          <View style={styles.loyaltyStatBox}>
-            <Text style={styles.loyaltyStatNumber}>
-              {loyalty.customer.totalRewardsRedeemed}
-            </Text>
-            <Text style={styles.loyaltyStatLabel}>
-              Redeemed
-            </Text>
-          </View>
+          <Text style={styles.loyaltyGift}>🎁</Text>
         </View>
 
-        <Text style={styles.loyaltySectionTitle}>
-          Your Rewards
-        </Text>
-
-        {loyalty.rewards.length === 0 ? (
-          <Text style={styles.loyaltyHint}>
-            No rewards earned yet.
-          </Text>
-        ) : (
-          loyalty.rewards.map((reward) => (
-            <View
-              key={reward._id}
-              style={styles.loyaltyRewardRow}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.loyaltyRewardName}>
-                  {reward.rewardType === "percentage"
-                    ? `${reward.rewardValue}% OFF`
-                    : `₹${reward.rewardValue} OFF`}
+        {loyalty.program.isActive &&
+          loyalty.customer && (
+            <>
+              <View style={styles.loyaltyProgressRow}>
+                <Text style={styles.loyaltyProgressText}>
+                  Completed visits
                 </Text>
 
-                <Text style={styles.loyaltyRewardMeta}>
-                  Earned: {new Date(reward.earnedAt).toLocaleDateString("en-IN")}
+                <Text style={styles.loyaltyProgressText}>
+                  {completedVisits}/{visitsRequired}
                 </Text>
-
-                {reward.expiresAt && (
-                  <Text style={styles.loyaltyRewardMeta}>
-                    Expires: {new Date(reward.expiresAt).toLocaleDateString("en-IN")}
-                  </Text>
-                )}
               </View>
 
-              <Text
-                style={[
-                  styles.rewardStatus,
-                  reward.status === "available" && styles.rewardAvailable,
-                  reward.status === "redeemed" && styles.rewardRedeemed,
-                  reward.status === "expired" && styles.rewardExpired,
-                ]}
-              >
-                {reward.status.toUpperCase()}
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${
+                        Math.min(
+                          100,
+                          (completedVisits / visitsRequired) * 100
+                        )
+                      }%`,
+                    },
+                  ]}
+                />
+              </View>
+
+              <Text style={styles.loyaltyHint}>
+                {remainingVisits === 0
+                  ? "You have reached the visit target for your reward."
+                  : `${remainingVisits} more visit(s) to unlock your next reward.`}
               </Text>
-            </View>
-          ))
+            </>
+          )}
+
+        {!loyalty.customer && (
+          <Text style={styles.loyaltyHint}>
+            Complete your appointments to start earning rewards.
+          </Text>
         )}
-      </>
-    )}
-  </View>
-)}
+
+        {!loyalty.program.isActive && (
+          <Text style={styles.loyaltyHint}>
+            This rewards program is currently paused.
+            Previously earned rewards remain visible below.
+          </Text>
+        )}
+
+        {loyalty.customer && (
+          <>
+            <View style={styles.loyaltyStatsRow}>
+              <View style={styles.loyaltyStatBox}>
+                <Text style={styles.loyaltyStatNumber}>
+                  {loyalty.customer.lifetimeVisits}
+                </Text>
+                <Text style={styles.loyaltyStatLabel}>
+                  Total visits
+                </Text>
+              </View>
+
+              <View style={styles.loyaltyStatBox}>
+                <Text style={styles.loyaltyStatNumber}>
+                  {loyalty.customer.totalRewardsEarned}
+                </Text>
+                <Text style={styles.loyaltyStatLabel}>
+                  Rewards earned
+                </Text>
+              </View>
+
+              <View style={styles.loyaltyStatBox}>
+                <Text style={styles.loyaltyStatNumber}>
+                  {loyalty.customer.totalRewardsRedeemed}
+                </Text>
+                <Text style={styles.loyaltyStatLabel}>
+                  Redeemed
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.loyaltySectionTitle}>
+              Your Rewards
+            </Text>
+
+            {loyalty.rewards.length === 0 ? (
+              <Text style={styles.loyaltyHint}>
+                No rewards earned yet.
+              </Text>
+            ) : (
+              loyalty.rewards.map((reward) => (
+                <View
+                  key={reward._id}
+                  style={styles.loyaltyRewardRow}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.loyaltyRewardName}>
+                      {reward.rewardType === "percentage"
+                        ? `${reward.rewardValue}% OFF`
+                        : `₹${reward.rewardValue} OFF`}
+                    </Text>
+
+                    <Text style={styles.loyaltyRewardMeta}>
+                      Earned:{" "}
+                      {new Date(
+                        reward.earnedAt
+                      ).toLocaleDateString("en-IN")}
+                    </Text>
+
+                    {reward.expiresAt && (
+                      <Text style={styles.loyaltyRewardMeta}>
+                        Expires:{" "}
+                        {new Date(
+                          reward.expiresAt
+                        ).toLocaleDateString("en-IN")}
+                      </Text>
+                    )}
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.rewardStatus,
+                      reward.status === "available" &&
+                        styles.rewardAvailable,
+                      reward.status === "redeemed" &&
+                        styles.rewardRedeemed,
+                      reward.status === "expired" &&
+                        styles.rewardExpired,
+                    ]}
+                  >
+                    {reward.status.toUpperCase()}
+                  </Text>
+                </View>
+              ))
+            )}
+          </>
+        )}
+      </View>
+    );
+  })}
 
 
             {bookings.length === 0 ? (
@@ -861,16 +961,22 @@ const loadLoyalty = async (customerPhone: string) => {
                     ====================================== */}
 
                     <View style={styles.bookingTop}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.serviceName}>
-                          {booking.serviceId?.name ||
-                            "Service"}
-                        </Text>
+<View style={{ flex: 1 }}>
+  <Text style={styles.businessName}>
+    {typeof booking.businessId === "object" &&
+    booking.businessId?.businessName
+      ? booking.businessId.businessName
+      : "Business"}
+  </Text>
 
-                        <Text style={styles.customerName}>
-                          {booking.customerName}
-                        </Text>
-                      </View>
+  <Text style={styles.serviceName}>
+    {booking.serviceId?.name || "Service"}
+  </Text>
+
+  <Text style={styles.customerName}>
+    {booking.customerName}
+  </Text>
+</View>
 
                       <View
                         style={[
@@ -1514,6 +1620,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
   },
+
+  businessName: {
+  fontSize: 14,
+  fontWeight: "700",
+  color: "#208AEF",
+  marginBottom: 6,
+},
 
   serviceName: {
     fontSize: 18,
