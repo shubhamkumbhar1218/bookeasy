@@ -770,17 +770,23 @@ const bookings = await Booking.find({
 
 
 
+
 router.get("/customer", async (req, res) => {
   try {
     const { phone, businessId } = req.query;
 
-    if (!phone || !businessId) {
+    // Phone number is always required.
+    if (!phone) {
       return res.status(400).json({
-        message: "Phone number and business ID are required",
+        message: "Phone number is required",
       });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(String(businessId))) {
+    // Validate businessId only when supplied.
+    if (
+      businessId &&
+      !mongoose.Types.ObjectId.isValid(String(businessId))
+    ) {
       return res.status(400).json({
         message: "Invalid business ID",
       });
@@ -794,10 +800,18 @@ router.get("/customer", async (req, res) => {
       });
     }
 
-    const bookings = await Booking.find({
-      businessId,
+    // Always search by the normalized customer phone.
+    const bookingQuery = {
       customerPhone: cleanPhone,
-    })
+    };
+
+    // Preserve the existing single-business behavior
+    // when the website supplies businessId.
+    if (businessId) {
+      bookingQuery.businessId = businessId;
+    }
+
+    const bookings = await Booking.find(bookingQuery)
       .populate(
         "serviceId",
         "name price duration slotIntervalMinutes bufferMinutes"
@@ -813,6 +827,51 @@ router.get("/customer", async (req, res) => {
     });
   }
 });
+
+
+// router.get("/customer", async (req, res) => {
+//   try {
+//     const { phone, businessId } = req.query;
+
+//     if (!phone || !businessId) {
+//       return res.status(400).json({
+//         message: "Phone number and business ID are required",
+//       });
+//     }
+
+//     if (!mongoose.Types.ObjectId.isValid(String(businessId))) {
+//       return res.status(400).json({
+//         message: "Invalid business ID",
+//       });
+//     }
+
+//     const cleanPhone = normalizePhone(phone);
+
+//     if (!cleanPhone) {
+//       return res.status(400).json({
+//         message: "Valid phone number is required",
+//       });
+//     }
+
+//     const bookings = await Booking.find({
+//       businessId,
+//       customerPhone: cleanPhone,
+//     })
+//       .populate(
+//         "serviceId",
+//         "name price duration slotIntervalMinutes bufferMinutes"
+//       )
+//       .sort({ bookingDate: -1 });
+
+//     return res.json(bookings);
+//   } catch (error) {
+//     console.log("Customer bookings error:", error);
+
+//     return res.status(500).json({
+//       message: "Server error",
+//     });
+//   }
+// });
 
 
 
