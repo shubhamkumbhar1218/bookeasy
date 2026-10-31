@@ -119,24 +119,6 @@ router.get("/search", async (req, res) => {
   }
 }
 
-// if (category && category.trim() &&
-//     category.trim().toLowerCase() !== "all") {
-//   const normalizeCategory = (value) =>
-//     String(value || "")
-//       .trim()
-//       .toLowerCase()
-//       .replace(/\s+/g, " ");
-
-//   const requestedCategory = normalizeCategory(category);
-
-//   query.businessType = {
-//     $in: [
-//       requestedCategory,
-//       category.trim(),
-//     ],
-//   };
-// }
-
     const businesses = await User.find(query)
       .select(
         "businessName businessSlug businessType phone address name workingHours profilePhoto"

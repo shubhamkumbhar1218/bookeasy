@@ -30,6 +30,7 @@ const PLANS = {
       "pop-up notifications",
       "automated_reminders",
       "advanced_analytics",
+      "loyalty_program",
     ],
   },
 

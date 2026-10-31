@@ -23,6 +23,7 @@ import {
 import {
   startAppointmentReminderScheduler,
 } from "./utils/appointmentReminderScheduler.js";
+import loyaltyRoutes from "./routes/loyaltyRoutes.js";
 
 dotenv.config();
 
@@ -86,6 +87,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/reviews", reviewRoutes);
 
 app.use("/api/payments", paymentRoutes);
+app.use("/api/loyalty", loyaltyRoutes);
 
 app.use(
   "/api/push-tokens",

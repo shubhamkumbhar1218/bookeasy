@@ -1389,3 +1389,195 @@
     animation: none;
   }
 }
+
+/* =================================
+   ROYALTOI LOYALTY CARD
+================================= */
+
+.royaltoi-card {
+  background: linear-gradient(135deg, #fffaf0, #ffffff);
+  border: 1px solid #ead7a5;
+  border-radius: 18px;
+  padding: 24px;
+  margin: 28px 0;
+  box-shadow: 0 5px 20px rgba(120, 85, 20, 0.07);
+}
+
+.royaltoi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.royaltoi-eyebrow {
+  color: #a87918;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.royaltoi-header h2 {
+  color: #4b3510;
+  margin: 8px 0;
+}
+
+.royaltoi-header p,
+.royaltoi-progress p {
+  color: #786b53;
+  margin: 6px 0;
+  font-size: 14px;
+}
+
+.royaltoi-icon {
+  color: #c18b22;
+  font-size: 34px;
+}
+
+.royaltoi-loading {
+  color: #786b53;
+}
+
+.royaltoi-progress {
+  margin-top: 24px;
+}
+
+.royaltoi-progress-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #4b3510;
+}
+
+.royaltoi-progress-track {
+  height: 10px;
+  background: #eee4cf;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.royaltoi-progress-fill {
+  height: 100%;
+  background: #c18b22;
+  border-radius: 20px;
+  transition: width 0.3s ease;
+}
+
+.royaltoi-paused {
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fff1d6;
+  color: #795515;
+  font-size: 14px;
+}
+
+.royaltoi-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.royaltoi-stats > div {
+  background: #ffffff;
+  border: 1px solid #eee5d3;
+  border-radius: 12px;
+  padding: 14px 8px;
+  text-align: center;
+}
+
+.royaltoi-stats strong {
+  display: block;
+  color: #8b6419;
+  font-size: 23px;
+}
+
+.royaltoi-stats span {
+  display: block;
+  color: #786b53;
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+.royaltoi-rewards {
+  margin-top: 24px;
+}
+
+.royaltoi-rewards h3 {
+  color: #4b3510;
+  margin-bottom: 12px;
+}
+
+.royaltoi-reward {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #eee5d3;
+  border-radius: 12px;
+  margin-top: 10px;
+}
+
+.royaltoi-reward > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.royaltoi-reward strong {
+  color: #4b3510;
+}
+
+.royaltoi-reward small {
+  color: #786b53;
+}
+
+.royaltoi-status {
+  text-transform: capitalize;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.royaltoi-status.available {
+  background: #e4f6e9;
+  color: #18743a;
+}
+
+.royaltoi-status.redeemed {
+  background: #e8efff;
+  color: #3156a4;
+}
+
+.royaltoi-status.expired {
+  background: #ffebeb;
+  color: #b83232;
+}
+
+@media (max-width: 480px) {
+  .royaltoi-card {
+    padding: 17px;
+  }
+
+  .royaltoi-stats {
+    gap: 7px;
+  }
+
+  .royaltoi-stats > div {
+    padding: 12px 5px;
+  }
+
+  .royaltoi-stats strong {
+    font-size: 19px;
+  }
+
+  .royaltoi-stats span {
+    font-size: 10px;
+  }
+}

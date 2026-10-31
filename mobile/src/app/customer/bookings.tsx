@@ -50,6 +50,36 @@ type ReviewStatus = {
   } | null;
 };
 
+type LoyaltyReward = {
+  _id: string;
+  rewardType: "fixed" | "percentage";
+  rewardValue: number;
+  status: "available" | "redeemed" | "expired";
+  earnedAt: string;
+  expiresAt: string | null;
+  redeemedAt: string | null;
+};
+
+type CustomerLoyaltyData = {
+  success: boolean;
+  program: {
+    name: string;
+    isActive: boolean;
+    visitsRequired: number;
+    rewardType: "fixed" | "percentage";
+    rewardValue: number;
+    rewardExpiryDays: number | null;
+  } | null;
+  customer: {
+    _id: string;
+    customerName: string;
+    completedVisits: number;
+    lifetimeVisits: number;
+    totalRewardsEarned: number;
+    totalRewardsRedeemed: number;
+  } | null;
+  rewards: LoyaltyReward[];
+};
 
 // ======================================================
 // SCREEN
@@ -72,6 +102,11 @@ export default function CustomerBookingsScreen() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
 
+  const [loyalty, setLoyalty] =
+  useState<CustomerLoyaltyData | null>(null);
+
+const [loyaltyLoading, setLoyaltyLoading] =
+  useState(false);
   // ====================================================
   // REVIEW STATE
   // ====================================================
@@ -163,6 +198,37 @@ export default function CustomerBookingsScreen() {
     );
   };
 
+const loadLoyalty = async (customerPhone: string) => {
+  if (!params.businessId) {
+    setLoyalty(null);
+    return;
+  }
+
+  try {
+    setLoyaltyLoading(true);
+
+    const response = await fetch(
+      `${API_URL}/loyalty/customer?businessId=${encodeURIComponent(
+        params.businessId
+      )}&phone=${encodeURIComponent(customerPhone)}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message || "Unable to load loyalty information"
+      );
+    }
+
+    setLoyalty(data);
+  } catch (error) {
+    console.log("Loyalty loading error:", error);
+    setLoyalty(null);
+  } finally {
+    setLoyaltyLoading(false);
+  }
+};
 
 // ======================================================
 // LOAD BOOKINGS
@@ -222,12 +288,15 @@ export default function CustomerBookingsScreen() {
         bookingList,
         cleanPhone
       );
+
+      await loadLoyalty(cleanPhone);
     } catch (error: any) {
       console.log("Bookings error:", error);
 
       setBookings([]);
       setReviewStatuses({});
       setSearched(true);
+      setLoyalty(null);
 
       setError(
         error?.message ||
@@ -585,6 +654,165 @@ export default function CustomerBookingsScreen() {
                 {bookings.length}
               </Text>
             </View>
+
+            
+{/* ======================================
+    ROYALTOI LOYALTY PROGRAM
+====================================== */}
+
+{loyaltyLoading && (
+  <View style={styles.loyaltyCard}>
+    <ActivityIndicator size="small" color="#2563eb" />
+    <Text style={styles.loyaltyHint}>
+      Loading Royaltoi Rewards...
+    </Text>
+  </View>
+)}
+
+{!loyaltyLoading && loyalty?.program && (
+  <View style={styles.loyaltyCard}>
+    <View style={styles.loyaltyHeader}>
+      <View>
+        <Text style={styles.loyaltyTitle}>
+          {loyalty.program.name}
+        </Text>
+        <Text style={styles.loyaltySubtitle}>
+          Royaltoi Rewards
+        </Text>
+      </View>
+      <Text style={styles.loyaltyGift}>🎁</Text>
+    </View>
+
+    {loyalty.program.isActive && loyalty.customer && (
+      <>
+        <View style={styles.loyaltyProgressRow}>
+          <Text style={styles.loyaltyProgressText}>
+            Completed visits
+          </Text>
+          <Text style={styles.loyaltyProgressText}>
+            {loyalty.customer.completedVisits}/
+            {loyalty.program.visitsRequired}
+          </Text>
+        </View>
+
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${
+                  Math.min(
+                    100,
+                    (loyalty.customer.completedVisits /
+                      loyalty.program.visitsRequired) * 100
+                  )
+                }%`,
+              },
+            ]}
+          />
+        </View>
+
+        <Text style={styles.loyaltyHint}>
+          {loyalty.program.visitsRequired -
+            loyalty.customer.completedVisits}{" "}
+          more visit(s) to unlock your next reward.
+        </Text>
+      </>
+    )}
+
+    {!loyalty.customer && (
+      <Text style={styles.loyaltyHint}>
+        Complete your appointments to start earning rewards.
+      </Text>
+    )}
+
+    {!loyalty.program.isActive && (
+      <Text style={styles.loyaltyHint}>
+        This rewards program is currently paused.
+        Previously earned rewards remain visible below.
+      </Text>
+    )}
+
+    {loyalty.customer && (
+      <>
+        <View style={styles.loyaltyStatsRow}>
+          <View style={styles.loyaltyStatBox}>
+            <Text style={styles.loyaltyStatNumber}>
+              {loyalty.customer.lifetimeVisits}
+            </Text>
+            <Text style={styles.loyaltyStatLabel}>
+              Total visits
+            </Text>
+          </View>
+
+          <View style={styles.loyaltyStatBox}>
+            <Text style={styles.loyaltyStatNumber}>
+              {loyalty.customer.totalRewardsEarned}
+            </Text>
+            <Text style={styles.loyaltyStatLabel}>
+              Rewards earned
+            </Text>
+          </View>
+
+          <View style={styles.loyaltyStatBox}>
+            <Text style={styles.loyaltyStatNumber}>
+              {loyalty.customer.totalRewardsRedeemed}
+            </Text>
+            <Text style={styles.loyaltyStatLabel}>
+              Redeemed
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.loyaltySectionTitle}>
+          Your Rewards
+        </Text>
+
+        {loyalty.rewards.length === 0 ? (
+          <Text style={styles.loyaltyHint}>
+            No rewards earned yet.
+          </Text>
+        ) : (
+          loyalty.rewards.map((reward) => (
+            <View
+              key={reward._id}
+              style={styles.loyaltyRewardRow}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.loyaltyRewardName}>
+                  {reward.rewardType === "percentage"
+                    ? `${reward.rewardValue}% OFF`
+                    : `₹${reward.rewardValue} OFF`}
+                </Text>
+
+                <Text style={styles.loyaltyRewardMeta}>
+                  Earned: {new Date(reward.earnedAt).toLocaleDateString("en-IN")}
+                </Text>
+
+                {reward.expiresAt && (
+                  <Text style={styles.loyaltyRewardMeta}>
+                    Expires: {new Date(reward.expiresAt).toLocaleDateString("en-IN")}
+                  </Text>
+                )}
+              </View>
+
+              <Text
+                style={[
+                  styles.rewardStatus,
+                  reward.status === "available" && styles.rewardAvailable,
+                  reward.status === "redeemed" && styles.rewardRedeemed,
+                  reward.status === "expired" && styles.rewardExpired,
+                ]}
+              >
+                {reward.status.toUpperCase()}
+              </Text>
+            </View>
+          ))
+        )}
+      </>
+    )}
+  </View>
+)}
 
 
             {bookings.length === 0 ? (
@@ -1641,4 +1869,144 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.7,
   },
+
+  
+  // ====================================================
+  // ROYALTOI LOYALTY
+  // ====================================================
+
+  loyaltyCard: {
+    backgroundColor: "#eff6ff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+
+  loyaltyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  loyaltyTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1e3a8a",
+  },
+
+  loyaltySubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 3,
+  },
+
+  loyaltyGift: {
+    fontSize: 28,
+  },
+
+  loyaltyProgressRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+
+  loyaltyProgressText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1e40af",
+  },
+
+  progressTrack: {
+    height: 9,
+    backgroundColor: "#dbeafe",
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#2563eb",
+    borderRadius: 10,
+  },
+
+  loyaltyHint: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 9,
+  },
+
+  loyaltyStatsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 18,
+    marginBottom: 18,
+  },
+
+  loyaltyStatBox: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  loyaltyStatNumber: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#1e40af",
+  },
+
+  loyaltyStatLabel: {
+    fontSize: 10,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 3,
+  },
+
+  loyaltySectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1e3a8a",
+    marginBottom: 10,
+  },
+
+  loyaltyRewardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 11,
+    borderTopWidth: 1,
+    borderTopColor: "#dbeafe",
+  },
+
+  loyaltyRewardName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1e3a8a",
+  },
+
+  loyaltyRewardMeta: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 3,
+  },
+
+  rewardStatus: {
+    fontSize: 10,
+    fontWeight: "800",
+    marginLeft: 8,
+  },
+
+  rewardAvailable: {
+    color: "#15803d",
+  },
+
+  rewardRedeemed: {
+    color: "#64748b",
+  },
+
+  rewardExpired: {
+    color: "#dc2626",
+  },
+
 });

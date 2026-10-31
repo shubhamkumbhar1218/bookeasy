@@ -26,6 +26,9 @@ type User = {
   businessSlug: string;
   businessType: string;
   profilePhoto?: string;
+  plan?: string;
+  subscriptionStatus?: string;
+  subscriptionEndDate?: string;
 };
 
 export default function BusinessDashboard() {
@@ -437,6 +440,25 @@ onPress={() => {
 
   <Text style={styles.actionDescription}>
     View your plan and booking limits
+  </Text>
+</TouchableOpacity>
+
+{/* Royaltoi Loyalty Program */}
+<TouchableOpacity
+  style={styles.actionCard}
+  onPress={() => router.push("/business/loyalty" as any)}
+  activeOpacity={0.8}
+>
+  <View style={styles.actionIconBox}>
+    <Text style={styles.actionIcon}>🎁</Text>
+  </View>
+
+  <Text style={styles.actionTitle}>
+    Royaltoi Rewards
+  </Text>
+
+  <Text style={styles.actionDescription}>
+    Manage customer visits, rewards and redemptions
   </Text>
 </TouchableOpacity>
 

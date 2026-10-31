@@ -51,6 +51,8 @@ function CustomerBookings() {
 
   const [reviewStatuses, setReviewStatuses] = useState({});
 
+  const [loyalty, setLoyalty] = useState(null);
+const [loyaltyLoading, setLoyaltyLoading] = useState(false);
   // ================================
   // CHECK REVIEW STATUS
   // ================================
@@ -284,6 +286,36 @@ setReviewStatuses((current) => ({
     }
   };
 
+
+  // ================================
+// LOAD CUSTOMER LOYALTY
+// ================================
+
+const loadLoyalty = async (businessId, customerPhone) => {
+  try {
+    setLoyaltyLoading(true);
+
+    const response = await fetch(
+      `${API}/loyalty/customer?businessId=${encodeURIComponent(
+        businessId
+      )}&phone=${encodeURIComponent(customerPhone)}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to load loyalty details");
+    }
+
+    setLoyalty(data);
+  } catch (error) {
+    console.log("Customer loyalty error:", error);
+    setLoyalty(null);
+  } finally {
+    setLoyaltyLoading(false);
+  }
+};
+
   // ================================
   // CHECK BOOKINGS
   // ================================
@@ -293,13 +325,14 @@ setReviewStatuses((current) => ({
       e.preventDefault();
     }
 
-    setError("");
-    setBookings([]);
-    setNotifications([]);
-    setReviewStatuses({});
-    setSearched(false);
+setLoyalty(null);
+setError("");
+setBookings([]);
+setNotifications([]);
+setReviewStatuses({});
+setSearched(false);
 
-    if (!phone.trim()) {
+if (!phone.trim()) {
       setError("Please enter your phone number.");
       return;
     }
@@ -354,6 +387,9 @@ setReviewStatuses((current) => ({
       // --------------------------------
       // CHECK REVIEW STATUS
       // --------------------------------
+
+    // Load Royaltoi loyalty details
+await loadLoyalty(businessData._id, phone.trim());
 
 await Promise.all(
   data
@@ -595,6 +631,150 @@ await Promise.all(
             </div>
           </section>
         )}
+
+        {/* =================================
+    ROYALTOI LOYALTY
+================================= */}
+
+{searched && (
+  <section className="royaltoi-card">
+    {loyaltyLoading ? (
+      <p className="royaltoi-loading">
+        Loading Royaltoi rewards...
+      </p>
+    ) : loyalty?.program ? (
+      <>
+        <div className="royaltoi-header">
+          <div>
+            <span className="royaltoi-eyebrow">
+              BOOKEASY REWARDS
+            </span>
+
+            <h2>🎁 {loyalty.program.name}</h2>
+
+            <p>
+              Every completed visit brings you closer to a reward.
+            </p>
+          </div>
+
+          <span className="royaltoi-icon">★</span>
+        </div>
+
+        {loyalty.customer && loyalty.program.isActive && (
+          <div className="royaltoi-progress">
+            <div className="royaltoi-progress-heading">
+              <strong>Your visit progress</strong>
+
+              <span>
+                {loyalty.customer.completedVisits}/
+                {loyalty.program.visitsRequired}
+              </span>
+            </div>
+
+            <div className="royaltoi-progress-track">
+              <div
+                className="royaltoi-progress-fill"
+                style={{
+                  width: `${
+                    Math.min(
+                      100,
+                      (loyalty.customer.completedVisits /
+                        loyalty.program.visitsRequired) * 100
+                    )
+                  }%`,
+                }}
+              />
+            </div>
+
+            <p>
+              {loyalty.program.visitsRequired -
+                loyalty.customer.completedVisits}{" "}
+              more completed visit(s) to your next reward.
+            </p>
+          </div>
+        )}
+
+        {!loyalty.program.isActive && (
+          <p className="royaltoi-paused">
+            This rewards program is currently paused.
+            Previously earned rewards are still shown below.
+          </p>
+        )}
+
+        {loyalty.customer && (
+          <div className="royaltoi-stats">
+            <div>
+              <strong>{loyalty.customer.lifetimeVisits}</strong>
+              <span>Lifetime visits</span>
+            </div>
+
+            <div>
+              <strong>{loyalty.customer.totalRewardsEarned}</strong>
+              <span>Rewards earned</span>
+            </div>
+
+            <div>
+              <strong>{loyalty.customer.totalRewardsRedeemed}</strong>
+              <span>Rewards redeemed</span>
+            </div>
+          </div>
+        )}
+
+        <div className="royaltoi-rewards">
+          <h3>Your rewards</h3>
+
+          {loyalty.rewards.length === 0 ? (
+            <p>No rewards earned yet. Keep visiting!</p>
+          ) : (
+            loyalty.rewards.map((reward) => (
+              <div className="royaltoi-reward" key={reward._id}>
+                <div>
+                  <strong>
+                    {reward.rewardType === "percentage"
+                      ? `${reward.rewardValue}% discount`
+                      : `₹${reward.rewardValue} discount`}
+                  </strong>
+
+                  <small>
+                    Earned:{" "}
+                    {new Date(reward.earnedAt).toLocaleDateString("en-IN")}
+                  </small>
+
+                  {reward.expiresAt && (
+                    <small>
+                      Expires:{" "}
+                      {new Date(reward.expiresAt).toLocaleDateString("en-IN")}
+                    </small>
+                  )}
+                </div>
+
+                <span className={`royaltoi-status ${reward.status}`}>
+                  {reward.status}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </>
+    ) : (
+      <div className="royaltoi-header">
+        <div>
+          <span className="royaltoi-eyebrow">
+            BOOKEASY REWARDS
+          </span>
+
+          <h2>🎁 Royaltoi Rewards</h2>
+
+          <p>
+            {loyalty?.customer
+              ? "Your loyalty history is available."
+              : "No loyalty activity found for this customer yet."}
+          </p>
+        </div>
+      </div>
+    )}
+  </section>
+)}
 
         {/* =================================
             BOOKINGS

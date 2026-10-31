@@ -12,6 +12,7 @@ import {
   sendPushForNotification,
 } from "../utils/sendPushNotification.js";
 import { getBookingQuotaCycle } from "../utils/bookingQuota.js";
+import { awardLoyaltyVisit } from "../utils/loyaltyService.js";
 
 const router = express.Router();
 
@@ -768,13 +769,20 @@ const bookings = await Booking.find({
 });
 
 
+
 router.get("/customer", async (req, res) => {
   try {
-    const { phone } = req.query;
+    const { phone, businessId } = req.query;
 
-    if (!phone) {
+    if (!phone || !businessId) {
       return res.status(400).json({
-        message: "Phone number is required",
+        message: "Phone number and business ID are required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(String(businessId))) {
+      return res.status(400).json({
+        message: "Invalid business ID",
       });
     }
 
@@ -782,28 +790,30 @@ router.get("/customer", async (req, res) => {
 
     if (!cleanPhone) {
       return res.status(400).json({
-        message: "Phone number is required",
+        message: "Valid phone number is required",
       });
     }
 
-const bookings = await Booking.find({
-  customerPhone: cleanPhone,
-})
-  .populate(
-    "serviceId",
-    "name price duration slotIntervalMinutes bufferMinutes"
-  )
-  .sort({ bookingDate: -1 });
+    const bookings = await Booking.find({
+      businessId,
+      customerPhone: cleanPhone,
+    })
+      .populate(
+        "serviceId",
+        "name price duration slotIntervalMinutes bufferMinutes"
+      )
+      .sort({ bookingDate: -1 });
 
-    res.json(bookings);
+    return res.json(bookings);
   } catch (error) {
     console.log("Customer bookings error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error",
     });
   }
 });
+
 
 
 
@@ -1979,6 +1989,101 @@ await sendPushForNotification(cancelledNotification);
 
 
 
+// /**
+//  * Complete a booking.
+//  * Only the owning business can complete an active appointment.
+//  */
+// router.patch("/:id/complete", authMiddleware, async (req, res) => {
+//   try {
+//     const booking = await Booking.findById(req.params.id);
+
+//     if (!booking) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Booking not found",
+//       });
+//     }
+
+//     // Verify business ownership once.
+//     if (booking.businessId.toString() !== req.user.id.toString()) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "You are not allowed to modify this booking",
+//       });
+//     }
+
+//     // Only active bookings can be completed.
+//     if (!["pending", "confirmed"].includes(booking.status)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Only pending or confirmed bookings can be completed",
+//       });
+//     }
+
+//     // Do not complete an appointment before its scheduled start.
+//     if (new Date(booking.bookingDate) > new Date()) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "A future appointment cannot be completed",
+//       });
+//     }
+
+//     if (!Array.isArray(booking.statusHistory)) {
+//       booking.statusHistory = [];
+//     }
+
+//     // Update the status and history once.
+//     booking.status = "completed";
+
+//     booking.statusHistory.push({
+//       status: "completed",
+//       changedBy: req.user.id,
+//       changedByName: req.user.name || "Business owner",
+//       changedAt: new Date(),
+//     });
+
+//     await booking.save();
+
+//     // Notify the customer after saving the booking.
+//     try {
+//       const completedNotification = await Notification.create({
+//         customerPhone: normalizePhone(booking.customerPhone),
+//         type: "booking_completed",
+//         title: "Booking completed",
+//         message:
+//           "Your booking has been completed. Thank you for choosing us!",
+//         bookingId: booking._id,
+//       });
+
+//       await sendPushForNotification(completedNotification);
+//     } catch (notificationError) {
+//       // A notification failure must not undo the saved booking.
+//       console.error(
+//         "Booking completion notification error:",
+//         notificationError
+//       );
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "Booking completed successfully",
+//       booking,
+//     });
+//   } catch (error) {
+//     console.error("Complete booking error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Server error",
+//     });
+//   }
+// });
+
+
+
+
+
+
 /**
  * Complete a booking.
  * Only the owning business can complete an active appointment.
@@ -1994,7 +2099,6 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
       });
     }
 
-    // Verify business ownership once.
     if (booking.businessId.toString() !== req.user.id.toString()) {
       return res.status(403).json({
         success: false,
@@ -2002,7 +2106,6 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
       });
     }
 
-    // Only active bookings can be completed.
     if (!["pending", "confirmed"].includes(booking.status)) {
       return res.status(400).json({
         success: false,
@@ -2010,7 +2113,6 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
       });
     }
 
-    // Do not complete an appointment before its scheduled start.
     if (new Date(booking.bookingDate) > new Date()) {
       return res.status(400).json({
         success: false,
@@ -2022,10 +2124,10 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
       booking.statusHistory = [];
     }
 
-    // Update the status and history once.
     booking.status = "completed";
 
     booking.statusHistory.push({
+      action: "completed",
       status: "completed",
       changedBy: req.user.id,
       changedByName: req.user.name || "Business owner",
@@ -2033,6 +2135,24 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
     });
 
     await booking.save();
+
+    // Award loyalty visit after successful booking completion.
+    let loyaltyResult = {
+      awarded: false,
+      reason: "NOT_PROCESSED",
+    };
+
+    try {
+      loyaltyResult = await awardLoyaltyVisit(booking);
+    } catch (loyaltyError) {
+      // Loyalty errors must not undo booking completion.
+      console.error("Loyalty visit processing error:", loyaltyError);
+
+      loyaltyResult = {
+        awarded: false,
+        reason: "LOYALTY_PROCESSING_ERROR",
+      };
+    }
 
     // Notify the customer after saving the booking.
     try {
@@ -2047,7 +2167,6 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
 
       await sendPushForNotification(completedNotification);
     } catch (notificationError) {
-      // A notification failure must not undo the saved booking.
       console.error(
         "Booking completion notification error:",
         notificationError
@@ -2058,6 +2177,7 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
       success: true,
       message: "Booking completed successfully",
       booking,
+      loyalty: loyaltyResult,
     });
   } catch (error) {
     console.error("Complete booking error:", error);
@@ -2068,8 +2188,6 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
     });
   }
 });
-
-
 
 
 

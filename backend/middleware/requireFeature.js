@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 import PLANS from "../config/plans.js";
 import User from "../models/User.js";

@@ -2396,6 +2396,17 @@ const rescheduleBooking = async () => {
   Subscription
 </button>
 
+<button
+  className="outline"
+  type="button"
+  onClick={() => {
+    window.location.href = "/loyalty";
+  }}
+>
+  🎁
+  Royaltoi Rewards
+</button>
+
     <button
       className="outline"
       type="button"
@@ -3281,6 +3292,557 @@ const rescheduleBooking = async () => {
 
 
 // ===============================
+// ROYALTOI LOYALTY PAGE
+// ===============================
+
+function LoyaltyPage() {
+  const [program, setProgram] = useState({
+    name: "Royaltoi Rewards",
+    isActive: false,
+    visitsRequired: 5,
+    rewardType: "fixed",
+    rewardValue: 100,
+    rewardExpiryDays: null,
+  });
+
+  const [customers, setCustomers] = useState([]);
+  const [rewards, setRewards] = useState([]);
+  const [filter, setFilter] = useState("available");
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [programData, customerData, rewardData] =
+        await Promise.all([
+          api("/loyalty/program"),
+          api("/loyalty/customers"),
+          api(`/loyalty/rewards?status=${filter}`),
+        ]);
+
+      if (programData.program) {
+        setProgram({
+          name: programData.program.name || "Royaltoi Rewards",
+          isActive: programData.program.isActive ?? false,
+          visitsRequired: programData.program.visitsRequired ?? 5,
+          rewardType: programData.program.rewardType || "fixed",
+          rewardValue: programData.program.rewardValue ?? 100,
+          rewardExpiryDays:
+            programData.program.rewardExpiryDays ?? null,
+        });
+      }
+
+      setCustomers(customerData.customers || []);
+      setRewards(rewardData.rewards || []);
+    } catch (err) {
+      setError(err.message || "Unable to load loyalty data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [filter]);
+
+  const updateProgram = async (e) => {
+    e.preventDefault();
+
+    setError("");
+    setMessage("");
+
+    if (!program.name.trim()) {
+      setError("Please enter a program name.");
+      return;
+    }
+
+    if (
+      !Number.isInteger(Number(program.visitsRequired)) ||
+      Number(program.visitsRequired) < 2 ||
+      Number(program.visitsRequired) > 100
+    ) {
+      setError("Visits required must be between 2 and 100.");
+      return;
+    }
+
+    if (
+      !Number.isFinite(Number(program.rewardValue)) ||
+      Number(program.rewardValue) < 1
+    ) {
+      setError("Enter a valid reward value.");
+      return;
+    }
+
+    if (
+      program.rewardType === "percentage" &&
+      Number(program.rewardValue) > 100
+    ) {
+      setError("Percentage reward cannot exceed 100%.");
+      return;
+    }
+
+    if (
+      program.rewardExpiryDays !== null &&
+      (
+        !Number.isInteger(Number(program.rewardExpiryDays)) ||
+        Number(program.rewardExpiryDays) < 1 ||
+        Number(program.rewardExpiryDays) > 3650
+      )
+    ) {
+      setError("Reward expiry must be between 1 and 3650 days.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await api("/loyalty/program", {
+        method: "PUT",
+        body: JSON.stringify({
+          ...program,
+          name: program.name.trim(),
+          visitsRequired: Number(program.visitsRequired),
+          rewardValue: Number(program.rewardValue),
+          rewardExpiryDays:
+            program.rewardExpiryDays === null
+              ? null
+              : Number(program.rewardExpiryDays),
+        }),
+      });
+
+      setMessage("Royaltoi program settings saved successfully.");
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const redeemReward = async (reward) => {
+    const confirmed = window.confirm(
+      `Redeem this reward for ${reward.customerPhone}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setError("");
+      setMessage("");
+
+      await api(`/loyalty/rewards/${reward._id}/redeem`, {
+        method: "PATCH",
+      });
+
+      setMessage("Reward marked as redeemed successfully.");
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const formatDate = (date) => {
+    if (!date) return "—";
+
+    return new Date(date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-icon">🎁</div>
+
+          <div>
+            <h1>BookEasy</h1>
+            <span>Royaltoi Rewards</span>
+          </div>
+        </div>
+
+        <button
+          className="secondary"
+          type="button"
+          onClick={() => {
+            window.location.href = "/dashboard";
+          }}
+        >
+          <ArrowLeft size={17} />
+          Back to Dashboard
+        </button>
+      </header>
+
+      <main className="settings-page">
+        <div className="settings-heading">
+          <div>
+            <p className="eyebrow">CUSTOMER LOYALTY</p>
+            <h2>Royaltoi Rewards</h2>
+            <p>
+              Reward customers for their completed appointments
+              and encourage repeat visits.
+            </p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="error settings-alert">
+            {error}
+          </div>
+        )}
+
+        {message && (
+          <div className="success settings-alert">
+            {message}
+          </div>
+        )}
+
+        {/* PROGRAM SETTINGS */}
+
+        <section className="settings-card">
+          <div className="settings-card-header">
+            <div>
+              <p className="step-number">PROGRAM SETTINGS</p>
+              <h3>Configure your rewards</h3>
+              <p className="muted">
+                Set how customers earn visits and receive rewards.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={updateProgram}>
+            <div className="settings-grid">
+              <label>
+                Program name
+
+                <input
+                  value={program.name}
+                  maxLength={80}
+                  onChange={(e) =>
+                    setProgram({
+                      ...program,
+                      name: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Completed visits required
+
+                <input
+                  type="number"
+                  min="2"
+                  max="100"
+                  value={program.visitsRequired}
+                  onChange={(e) =>
+                    setProgram({
+                      ...program,
+                      visitsRequired: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Reward type
+
+                <select
+                  value={program.rewardType}
+                  onChange={(e) =>
+                    setProgram({
+                      ...program,
+                      rewardType: e.target.value,
+                    })
+                  }
+                >
+                  <option value="fixed">Fixed discount (₹)</option>
+                  <option value="percentage">Percentage discount (%)</option>
+                </select>
+              </label>
+
+              <label>
+                Reward value
+
+                <input
+                  type="number"
+                  min="1"
+                  max={
+                    program.rewardType === "percentage"
+                      ? "100"
+                      : undefined
+                  }
+                  value={program.rewardValue}
+                  onChange={(e) =>
+                    setProgram({
+                      ...program,
+                      rewardValue: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Reward expiry
+
+                <select
+                  value={
+                    program.rewardExpiryDays === null
+                      ? "never"
+                      : String(program.rewardExpiryDays)
+                  }
+                  onChange={(e) =>
+                    setProgram({
+                      ...program,
+                      rewardExpiryDays:
+                        e.target.value === "never"
+                          ? null
+                          : Number(e.target.value),
+                    })
+                  }
+                >
+                  <option value="never">No expiry</option>
+                  <option value="7">7 days</option>
+                  <option value="15">15 days</option>
+                  <option value="30">30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">90 days</option>
+                  <option value="180">180 days</option>
+                  <option value="365">365 days</option>
+                </select>
+              </label>
+
+              <label>
+                Program status
+
+                <select
+                  value={program.isActive ? "active" : "paused"}
+                  onChange={(e) =>
+                    setProgram({
+                      ...program,
+                      isActive: e.target.value === "active",
+                    })
+                  }
+                >
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                </select>
+              </label>
+            </div>
+
+            <p className="muted">
+              Only completed appointments count toward loyalty visits.
+              Progress resets after a reward is earned.
+            </p>
+
+            <button
+              className="primary"
+              type="submit"
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Save Program Settings"}
+            </button>
+          </form>
+        </section>
+
+        {/* CUSTOMER PROGRESS */}
+
+        <section className="settings-card">
+          <div className="settings-card-header">
+            <div>
+              <p className="step-number">CUSTOMER LOYALTY</p>
+              <h3>Customer progress</h3>
+              <p className="muted">
+                Track completed visits and rewards earned by customers.
+              </p>
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="muted">Loading customers...</p>
+          ) : customers.length === 0 ? (
+            <p className="empty">
+              No loyalty customers yet. Completed appointments
+              will appear here when the program is active.
+            </p>
+          ) : (
+            <div className="service-list">
+              {customers.map((customer) => {
+                const progress = Math.min(
+                  100,
+                  (
+                    customer.completedVisits /
+                    Math.max(1, program.visitsRequired)
+                  ) * 100
+                );
+
+                return (
+                  <div
+                    className="service"
+                    key={customer._id}
+                    style={{
+                      display: "block",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <strong>
+                      {customer.customerName || "Customer"}
+                    </strong>
+
+                    <small>{customer.customerPhone}</small>
+
+                    <p>
+                      {customer.completedVisits} /{" "}
+                      {program.visitsRequired} visits completed
+                    </p>
+
+                    <div
+                      style={{
+                        height: "9px",
+                        background: "#e5e7eb",
+                        borderRadius: "20px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${progress}%`,
+                          height: "100%",
+                          background: "#208aeF",
+                          borderRadius: "20px",
+                        }}
+                      />
+                    </div>
+
+                    <small>
+                      Lifetime visits: {customer.lifetimeVisits || 0}
+                      {" · "}
+                      Rewards earned: {customer.totalRewardsEarned || 0}
+                      {" · "}
+                      Redeemed: {customer.totalRewardsRedeemed || 0}
+                    </small>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* REWARD HISTORY */}
+
+        <section className="settings-card">
+          <div className="settings-card-header">
+            <div>
+              <p className="step-number">REWARD MANAGEMENT</p>
+              <h3>Customer rewards</h3>
+              <p className="muted">
+                Review rewards and mark available rewards as redeemed.
+              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
+              marginBottom: "20px",
+            }}
+          >
+            {["available", "redeemed", "expired"].map((status) => (
+              <button
+                key={status}
+                type="button"
+                className={filter === status ? "primary" : "outline"}
+                onClick={() => setFilter(status)}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <p className="muted">Loading rewards...</p>
+          ) : rewards.length === 0 ? (
+            <p className="empty">
+              No {filter} rewards found.
+            </p>
+          ) : (
+            <div className="service-list">
+              {rewards.map((reward) => (
+                <div
+                  className="service"
+                  key={reward._id}
+                >
+                  <div>
+                    <strong>
+                      {reward.rewardType === "percentage"
+                        ? `${reward.rewardValue}% discount`
+                        : `₹${reward.rewardValue} discount`}
+                    </strong>
+
+                    <small>
+                      Customer: {reward.customerPhone}
+                    </small>
+
+                    <small>
+                      Earned: {formatDate(reward.earnedAt)}
+                    </small>
+
+                    <small>
+                      Expires:{" "}
+                      {reward.expiresAt
+                        ? formatDate(reward.expiresAt)
+                        : "Never"}
+                    </small>
+
+                    {reward.redeemedAt && (
+                      <small>
+                        Redeemed: {formatDate(reward.redeemedAt)}
+                      </small>
+                    )}
+                  </div>
+
+                  {reward.status === "available" && (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => redeemReward(reward)}
+                    >
+                      Mark Redeemed
+                    </button>
+                  )}
+
+                  {reward.status !== "available" && (
+                    <span className="muted">
+                      {reward.status.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <p className="muted">
+          Note: Marking a reward as redeemed records its redemption.
+          It does not currently apply a discount to a booking or payment.
+        </p>
+      </main>
+    </div>
+  );
+}
+
+
+// ===============================
 // APP
 // ===============================
 
@@ -3372,6 +3934,20 @@ function App() {
       <Navigate to="/admin" replace />
     ) : (
       <Dashboard user={user} logout={logout} />
+    )
+  }
+/>
+
+{/* Royaltoi Loyalty */}
+<Route
+  path="/loyalty"
+  element={
+    !user ? (
+      <Navigate to="/business/login" replace />
+    ) : user.role === "ADMIN" ? (
+      <Navigate to="/admin" replace />
+    ) : (
+      <LoyaltyPage />
     )
   }
 />
