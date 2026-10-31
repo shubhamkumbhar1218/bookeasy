@@ -124,11 +124,15 @@ async function sendReminder(booking, reminderType) {
       bookingId: claimedBooking._id,
     });
 
-    await sendPushForNotification(notification);
+const pushAccepted = await sendPushForNotification(notification);
 
-    console.log(
-      `BookEasy: ${reminderType} reminder sent for booking ${claimedBooking._id}`
-    );
+console.log("BookEasy: Appointment reminder processed.", {
+  bookingId: claimedBooking._id.toString(),
+  reminderType,
+  notificationCreated: true,
+  pushAccepted,
+});
+
   } catch (error) {
     // Allow the scheduler to retry if sending fails.
     await Booking.updateOne(
@@ -156,11 +160,17 @@ async function checkAppointmentReminders() {
     );
 
     // Do not even query reminder bookings for ineligible owners.
-    const eligibleBusinessIds = await getEligibleBusinessIds(now);
+const eligibleBusinessIds = await getEligibleBusinessIds(now);
 
-    if (eligibleBusinessIds.length === 0) {
-      return;
-    }
+console.log("BookEasy: Reminder eligibility check.", {
+  eligibleBusinessCount: eligibleBusinessIds.length,
+  checkedAt: now.toISOString(),
+});
+
+if (eligibleBusinessIds.length === 0) {
+  console.log("BookEasy: No eligible businesses for reminders.");
+  return;
+}
 
     const bookings = await Booking.find({
       businessId: { $in: eligibleBusinessIds },
@@ -177,9 +187,26 @@ async function checkAppointmentReminders() {
       "_id businessId customerPhone bookingDate status reminder24hSentAt reminder1hSentAt"
     );
 
+    console.log("BookEasy: Reminder bookings found.", {
+  bookingCount: bookings.length,
+  eligibleBusinessCount: eligibleBusinessIds.length,
+});
+
     for (const booking of bookings) {
       const timeUntilAppointment =
         new Date(booking.bookingDate).getTime() - Date.now();
+
+        console.log("BookEasy: Checking appointment reminder.", {
+  bookingId: booking._id.toString(),
+  businessId: booking.businessId.toString(),
+  status: booking.status,
+  bookingDate: new Date(booking.bookingDate).toISOString(),
+  hoursUntilAppointment: Number(
+    (timeUntilAppointment / ONE_HOUR_MS).toFixed(2)
+  ),
+  reminder24hSent: Boolean(booking.reminder24hSentAt),
+  reminder1hSent: Boolean(booking.reminder1hSentAt),
+});
 
       if (
         timeUntilAppointment <= TWENTY_FOUR_HOURS_MS &&

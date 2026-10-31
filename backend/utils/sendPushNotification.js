@@ -1,7 +1,3 @@
-
-
-
-
 import { Expo } from "expo-server-sdk";
 import PushToken from "../models/PushToken.js";
 import { normalizePhone } from "./normalizePhone.js";
@@ -12,7 +8,7 @@ export async function sendPushForNotification(notification) {
   try {
     if (!notification) {
       console.error("BOOKEASY: Notification data is missing.");
-      return;
+      return false;
     }
 
     let pushTokens = [];
@@ -37,7 +33,7 @@ export async function sendPushForNotification(notification) {
             type: notification.type,
           }
         );
-        return;
+        return false;
       }
 
       recipientType = "customer";
@@ -92,7 +88,7 @@ export async function sendPushForNotification(notification) {
           : null,
         type: notification.type,
       });
-      return;
+      return false;
     }
 
     console.log("BOOKEASY: Push tokens found.", {
@@ -105,21 +101,25 @@ export async function sendPushForNotification(notification) {
     // 3. BUILD PUSH MESSAGES
     // =====================================================
 
-    const messages = [];
+const messages = [];
+let allPushesAccepted = true;
 
-    for (const tokenRecord of pushTokens) {
+for (const tokenRecord of pushTokens) {
       const token = tokenRecord.expoPushToken;
 
-      if (!Expo.isExpoPushToken(token)) {
-        console.error(
-          "BOOKEASY: Invalid Expo push token found.",
-          {
-            tokenId: tokenRecord._id.toString(),
-            recipientType,
-          }
-        );
-        continue;
-      }
+if (!Expo.isExpoPushToken(token)) {
+  allPushesAccepted = false;
+
+  console.error(
+    "BOOKEASY: Invalid Expo push token found.",
+    {
+      tokenId: tokenRecord._id.toString(),
+      recipientType,
+    }
+  );
+
+  continue;
+}
 
       messages.push({
         to: token,
@@ -147,7 +147,7 @@ export async function sendPushForNotification(notification) {
         "BOOKEASY: No valid push messages to send.",
         { recipientType, type: notification.type }
       );
-      return;
+      return false;
     }
 
     // =====================================================
@@ -159,6 +159,17 @@ export async function sendPushForNotification(notification) {
     for (const chunk of chunks) {
       try {
         const tickets = await expo.sendPushNotificationsAsync(chunk);
+
+if (tickets.some((ticket) => ticket.status !== "ok")) {
+  allPushesAccepted = false;
+
+  console.error(
+    "BOOKEASY: One or more Expo push tickets failed.",
+    {
+      type: notification.type,
+    }
+  );
+}
 
         console.log("BOOKEASY: Expo push tickets.", {
           recipientType,
@@ -190,19 +201,21 @@ export async function sendPushForNotification(notification) {
             );
           }
         }
-      } catch (error) {
-        console.error(
-          "BOOKEASY: Failed to send Expo push notification.",
-          {
-            recipientType,
-            type: notification.type,
-            error:
-              error instanceof Error
-                ? error.message
-                : String(error),
-          }
-        );
-      }
+} catch (error) {
+  allPushesAccepted = false;
+
+  console.error(
+    "BOOKEASY: Failed to send Expo push notification.",
+    {
+      recipientType,
+      type: notification.type,
+      error:
+        error instanceof Error
+          ? error.message
+          : String(error),
+    }
+  );
+}
     }
   } catch (error) {
     console.error("BOOKEASY: Send push notification error.", {
@@ -210,5 +223,6 @@ export async function sendPushForNotification(notification) {
       type: notification?.type,
       error: error instanceof Error ? error.message : String(error),
     });
+    return false;
   }
 }
