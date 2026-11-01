@@ -2,7 +2,6 @@
 import {
   ActivityIndicator,
   Alert,
-  AppState,
   Linking,
   RefreshControl,
   ScrollView,
@@ -398,23 +397,30 @@ const handleContact = async (url: string) => {
           />
         }
       >
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backCircle}
-            onPress={() => router.back()}
-            accessibilityLabel="Go back"
-          >
-            <Text style={styles.backCircleText}>Back</Text>
-          </TouchableOpacity>
+<View style={styles.navigationRow}>
+  <TouchableOpacity
+    style={styles.dashboardButton}
+    onPress={() => router.replace("/business/dashboard" as any)}
+    activeOpacity={0.75}
+    accessibilityRole="button"
+    accessibilityLabel="Go to business dashboard"
+  >
+    <Text style={styles.dashboardArrow}>‹</Text>
+    <Text style={styles.dashboardButtonText}>Dashboard</Text>
+  </TouchableOpacity>
 
-          <View style={styles.headerText}>
-            <Text style={styles.heading}>Subscription</Text>
-            <Text style={styles.muted}>
-              Manage your BookEasy plan
-            </Text>
-          </View>
-          <Text style={styles.crown}>*</Text>
-        </View>
+  <Text style={styles.navigationLabel}>BUSINESS ACCOUNT</Text>
+</View>
+
+<View style={styles.header}>
+  <View style={styles.headerText}>
+    <Text style={styles.heading}>Subscription</Text>
+    <Text style={styles.muted}>
+      Manage your BookEasy plan
+    </Text>
+  </View>
+  <Text style={styles.crown}>*</Text>
+</View>
 
         <View style={styles.currentCard}>
           <Text style={styles.eyebrow}>YOUR CURRENT PLAN</Text>
@@ -836,48 +842,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 24,
     backgroundColor: "#F7F6F0",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 22,
-    gap: 12,
-  },
-  backCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E9F0E8",
-  },
-backCircleText: {
-  fontSize: 12,
-  fontWeight: "700",
-  color: "#243B35",
+  },currentCard: {
+  backgroundColor: "#243B35",
+  padding: 20,
+  borderRadius: 22,
+  marginBottom: 28,
 },
-  headerText: {
-    flex: 1,
-  },
-  heading: {
-    color: "#243B35",
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  muted: {
-    color: "#64766A",
-    fontSize: 13,
-    marginTop: 5,
-  },
-  crown: {
-    fontSize: 27,
-  },
-  currentCard: {
-    backgroundColor: "#243B35",
-    padding: 20,
-    borderRadius: 22,
-    marginBottom: 28,
-  },
   eyebrow: {
     color: "#D7E2D9",
     fontSize: 11,
@@ -1276,6 +1246,75 @@ contactFooterText: {
   lineHeight: 17,
 },
 
+navigationRow: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 16,
+  gap: 10,
+},
 
+dashboardButton: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  paddingVertical: 9,
+  paddingHorizontal: 13,
+  borderRadius: 12,
+  backgroundColor: "#E9F0E8",
+  borderWidth: 1,
+  borderColor: "#D5E3D5",
+  transform: [{ translateY: 12 }],
+},
+
+dashboardArrow: {
+  color: "#2F4F43",
+  fontSize: 23,
+  fontWeight: "700",
+  lineHeight: 24,
+},
+
+dashboardButtonText: {
+  color: "#2F4F43",
+  fontSize: 13,
+  fontWeight: "800",
+},
+
+navigationLabel: {
+  color: "#64766A",
+  fontSize: 10,
+  fontWeight: "800",
+  letterSpacing: 1.2,
+},
+
+header: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginBottom: 22,
+  gap: 12,
+}, 
+
+headerText: {
+  flex: 1,
+},
+
+heading: {
+  color: "#243B35",
+  fontSize: 25,
+  fontWeight: "800",
+},
+
+muted: {
+  color: "#64766A",
+  fontSize: 13,
+  marginTop: 6,
+},
+
+crown: {
+  color: "#D4A72C",
+  fontSize: 28,
+  fontWeight: "800",
+},
 });
 

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Animated,
   StyleSheet,
   Text,
   Image,
@@ -130,6 +131,25 @@ const [selectedCategory, setSelectedCategory] =
 const [supportVisible, setSupportVisible] = useState(false);
     const [helpVisible, setHelpVisible] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+
+  const headerAnimation = useRef(new Animated.Value(0)).current;
+
+useEffect(() => {
+  Animated.parallel([
+    Animated.timing(headerAnimation, {
+      toValue: 1,
+      duration: 700,
+      useNativeDriver: true,
+    }),
+    Animated.spring(headerAnimation, {
+      toValue: 1,
+      friction: 6,
+      tension: 45,
+      useNativeDriver: true,
+    }),
+  ]).start();
+}, [headerAnimation]);
+
 
   const handleContact = async (url: string) => {
   try {
@@ -298,14 +318,27 @@ if (selectedCategory !== "All") {
         ListHeaderComponent={
           <>
 
-<View style={styles.topHeader}>
-  <View>
-    <Text style={styles.logo}>BookEasy</Text>
-    <Text style={styles.headerSubtitle}>
-      Customer Dashboard
-    </Text>
-  </View>
-</View>
+<Animated.View
+  style={[
+    styles.topHeader,
+    {
+      opacity: headerAnimation,
+      transform: [
+        {
+          scale: headerAnimation.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.85, 1],
+          }),
+        },
+      ],
+    },
+  ]}
+>
+  <Text style={styles.logo}>
+    <Text style={styles.logoBook}>Book</Text>
+    <Text style={styles.logoEasy}>Easy</Text>
+  </Text>
+</Animated.View>
 
 
             {/* Back to Business Dashboard */}
@@ -854,27 +887,35 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  topHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 10,
-    marginBottom: 20,
-  },
-
-  logo: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
   headerSubtitle: {
     fontSize: 12,
     color: "#6b7280",
     marginTop: 2,
   },
 
-  
+  topHeader: {
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 12,
+  marginBottom: 24,
+  minHeight: 48,
+},
+
+logo: {
+  fontSize: 30,
+  fontWeight: "900",
+  letterSpacing: 1.2,
+},
+
+logoBook: {
+  color: "#111827",
+},
+
+logoEasy: {
+  color: "#2563EB",
+},
+
+
 supportIconButton: {
   width: 46,
   height: 46,

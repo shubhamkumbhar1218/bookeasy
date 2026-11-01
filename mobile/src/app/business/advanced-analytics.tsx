@@ -831,6 +831,7 @@ dashboardButton: {
   backgroundColor: "#211B31",
   borderWidth: 1,
   borderColor: "#514071",
+  transform: [{ translateY: 12 }],
 },
 
 dashboardButtonText: {
