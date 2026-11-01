@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -667,22 +669,29 @@ const body = {
         )}
       </ScrollView>
 
+
       {/* Add / Edit Modal */}
 
       <Modal
         visible={modalVisible}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={closeModal}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
+        >
           <View style={styles.modalCard}>
+
+            {/* Fixed Modal Header */}
+
             <View style={styles.modalHeader}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitle}>
-                  {editingService
-                    ? "Edit Service"
-                    : "Add Service"}
+                  {editingService ? "Edit Service" : "Add Service"}
                 </Text>
 
                 <Text style={styles.modalSubtitle}>
@@ -693,138 +702,152 @@ const body = {
               <TouchableOpacity
                 onPress={closeModal}
                 disabled={saving}
+                style={styles.modalCloseButton}
               >
-                <Text style={styles.closeText}>
-                  ✕
-                </Text>
+                <Text style={styles.closeText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.label}>
-              Service Name
-            </Text>
+            {/* Scrollable Form Content */}
 
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Haircut"
-              placeholderTextColor="#9ca3af"
-              value={serviceName}
-              onChangeText={setServiceName}
-            />
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              <Text style={styles.label}>Service Name</Text>
 
-            <Text style={styles.label}>
-              Price
-            </Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Haircut"
+                placeholderTextColor="#9ca3af"
+                value={serviceName}
+                onChangeText={setServiceName}
+              />
 
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. 300"
-              placeholderTextColor="#9ca3af"
-              value={price}
-              onChangeText={setPrice}
-              keyboardType="numeric"
-            />
+              <Text style={styles.label}>Price</Text>
 
-<Text style={styles.label}>
-  Appointment Duration (minutes)
-</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 300"
+                placeholderTextColor="#9ca3af"
+                value={price}
+                onChangeText={setPrice}
+                keyboardType="numeric"
+              />
 
-{renderOptions(
-  duration,
-  [15, 20, 30, 45, 60],
-  setDuration
-)}
-
-<Text style={styles.label}>
-  Slot Interval (minutes)
-</Text>
-
-<Text style={styles.helperText}>
-  How often a new appointment can start.
-</Text>
-
-{renderOptions(
-  slotInterval,
-  [5, 10, 15, 20, 30],
-  setSlotInterval
-)}
-
-<Text style={styles.label}>
-  Buffer After Appointment (minutes)
-</Text>
-
-<Text style={styles.helperText}>
-  Extra time blocked after each appointment.
-</Text>
-
-{renderOptions(
-  bufferMinutes,
-  [0, 5, 10, 15],
-  setBufferMinutes
-)}
-
-
-{(teamEnabled || isHealthcareBusiness) && (
-  <View style={styles.staffSelectionSection}>
-    <Text style={styles.label}>
-      Team Members for This Service
-    </Text>
-
-    <Text style={styles.helperText}>
-      {isHealthcareBusiness
-        ? "Select at least one active doctor or team member. This is required for healthcare services."
-        : "Select who can provide this service. Leave everyone unselected to allow all active team members."}
-    </Text>
-
-    {!teamEnabled && isHealthcareBusiness ? (
-      <Text style={styles.noStaffText}>
-        Healthcare services require an active Team Management subscription.
-        Activate it and add eligible team members.
-      </Text>
-    ) : teamStaff.length === 0 ? (
-      <Text style={styles.noStaffText}>
-        No active team members. Add members in Team Management.
-      </Text>
-    ) : (
-      teamStaff.map((member) => {
-        const selected = selectedStaffIds.includes(member._id);
-
-        return (
-          <TouchableOpacity
-            key={member._id}
-            style={[
-              styles.staffOption,
-              selected && styles.staffOptionSelected,
-            ]}
-            onPress={() => toggleStaffSelection(member._id)}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.staffOptionName}>
-                {member.name}
+              <Text style={styles.label}>
+                Appointment Duration (minutes)
               </Text>
 
-              {!!member.designation && (
-                <Text style={styles.staffOptionDesignation}>
-                  {member.designation}
-                </Text>
+              {renderOptions(
+                duration,
+                [15, 20, 30, 45, 60],
+                setDuration
               )}
-            </View>
 
-            <Text
-              style={[
-                styles.staffCheckbox,
-                selected && styles.staffCheckboxSelected,
-              ]}
-            >
-              {selected ? "✓" : ""}
-            </Text>
-          </TouchableOpacity>
-        );
-      })
-    )}
-  </View>
-)}
+              <Text style={styles.label}>
+                Slot Interval (minutes)
+              </Text>
 
+              <Text style={styles.helperText}>
+                How often a new appointment can start.
+              </Text>
+
+              {renderOptions(
+                slotInterval,
+                [5, 10, 15, 20, 30],
+                setSlotInterval
+              )}
+
+              <Text style={styles.label}>
+                Buffer After Appointment (minutes)
+              </Text>
+
+              <Text style={styles.helperText}>
+                Extra time blocked after each appointment.
+              </Text>
+
+              {renderOptions(
+                bufferMinutes,
+                [0, 5, 10, 15],
+                setBufferMinutes
+              )}
+
+              {(teamEnabled || isHealthcareBusiness) && (
+                <View style={styles.staffSelectionSection}>
+                  <Text style={styles.label}>
+                    Team Members for This Service
+                  </Text>
+
+                  <Text style={styles.helperText}>
+                    {isHealthcareBusiness
+                      ? "Select at least one active doctor or team member. This is required for healthcare services."
+                      : "Select who can provide this service. Leave everyone unselected to allow all active team members."}
+                  </Text>
+
+                  {!teamEnabled && isHealthcareBusiness ? (
+                    <Text style={styles.noStaffText}>
+                      Healthcare services require an active Team
+                      Management subscription. Activate it and add
+                      eligible team members.
+                    </Text>
+                  ) : teamStaff.length === 0 ? (
+                    <Text style={styles.noStaffText}>
+                      No active team members. Add members in Team
+                      Management.
+                    </Text>
+                  ) : (
+                    teamStaff.map((member) => {
+                      const selected = selectedStaffIds.includes(
+                        member._id
+                      );
+
+                      return (
+                        <TouchableOpacity
+                          key={member._id}
+                          style={[
+                            styles.staffOption,
+                            selected && styles.staffOptionSelected,
+                          ]}
+                          onPress={() =>
+                            toggleStaffSelection(member._id)
+                          }
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.staffOptionName}>
+                              {member.name}
+                            </Text>
+
+                            {!!member.designation && (
+                              <Text
+                                style={styles.staffOptionDesignation}
+                              >
+                                {member.designation}
+                              </Text>
+                            )}
+                          </View>
+
+                          <Text
+                            style={[
+                              styles.staffCheckbox,
+                              selected &&
+                                styles.staffCheckboxSelected,
+                            ]}
+                          >
+                            {selected ? "✓" : ""}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Fixed Bottom Actions */}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -854,9 +877,11 @@ const body = {
                 </Text>
               </TouchableOpacity>
             </View>
+
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
+
     </View>
   );
 }
@@ -1104,19 +1129,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
-  },
+modalOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.50)",
+  justifyContent: "flex-end",
+},
 
-  modalCard: {
-    backgroundColor: "#ffffff",
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    padding: 22,
-    paddingBottom: 35,
-  },
+modalCard: {
+  width: "100%",
+  maxHeight: "90%",
+  backgroundColor: "#ffffff",
+  borderTopLeftRadius: 25,
+  borderTopRightRadius: 25,
+  paddingTop: 20,
+  paddingHorizontal: 20,
+  paddingBottom: Platform.OS === "ios" ? 28 : 16,
+  overflow: "hidden",
+},
+
+modalScroll: {
+  flexShrink: 1,
+  minHeight: 0,
+},
+
+modalScrollContent: {
+  paddingBottom: 22,
+  flexGrow: 1,
+},
+
+modalCloseButton: {
+  width: 36,
+  height: 36,
+  borderRadius: 10,
+  backgroundColor: "#f3f4f6",
+  justifyContent: "center",
+  alignItems: "center",
+},
 
   modalHeader: {
     flexDirection: "row",
@@ -1160,11 +1208,15 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
 
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 5,
-  },
+modalActions: {
+  flexDirection: "row",
+  gap: 10,
+  paddingTop: 14,
+  paddingBottom: 4,
+  backgroundColor: "#ffffff",
+  borderTopWidth: 1,
+  borderTopColor: "#f0f2f5",
+},
 
   modalCancelButton: {
     flex: 1,

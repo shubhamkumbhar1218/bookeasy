@@ -183,18 +183,17 @@ export default function AdvancedAnalytics() {
         />
       }
     >
-<View style={styles.topBar}>
-  <Text style={styles.topBarLabel}>Analytics</Text>
-
+<View style={styles.navigationRow}>
   <TouchableOpacity
     style={styles.dashboardButton}
     onPress={() => router.replace("/business/dashboard" as any)}
-    activeOpacity={0.8}
+    activeOpacity={0.75}
   >
-    <Text style={styles.dashboardButtonText}>
-      ← Dashboard
-    </Text>
+    <Text style={styles.dashboardButtonText}>‹</Text>
+    <Text style={styles.dashboardButtonText}>Dashboard</Text>
   </TouchableOpacity>
+
+  <Text style={styles.navigationLabel}>BUSINESS ANALYTICS</Text>
 </View>
 
 <LinearGradient
@@ -813,28 +812,22 @@ statusProgress: {
 },
 
 
-topBar: {
+navigationRow: {
   flexDirection: "row",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: 20,
-  gap: 12,
-},
-
-topBarLabel: {
-  color: "#F5F0FF",
-  fontSize: 17,
-  fontWeight: "800",
-  flex: 1,
+  marginBottom: 15,
+  gap: 10,
 },
 
 dashboardButton: {
   flexDirection: "row",
   alignItems: "center",
   justifyContent: "center",
-  paddingVertical: 11,
-  paddingHorizontal: 15,
-  borderRadius: 14,
+  gap: 6,
+  paddingVertical: 9,
+  paddingHorizontal: 13,
+  borderRadius: 12,
   backgroundColor: "#211B31",
   borderWidth: 1,
   borderColor: "#514071",
@@ -844,6 +837,13 @@ dashboardButtonText: {
   color: "#C4B5FD",
   fontSize: 13,
   fontWeight: "800",
+},
+
+navigationLabel: {
+  color: "#9186A8",
+  fontSize: 10,
+  fontWeight: "800",
+  letterSpacing: 1.3,
 },
 
 });
