@@ -13,10 +13,107 @@ import {
 } from "../utils/sendPushNotification.js";
 import { getBookingQuotaCycle } from "../utils/bookingQuota.js";
 import { awardLoyaltyVisit } from "../utils/loyaltyService.js";
+import Staff from "../models/Staff.js";
+import BookingSlotLock from "../models/BookingSlotLock.js";
+
+import {
+  getEligibleStaffForSlot,
+} from "../utils/staffAssignment.js";
+
+import {
+  reserveStaffBookingLocks,
+  releaseBookingLocks,
+} from "../utils/bookingSlotLocks.js";
 
 const router = express.Router();
 
+// --------------------------------------------------
+// CHECK WHETHER TEAM MANAGEMENT IS CURRENTLY ACTIVE
+// --------------------------------------------------
+const isTeamManagementEnabled = (business) => {
+  const planName = String(business?.plan || "FREE").toUpperCase();
+  const plan = PLANS[planName];
 
+  if (!plan?.features?.includes("staff_management")) {
+    return false;
+  }
+
+  if (business.subscriptionStatus !== "ACTIVE") {
+    return false;
+  }
+
+  const expiry = business.subscriptionEndDate;
+
+  if (
+    !(expiry instanceof Date) ||
+    Number.isNaN(expiry.getTime()) ||
+    expiry.getTime() <= Date.now()
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+// Check whether this business belongs to a healthcare category.
+const isHealthcareBusiness = (business) => {
+  const healthcareTypes = new Set([
+    "hospital",
+    "dental clinic",
+    "doctor / clinic",
+    "physiotherapy",
+    "diagnostic lab",
+    "pet clinic / veterinary",
+  ]);
+
+  return healthcareTypes.has(
+    String(business?.businessType || "").trim().toLowerCase()
+  );
+};
+
+// --------------------------------------------------
+// RELEASE LOCKS WHEN A BOOKING BECOMES INACTIVE
+// --------------------------------------------------
+const updateBookingAndReleaseLocks = async ({
+  bookingId,
+  businessId,
+  update,
+}) => {
+  const session = await mongoose.startSession();
+
+  try {
+    let updatedBooking;
+
+    await session.withTransaction(async () => {
+      updatedBooking = await Booking.findOneAndUpdate(
+        {
+          _id: bookingId,
+          businessId,
+          status: { $in: ["pending", "confirmed"] },
+        },
+        update,
+        {
+          new: true,
+          session,
+          runValidators: true,
+        }
+      );
+
+      if (!updatedBooking) {
+        throw new Error("BOOKING_NOT_ACTIVE");
+      }
+
+      await releaseBookingLocks({
+        bookingId,
+        session,
+      });
+    });
+
+    return updatedBooking;
+  } finally {
+    await session.endSession();
+  }
+};
 
 /**
  * Check appointment overlap, including each service's
@@ -85,12 +182,33 @@ function hasBookingConflict({
   });
 }
 
+const sendNewBookingNotifications = async (
+  booking,
+  customerName,
+  customerPhone
+) => {
+  const businessNotification = await Notification.create({
+    businessId: booking.businessId,
+    type: "new_booking",
+    title: "New appointment",
+    message: `${customerName} booked an appointment.`,
+    bookingId: booking._id,
+  });
+
+  await sendPushForNotification(businessNotification);
+
+  const customerNotification = await Notification.create({
+    customerPhone,
+    type: "new_booking",
+    title: "Booking received",
+    message: "Your appointment has been booked successfully.",
+    bookingId: booking._id,
+  });
+
+  await sendPushForNotification(customerNotification);
+};
 
 // Get available booki
-// ng slots
-// ======================================================
-// GET AVAILABLE BOOKING SLOTS
-// ======================================================
 router.get("/availability", async (req, res) => {
   try {
     const {
@@ -102,15 +220,13 @@ router.get("/availability", async (req, res) => {
 
     if (!businessId || !serviceId || !date) {
       return res.status(400).json({
-        message:
-          "businessId, serviceId and date are required",
+        message: "businessId, serviceId and date are required",
       });
     }
 
-    // Validate IDs before querying MongoDB.
     if (
-      !mongoose.Types.ObjectId.isValid(businessId) ||
-      !mongoose.Types.ObjectId.isValid(serviceId)
+      !mongoose.isValidObjectId(businessId) ||
+      !mongoose.isValidObjectId(serviceId)
     ) {
       return res.status(400).json({
         message: "Invalid businessId or serviceId",
@@ -119,14 +235,13 @@ router.get("/availability", async (req, res) => {
 
     if (
       excludeBookingId &&
-      !mongoose.Types.ObjectId.isValid(excludeBookingId)
+      !mongoose.isValidObjectId(excludeBookingId)
     ) {
       return res.status(400).json({
         message: "Invalid excludeBookingId",
       });
     }
 
-    // Require a real calendar date in YYYY-MM-DD format.
     if (
       typeof date !== "string" ||
       !/^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -149,7 +264,7 @@ router.get("/availability", async (req, res) => {
 
     const business = await User.findById(businessId);
 
-    if (!business) {
+    if (!business || business.role !== "BUSINESS") {
       return res.status(404).json({
         message: "Business not found",
       });
@@ -167,24 +282,6 @@ router.get("/availability", async (req, res) => {
       });
     }
 
-    console.log("AVAILABILITY SERVICE:", {
-  serviceId: service._id.toString(),
-  name: service.name,
-  duration: service.duration,
-  slotIntervalMinutes: service.slotIntervalMinutes,
-  bufferMinutes: service.bufferMinutes,
-});
-
-
-  let effectivePlan = business.plan || "FREE";
-
-    // --------------------------------------------------
-    // INDIA TIME HELPERS
-    // --------------------------------------------------
-
-    const IST_OFFSET_MS =
-      5.5 * 60 * 60 * 1000;
-
     const dayNames = [
       "sunday",
       "monday",
@@ -195,23 +292,9 @@ router.get("/availability", async (req, res) => {
       "saturday",
     ];
 
-    // Get weekday from an India calendar date.
-    // Using noon UTC avoids crossing the date boundary.
-    const calendarDate = new Date(
-      `${date}T12:00:00Z`
-    );
-
-    if (isNaN(calendarDate.getTime())) {
-      return res.status(400).json({
-        message: "Invalid date",
-      });
-    }
-
-    const dayName =
-      dayNames[calendarDate.getUTCDay()];
-
-    const hours =
-      business.workingHours?.[dayName];
+    const calendarDate = new Date(`${date}T12:00:00Z`);
+    const dayName = dayNames[calendarDate.getUTCDay()];
+    const hours = business.workingHours?.[dayName];
 
     if (!hours || hours.closed) {
       return res.json({
@@ -222,194 +305,154 @@ router.get("/availability", async (req, res) => {
     }
 
     if (
-  typeof hours.open !== "string" ||
-  typeof hours.close !== "string" ||
-  !/^\d{2}:\d{2}$/.test(hours.open) ||
-  !/^\d{2}:\d{2}$/.test(hours.close)
-) {
-  return res.status(400).json({
-    message: "Business working hours are invalid",
-  });
-}
-
-    const [openHour, openMinute] =
-      hours.open.split(":").map(Number);
-
-    const [closeHour, closeMinute] =
-      hours.close.split(":").map(Number);
-
-
-
-if (
-  !Number.isInteger(openHour) ||
-  !Number.isInteger(openMinute) ||
-  !Number.isInteger(closeHour) ||
-  !Number.isInteger(closeMinute) ||
-  openHour < 0 ||
-  openHour > 23 ||
-  openMinute < 0 ||
-  openMinute > 59 ||
-  closeHour < 0 ||
-  closeHour > 23 ||
-  closeMinute < 0 ||
-  closeMinute > 59
-) {
-  return res.status(400).json({
-    message: "Business working hours are invalid",
-  });
-}
-
-
-    const openMinutes =
-      openHour * 60 + openMinute;
-
-    const closeMinutes =
-      closeHour * 60 + closeMinute;
-
-
-    // --------------------------------------------------
-    // EXISTING ACTIVE BOOKINGS
-    // --------------------------------------------------
-
-
-    const bookingQuery = {
-      businessId,
-      status: {
-        $in: ["pending", "confirmed"],
-      },
-    };
-
-    if (excludeBookingId) {
-      bookingQuery._id = {
-        $ne: excludeBookingId,
-      };
+      typeof hours.open !== "string" ||
+      typeof hours.close !== "string" ||
+      !/^\d{2}:\d{2}$/.test(hours.open) ||
+      !/^\d{2}:\d{2}$/.test(hours.close)
+    ) {
+      return res.status(400).json({
+        message: "Business working hours are invalid",
+      });
     }
 
-const existingBookings = await Booking.find(bookingQuery)
-  .populate("serviceId", "duration bufferMinutes");
+    const [openHour, openMinute] = hours.open.split(":").map(Number);
+    const [closeHour, closeMinute] = hours.close.split(":").map(Number);
 
-    // --------------------------------------------------
-    // CURRENT TIME IN INDIA
-    // --------------------------------------------------
+    if (
+      openHour > 23 || closeHour > 23 ||
+      openMinute > 59 || closeMinute > 59
+    ) {
+      return res.status(400).json({
+        message: "Business working hours are invalid",
+      });
+    }
 
-    const now = new Date();
+    const openMinutes = openHour * 60 + openMinute;
+    const closeMinutes = closeHour * 60 + closeMinute;
 
-    // --------------------------------------------------
-    // GENERATE AVAILABLE SLOTS
-    // --------------------------------------------------
+    const slotIntervalMinutes = Number(
+      service.slotIntervalMinutes ?? 30
+    );
 
-    const slots = [];
+    const durationMinutes = Number(service.duration);
+    const bufferMinutes = Number(service.bufferMinutes ?? 0);
 
+    if (
+      ![5, 10, 15, 20, 30].includes(slotIntervalMinutes) ||
+      ![15, 20, 30, 45, 60].includes(durationMinutes) ||
+      ![0, 5, 10, 15].includes(bufferMinutes)
+    ) {
+      return res.status(400).json({
+        message: "Invalid service scheduling settings",
+      });
+    }
 
-const slotIntervalMinutes = Number(
-  service.slotIntervalMinutes ?? 30
-);
+    const teamEnabled = isTeamManagementEnabled(business);
 
-const serviceDuration = Number(service.duration);
-
-const serviceBufferMinutes = Number(
-  service.bufferMinutes ?? 0
-);
-
-// Validate scheduling settings before generating slots.
-if (
-  !Number.isFinite(slotIntervalMinutes) ||
-  !Number.isFinite(serviceDuration) ||
-  !Number.isFinite(serviceBufferMinutes) ||
-  ![5, 10, 15, 20, 30].includes(slotIntervalMinutes) ||
-  ![15, 20, 30, 45, 60].includes(serviceDuration) ||
-  ![0, 5, 10, 15].includes(serviceBufferMinutes)
-) {
-  return res.status(400).json({
-    message: "Invalid service scheduling settings",
+    if (isHealthcareBusiness(business) && !teamEnabled) {
+  return res.json({
+    date,
+    slots: [],
+    message:
+      "Healthcare bookings require an active Team Management subscription and eligible staff.",
   });
 }
 
-// Generate slots using the service's configured interval.
-// Appointment duration plus buffer must fit before closing.
-for (
-  let minutes = openMinutes;
-  minutes + serviceDuration + serviceBufferMinutes <= closeMinutes;
-  minutes += slotIntervalMinutes
-) {
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const now = new Date();
+    const slots = [];
 
-      const hour = Math.floor(
-        minutes / 60
-      );
-
+    // Generate each possible service slot.
+    for (
+      let minutes = openMinutes;
+      minutes + durationMinutes + bufferMinutes <= closeMinutes;
+      minutes += slotIntervalMinutes
+    ) {
+      const hour = Math.floor(minutes / 60);
       const minute = minutes % 60;
 
-      const localWallClockAsUTC = Date.UTC(
-        Number(date.split("-")[0]),
-        Number(date.split("-")[1]) - 1,
-        Number(date.split("-")[2]),
-        hour,
-        minute,
-        0
-      );
-
       const slotDate = new Date(
-        localWallClockAsUTC - IST_OFFSET_MS
+        Date.UTC(
+          Number(date.slice(0, 4)),
+          Number(date.slice(5, 7)) - 1,
+          Number(date.slice(8, 10)),
+          hour,
+          minute
+        ) - IST_OFFSET_MS
       );
-
-const slotEnd = new Date(
-  slotDate.getTime() + serviceDuration * 60 * 1000
-);
-
-      // --------------------------------------------------
-      // DON'T SHOW PAST SLOTS
-      // --------------------------------------------------
 
       if (slotDate <= now) {
         continue;
       }
 
-      // --------------------------------------------------
-      // CHECK BOOKING CONFLICT
-      // --------------------------------------------------
+      const slotEnd = new Date(
+        slotDate.getTime() + durationMinutes * 60000
+      );
 
-const conflict = hasBookingConflict({
-  bookings: existingBookings,
-  startTime: slotDate,
-  endTime: slotEnd,
-  bufferMinutes: serviceBufferMinutes,
-});
+      let available = false;
 
-      if (!conflict) {
+      if (teamEnabled) {
+        const eligibleStaff = await getEligibleStaffForSlot({
+          business,
+          service,
+          startTime: slotDate,
+          endTime: slotEnd,
+          excludeBookingId: excludeBookingId || null,
+        });
+
+        available = eligibleStaff.length > 0;
+      } else {
+        // Preserve legacy business-wide scheduling for plans
+        // without active team management.
+        const bookingQuery = {
+          businessId,
+          status: { $in: ["pending", "confirmed"] },
+        };
+
+        if (excludeBookingId) {
+          bookingQuery._id = { $ne: excludeBookingId };
+        }
+
+        const existingBookings = await Booking.find(bookingQuery)
+          .populate("serviceId", "duration bufferMinutes");
+
+        available = !hasBookingConflict({
+          bookings: existingBookings,
+          startTime: slotDate,
+          endTime: slotEnd,
+          bufferMinutes,
+        });
+      }
+
+      if (available) {
         slots.push({
-          value:
-            slotDate.toISOString(),
-
-          label:
-            slotDate.toLocaleTimeString(
-              "en-IN",
-              {
-                timeZone:
-                  "Asia/Kolkata",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: true,
-              }
-            ),
+          value: slotDate.toISOString(),
+          label: slotDate.toLocaleTimeString("en-IN", {
+            timeZone: "Asia/Kolkata",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          }),
         });
       }
     }
 
-    res.json({
+    return res.json({
       date,
       slots,
     });
   } catch (error) {
-    console.log(
-      "Availability error:",
-      error
-    );
+    console.error("Availability error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error",
     });
   }
 });
+
+
+
+
 
 router.post("/public", async (req, res) => {
   try {
@@ -433,24 +476,23 @@ router.post("/public", async (req, res) => {
       });
     }
 
-    // --------------------------------------------------
-    // FIND SERVICE
-    // --------------------------------------------------
-
-    const service = await Service.findOne({
-      _id: serviceId,
-      businessId,
-      isActive: true,
-    });
-
-    if (!service) {
-      return res.status(404).json({
-        message: "Service not found",
+    if (
+      !mongoose.isValidObjectId(businessId) ||
+      !mongoose.isValidObjectId(serviceId)
+    ) {
+      return res.status(400).json({
+        message: "Invalid business or service",
       });
     }
-// -----------------------------------------------
-    // BUSINESS PLAN AND MONTHLY BOOKING LIMIT
-    // -----------------------------------------------
+
+    const cleanName = String(customerName).trim();
+    const cleanPhone = normalizePhone(customerPhone);
+
+    if (!cleanName || !cleanPhone) {
+      return res.status(400).json({
+        message: "Valid customer name and phone are required",
+      });
+    }
 
     const business = await User.findById(businessId);
 
@@ -470,18 +512,37 @@ router.post("/public", async (req, res) => {
       });
     }
 
+    const service = await Service.findOne({
+      _id: serviceId,
+      businessId,
+      isActive: true,
+    });
+
+    if (!service) {
+      return res.status(404).json({
+        message: "Service not found",
+      });
+    }
+
+    // --------------------------------------------------
+    // PLAN AND BOOKING QUOTA
+    // --------------------------------------------------
+
     let effectivePlan = business.plan || "FREE";
 
     const subscriptionExpired =
       business.subscriptionEndDate &&
       new Date(business.subscriptionEndDate) <= new Date();
 
-if (
-  effectivePlan !== "FREE" &&
-  subscriptionExpired
-) {
-  effectivePlan = "FREE";
-}
+    if (
+      effectivePlan !== "FREE" &&
+      (
+        subscriptionExpired ||
+        business.subscriptionStatus !== "ACTIVE"
+      )
+    ) {
+      effectivePlan = "FREE";
+    }
 
     const plan = PLANS[effectivePlan];
 
@@ -491,24 +552,15 @@ if (
       });
     }
 
-
-    // -----------------------------------------------
-    // FREE PLAN BOOKING LIMIT — REGISTRATION ANNIVERSARY
-    // -----------------------------------------------
     if (plan.bookingLimit !== null) {
       const { start, end } = getBookingQuotaCycle(
         business.createdAt,
         new Date()
       );
 
-      // Count all bookings created during this cycle,
-      // including cancelled bookings.
       const bookingsUsed = await Booking.countDocuments({
         businessId,
-        createdAt: {
-          $gte: start,
-          $lt: end,
-        },
+        createdAt: { $gte: start, $lt: end },
       });
 
       if (bookingsUsed >= plan.bookingLimit) {
@@ -524,28 +576,39 @@ if (
       }
     }
 
-
     // --------------------------------------------------
-    // BOOKING DATE
+    // VALIDATE APPOINTMENT TIME
     // --------------------------------------------------
 
     const startTime = new Date(bookingDate);
 
-    if (isNaN(startTime.getTime())) {
+    if (
+      Number.isNaN(startTime.getTime()) ||
+      startTime <= new Date()
+    ) {
       return res.status(400).json({
-        message: "Invalid booking date",
+        message: "Please select a valid future appointment time",
       });
     }
 
-    
-    // --------------------------------------------------
-    // VALIDATE WORKING HOURS AND SLOT INTERVAL
-    // --------------------------------------------------
+    const durationMinutes = Number(service.duration);
+    const intervalMinutes = Number(
+      service.slotIntervalMinutes ?? 30
+    );
+    const bufferMinutes = Number(service.bufferMinutes ?? 0);
+
+    if (
+      ![15, 20, 30, 45, 60].includes(durationMinutes) ||
+      ![5, 10, 15, 20, 30].includes(intervalMinutes) ||
+      ![0, 5, 10, 15].includes(bufferMinutes)
+    ) {
+      return res.status(400).json({
+        message: "Invalid service scheduling settings",
+      });
+    }
 
     const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-    const istDate = new Date(
-      startTime.getTime() + IST_OFFSET_MS
-    );
+    const istDate = new Date(startTime.getTime() + IST_OFFSET_MS);
 
     const dayNames = [
       "sunday",
@@ -557,183 +620,231 @@ if (
       "saturday",
     ];
 
-    const dayName = dayNames[istDate.getUTCDay()];
-    const hours = business.workingHours?.[dayName];
+    const hours = business.workingHours?.[
+      dayNames[istDate.getUTCDay()]
+    ];
 
-    if (!hours || hours.closed) {
+    if (
+      !hours ||
+      hours.closed ||
+      typeof hours.open !== "string" ||
+      typeof hours.close !== "string" ||
+      !/^\d{2}:\d{2}$/.test(hours.open) ||
+      !/^\d{2}:\d{2}$/.test(hours.close)
+    ) {
       return res.status(400).json({
-        message: "Business is closed on this day",
+        message: "Business is closed or has invalid working hours",
       });
     }
 
     const startMinutes =
-      istDate.getUTCHours() * 60 +
-      istDate.getUTCMinutes();
+      istDate.getUTCHours() * 60 + istDate.getUTCMinutes();
 
-    const [openHour, openMinute] =
-      hours.open.split(":").map(Number);
+    const [openHour, openMinute] = hours.open.split(":").map(Number);
+    const [closeHour, closeMinute] = hours.close.split(":").map(Number);
 
-    const [closeHour, closeMinute] =
-      hours.close.split(":").map(Number);
+    const openMinutes = openHour * 60 + openMinute;
+    const closeMinutes = closeHour * 60 + closeMinute;
 
-    const openMinutes =
-      openHour * 60 + openMinute;
-
-    const closeMinutes =
-      closeHour * 60 + closeMinute;
-
-    const durationMinutes = Number(service.duration);
-    const intervalMinutes = Number(
-      service.slotIntervalMinutes ?? 30
-    );
-    const bufferMinutes = Number(
-      service.bufferMinutes ?? 0
-    );
-
-if (
-  ![15, 20, 30, 45, 60].includes(durationMinutes) ||
-  ![5, 10, 15, 20, 30].includes(intervalMinutes) ||
-  ![0, 5, 10, 15].includes(bufferMinutes)
-) {
-      return res.status(400).json({
-        message: "Invalid service scheduling settings",
-      });
-    }
-
-    if (startTime <= new Date()) {
-      return res.status(400).json({
-        message: "Please select a future appointment time",
-      });
-    }
-
-if (
-  startMinutes < openMinutes ||
-  startMinutes + durationMinutes + bufferMinutes > closeMinutes ||
-  (startMinutes - openMinutes) % intervalMinutes !== 0 ||
-  istDate.getUTCSeconds() !== 0 ||
-  istDate.getUTCMilliseconds() !== 0
-) {
+    if (
+      startMinutes < openMinutes ||
+      startMinutes + durationMinutes + bufferMinutes > closeMinutes ||
+      (startMinutes - openMinutes) % intervalMinutes !== 0 ||
+      istDate.getUTCSeconds() !== 0 ||
+      istDate.getUTCMilliseconds() !== 0
+    ) {
       return res.status(400).json({
         message:
           "This appointment time is outside working hours or does not match the service's available time intervals.",
       });
     }
 
-
-    // --------------------------------------------------
-    // BOOKING END TIME
-    // --------------------------------------------------
-
     const endTime = new Date(
-      startTime.getTime() +
-        service.duration * 60 * 1000
+      startTime.getTime() + durationMinutes * 60000
     );
 
+    const bookingSlot =
+      `${businessId}_${startTime.toISOString()}`;
+
+    const teamEnabled = isTeamManagementEnabled(business);
+
+    if (isHealthcareBusiness(business) && !teamEnabled) {
+  return res.status(403).json({
+    message:
+      "Healthcare bookings require an active Team Management subscription and eligible staff.",
+  });
+}
+
     // --------------------------------------------------
-    // EXACT SLOT KEY
+    // LEGACY BOOKING FLOW
     // --------------------------------------------------
 
-        const bookingSlot = `${businessId}_${startTime.toISOString()}`;
+    if (!teamEnabled) {
+      const existingBookings = await Booking.find({
+        businessId,
+        status: { $in: ["pending", "confirmed"] },
+      }).populate("serviceId", "duration bufferMinutes");
 
-    // Check overlapping active bookings for this business.
-    const bookingQuery = {
-      businessId,
-      status: { $in: ["pending", "confirmed"] },
-    };
-
-const existingBookings = await Booking.find(bookingQuery)
-  .populate("serviceId", "duration bufferMinutes");
-
-const hasConflict = hasBookingConflict({
-  bookings: existingBookings,
-  startTime,
-  endTime,
-  bufferMinutes: Number(service.bufferMinutes ?? 0),
-});
-
-    if (hasConflict) {
-      return res.status(409).json({
-        message:
-          "This time overlaps an existing appointment. Please select another time.",
+      const conflict = hasBookingConflict({
+        bookings: existingBookings,
+        startTime,
+        endTime,
+        bufferMinutes,
       });
-    }
-// --------------------------------------------------
-    // CREATE BOOKING
-    // --------------------------------------------------
 
-    const booking =
-      await Booking.create({
+      if (conflict) {
+        return res.status(409).json({
+          message:
+            "This time overlaps an existing appointment. Please select another time.",
+        });
+      }
+
+      const booking = await Booking.create({
         businessId,
         serviceId,
-        customerName:
-          customerName.trim(),
-        customerPhone: normalizePhone(customerPhone),
+        customerName: cleanName,
+        customerPhone: cleanPhone,
         bookingDate: startTime,
         bookingSlot,
       });
 
+      await sendNewBookingNotifications(booking, cleanName, cleanPhone);
+
+      return res.status(201).json({
+        message: "Booking created successfully",
+        booking,
+      });
+    }
+
     // --------------------------------------------------
-    // BUSINESS OWNER NOTIFICATION
+    // AUTOMATIC TEAM ASSIGNMENT
     // --------------------------------------------------
 
-// --------------------------------------------------
-// BUSINESS OWNER NOTIFICATION
-// --------------------------------------------------
-// --------------------------------------------------
-// BUSINESS OWNER NOTIFICATION
-// --------------------------------------------------
+    const candidates = await getEligibleStaffForSlot({
+      business,
+      service,
+      startTime,
+      endTime,
+    });
 
-const businessNotification =
-  await Notification.create({
-    businessId:
-      booking.businessId,
-    type: "new_booking",
-    title: "New appointment",
-    message:
-      `${customerName.trim()} booked an appointment.`,
-    bookingId: booking._id,
-  });
+    if (!candidates.length) {
+      return res.status(409).json({
+        message:
+          "No eligible team member is available at this time. Please select another slot.",
+      });
+    }
 
-console.log(
-  "BOOKEASY: ABOUT TO SEND BUSINESS PUSH"
-);
+    let createdBooking = null;
+    let assignedStaff = null;
+    let lastError = null;
 
-await sendPushForNotification(
-  businessNotification
-);
+    // Each candidate is attempted in its own transaction.
+    // A duplicate lock means another booking won that staff slot.
+    for (const candidate of candidates) {
+      const session = await mongoose.startSession();
 
-// --------------------------------------------------
-// CUSTOMER NOTIFICATION
-// --------------------------------------------------
+      try {
+        await session.withTransaction(async () => {
+          const freshBusiness = await User.findById(businessId).session(session);
 
-const customerNotification =
-  await Notification.create({
-    customerPhone:
-      normalizePhone(customerPhone),
-    type: "new_booking",
-    title: "Booking received",
-    message:
-      "Your appointment has been booked successfully.",
-    bookingId: booking._id,
-  });
+          if (!freshBusiness || !isTeamManagementEnabled(freshBusiness)) {
+            throw new Error("TEAM_SUBSCRIPTION_INACTIVE");
+          }
 
-console.log(
-  "BOOKEASY: ABOUT TO SEND CUSTOMER PUSH"
-);
+          const freshStaff = await Staff.findOne({
+            _id: candidate._id,
+            businessId,
+            isActive: true,
+          }).session(session);
 
-await sendPushForNotification(
-  customerNotification
-);
+          if (!freshStaff) {
+            throw new Error("STAFF_NO_LONGER_AVAILABLE");
+          }
 
-// --------------------------------------------------
-// RESPONSE
-// --------------------------------------------------
-return res.status(201).json({
-  message: "Booking created successfully",
-  booking,
-});
+          const booking = new Booking({
+            businessId,
+            serviceId,
+            customerName: cleanName,
+            customerPhone: cleanPhone,
+            bookingDate: startTime,
+            bookingSlot,
+            assignedStaffId: freshStaff._id,
+            staffAssignmentHistory: [{
+              action: "assigned",
+              staffId: freshStaff._id,
+              staffName: freshStaff.name,
+              assignmentType: "automatic",
+              changedBy: null,
+              changedByName: "Automatic assignment",
+              changedAt: new Date(),
+            }],
+          });
+
+          await booking.save({ session });
+
+          await reserveStaffBookingLocks({
+            businessId,
+            staffId: freshStaff._id,
+            bookingId: booking._id,
+            startTime,
+            endTime,
+            bufferMinutes,
+            session,
+          });
+
+          createdBooking = booking;
+          assignedStaff = freshStaff;
+        });
+
+        if (createdBooking) {
+          break;
+        }
+      } catch (error) {
+        lastError = error;
+
+        if (error.code === 11000) {
+          // This staff member's slot was taken concurrently.
+          continue;
+        }
+
+        throw error;
+      } finally {
+        await session.endSession();
+      }
+    }
+
+    if (!createdBooking) {
+      console.error("Automatic staff assignment failed:", lastError);
+
+      return res.status(409).json({
+        message:
+          "The available team members were just booked. Please select another time.",
+      });
+    }
+
+    await sendNewBookingNotifications(
+      createdBooking,
+      cleanName,
+      cleanPhone
+    );
+
+    return res.status(201).json({
+      message: "Booking created and team member assigned successfully",
+      booking: createdBooking,
+      assignedStaff: {
+        _id: assignedStaff._id,
+        name: assignedStaff.name,
+        designation: assignedStaff.designation,
+      },
+    });
   } catch (error) {
-    console.log("Public booking error:", error);
+    console.error("Public booking error:", error);
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: "This time slot was just booked. Please select another time.",
+      });
+    }
 
     return res.status(500).json({
       message: "Server error",
@@ -741,22 +852,120 @@ return res.status(201).json({
   }
 });
 
+
+
+
+// GET STAFF WORK HISTORY
+router.get(
+  "/staff/:staffId/work-history",
+  authMiddleware,
+  requireFeature("staff_management"),
+  async (req, res) => {
+    try {
+      const { staffId } = req.params;
+      const businessId = req.user.id;
+
+      if (!mongoose.Types.ObjectId.isValid(staffId)) {
+        return res.status(400).json({
+          message: "Invalid staff ID.",
+        });
+      }
+
+      // Verify that this staff member belongs to the logged-in business.
+      // Do not filter by isActive: inactive staff need historical access.
+      const staffMember = await Staff.findOne({
+        _id: staffId,
+        businessId,
+      }).select("name designation isActive");
+
+      if (!staffMember) {
+        return res.status(404).json({
+          message: "Team member not found.",
+        });
+      }
+
+      // Include both current and previous assignments.
+      const bookings = await Booking.find({
+        businessId,
+        $or: [
+          { assignedStaffId: staffId },
+          { "staffAssignmentHistory.staffId": staffId },
+        ],
+      })
+        .populate("serviceId", "name price duration")
+        .sort({ bookingDate: -1 })
+        .lean();
+
+      const now = new Date();
+
+      const appointments = bookings.map((booking) => {
+        const assignmentHistory = (
+          booking.staffAssignmentHistory || []
+        ).filter(
+          (event) =>
+            String(event.staffId?._id || event.staffId) ===
+            String(staffId)
+        );
+
+        return {
+          ...booking,
+          staffAssignmentHistory: assignmentHistory,
+        };
+      });
+
+      const summary = {
+        total: appointments.length,
+        completed: appointments.filter(
+          (item) => item.status === "completed"
+        ).length,
+        cancelled: appointments.filter(
+          (item) => item.status === "cancelled"
+        ).length,
+        noShow: appointments.filter(
+          (item) => item.status === "no_show"
+        ).length,
+        upcoming: appointments.filter(
+          (item) =>
+            ["pending", "confirmed"].includes(item.status) &&
+            new Date(item.bookingDate) >= now
+        ).length,
+      };
+
+      return res.status(200).json({
+        staff: staffMember,
+        summary,
+        appointments,
+      });
+    } catch (error) {
+      console.error("Staff work history error:", error);
+
+      return res.status(500).json({
+        message: "Unable to load staff work history.",
+      });
+    }
+  }
+);
+
+
+
 // Get bookings for a business
-router.get("/business/:businessId", authMiddleware,async (req, res) => {
+router.get("/business/:businessId", authMiddleware, async (req, res) => {
   try {
     if (req.user.id !== req.params.businessId) {
-  return res.status(403).json({
-    message: "You are not allowed to view these bookings",
-  });
-}
-const bookings = await Booking.find({
-  businessId: req.params.businessId,
-})
-  .populate(
-    "serviceId",
-    "name price duration slotIntervalMinutes bufferMinutes"
-  )
-  .sort({ bookingDate: 1 });
+      return res.status(403).json({
+        message: "You are not allowed to view these bookings",
+      });
+    }
+
+    const bookings = await Booking.find({
+      businessId: req.params.businessId,
+    })
+      .populate(
+        "serviceId",
+        "name price duration slotIntervalMinutes bufferMinutes"
+      )
+      .populate("assignedStaffId", "name designation")
+      .sort({ bookingDate: 1 });
 
     res.json(bookings);
   } catch (error) {
@@ -1552,7 +1761,10 @@ router.get(
 // ======================================================
 // RESCHEDULE BOOKING - BUSINESS OWNER
 // ======================================================
+
 router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
+  let session;
+
   try {
     const { bookingDate } = req.body;
 
@@ -1562,27 +1774,18 @@ router.patch("/:id/reschedule", authMiddleware, async (req, res) => {
       });
     }
 
-    // --------------------------------------------------
-    // PARSE NEW BOOKING DATE
-    // --------------------------------------------------
-
     const newStartTime = new Date(bookingDate);
 
-    if (isNaN(newStartTime.getTime())) {
+    if (Number.isNaN(newStartTime.getTime())) {
       return res.status(400).json({
         message: "Invalid booking date",
       });
     }
 
-    // --------------------------------------------------
-    // FIND BOOKING
-    // --------------------------------------------------
-
-const booking = await Booking.findById(req.params.id)
-  .populate(
-    "serviceId",
-    "name price duration slotIntervalMinutes bufferMinutes"
-  );
+    const booking = await Booking.findById(req.params.id).populate(
+      "serviceId",
+      "name price duration slotIntervalMinutes bufferMinutes staffIds"
+    );
 
     if (!booking) {
       return res.status(404).json({
@@ -1590,23 +1793,14 @@ const booking = await Booking.findById(req.params.id)
       });
     }
 
-    // --------------------------------------------------
-    // CHECK BUSINESS OWNER
-    // --------------------------------------------------
-
     if (
       booking.businessId.toString() !==
       req.user.id.toString()
     ) {
       return res.status(403).json({
-        message:
-          "You are not allowed to modify this booking",
+        message: "You are not allowed to modify this booking",
       });
     }
-
-    // --------------------------------------------------
-    // CHECK BOOKING STATUS
-    // --------------------------------------------------
 
     if (
       booking.status !== "pending" &&
@@ -1618,13 +1812,7 @@ const booking = await Booking.findById(req.params.id)
       });
     }
 
-    // --------------------------------------------------
-    // FIND BUSINESS
-    // --------------------------------------------------
-
-    const business = await User.findById(
-      booking.businessId
-    );
+    const business = await User.findById(booking.businessId);
 
     if (!business) {
       return res.status(404).json({
@@ -1632,12 +1820,17 @@ const booking = await Booking.findById(req.params.id)
       });
     }
 
+    if (!booking.serviceId) {
+      return res.status(400).json({
+        message: "Booking service could not be found",
+      });
+    }
+
     // --------------------------------------------------
-    // CONVERT NEW DATE TO INDIA TIME
+    // INDIA TIME AND BUSINESS WORKING HOURS
     // --------------------------------------------------
 
-    const IST_OFFSET_MS =
-      5.5 * 60 * 60 * 1000;
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
     const istDate = new Date(
       newStartTime.getTime() + IST_OFFSET_MS
@@ -1653,97 +1846,87 @@ const booking = await Booking.findById(req.params.id)
       "saturday",
     ];
 
-    const dayName =
-      dayNames[istDate.getUTCDay()];
-
-    const hours =
-      business.workingHours?.[dayName];
+    const dayName = dayNames[istDate.getUTCDay()];
+    const hours = business.workingHours?.[dayName];
 
     if (!hours || hours.closed) {
       return res.status(400).json({
+        message: "Business is closed on this day",
+      });
+    }
+
+    const indiaHour = istDate.getUTCHours();
+    const indiaMinute = istDate.getUTCMinutes();
+
+    const startMinutes = indiaHour * 60 + indiaMinute;
+
+    const [openHour, openMinute] = hours.open
+      .split(":")
+      .map(Number);
+
+    const [closeHour, closeMinute] = hours.close
+      .split(":")
+      .map(Number);
+
+    const openMinutes = openHour * 60 + openMinute;
+    const closeMinutes = closeHour * 60 + closeMinute;
+
+    // --------------------------------------------------
+    // SERVICE SCHEDULING VALIDATION
+    // --------------------------------------------------
+
+    const durationMinutes = Number(
+      booking.serviceId.duration
+    );
+
+    const intervalMinutes = Number(
+      booking.serviceId.slotIntervalMinutes ?? 30
+    );
+
+    const bufferMinutes = Number(
+      booking.serviceId.bufferMinutes ?? 0
+    );
+
+    if (
+      ![15, 20, 30, 45, 60].includes(durationMinutes) ||
+      ![5, 10, 15, 20, 30].includes(intervalMinutes) ||
+      ![0, 5, 10, 15].includes(bufferMinutes) ||
+      !Number.isInteger(openHour) ||
+      !Number.isInteger(openMinute) ||
+      !Number.isInteger(closeHour) ||
+      !Number.isInteger(closeMinute) ||
+      openHour < 0 ||
+      openHour > 23 ||
+      closeHour < 0 ||
+      closeHour > 23 ||
+      openMinute < 0 ||
+      openMinute > 59 ||
+      closeMinute < 0 ||
+      closeMinute > 59 ||
+      closeMinutes <= openMinutes
+    ) {
+      return res.status(400).json({
+        message: "Invalid service or business scheduling settings",
+      });
+    }
+
+    const endMinutes = startMinutes + durationMinutes;
+
+    if (
+      startMinutes < openMinutes ||
+      endMinutes + bufferMinutes > closeMinutes ||
+      (startMinutes - openMinutes) % intervalMinutes !== 0 ||
+      istDate.getUTCSeconds() !== 0 ||
+      istDate.getUTCMilliseconds() !== 0
+    ) {
+      return res.status(400).json({
         message:
-          "Business is closed on this day",
+          "This appointment time is outside working hours or does not match the service's available time intervals.",
       });
     }
 
     // --------------------------------------------------
-    // GET INDIA LOCAL TIME
-    // --------------------------------------------------
-
-    const indiaHour =
-      istDate.getUTCHours();
-
-    const indiaMinute =
-      istDate.getUTCMinutes();
-
-    const startMinutes =
-      indiaHour * 60 + indiaMinute;
-
-    const [
-      openHour,
-      openMinute,
-    ] = hours.open
-      .split(":")
-      .map(Number);
-
-    const [
-      closeHour,
-      closeMinute,
-    ] = hours.close
-      .split(":")
-      .map(Number);
-
-    const openMinutes =
-      openHour * 60 + openMinute;
-
-    const closeMinutes =
-      closeHour * 60 + closeMinute;
-
-    // --------------------------------------------------
-    // CHECK WORKING HOURS
-    // --------------------------------------------------
-
-
-const durationMinutes = Number(
-  booking.serviceId.duration
-);
-
-const intervalMinutes = Number(
-  booking.serviceId.slotIntervalMinutes ?? 30
-);
-
-const bufferMinutes = Number(
-  booking.serviceId.bufferMinutes ?? 0
-);
-
-if (
-  ![15, 20, 30, 45, 60].includes(durationMinutes) ||
-  ![5, 10, 15, 20, 30].includes(intervalMinutes) ||
-  ![0, 5, 10, 15].includes(bufferMinutes)
-) {
-  return res.status(400).json({
-    message: "Invalid service scheduling settings",
-  });
-}
-
-const endMinutes = startMinutes + durationMinutes;
-
-if (
-  startMinutes < openMinutes ||
-  endMinutes + bufferMinutes > closeMinutes ||
-  (startMinutes - openMinutes) % intervalMinutes !== 0 ||
-  istDate.getUTCSeconds() !== 0 ||
-  istDate.getUTCMilliseconds() !== 0
-) {
-  return res.status(400).json({
-    message:
-      "This appointment time is outside working hours or does not match the service's available time intervals.",
-  });
-}
-
-
-    // --------------------------------------------------
-    // DON'T ALLOW PAST TIME
+    // DO NOT ALLOW PAST APPOINTMENTS
     // --------------------------------------------------
 
     if (newStartTime <= new Date()) {
@@ -1753,162 +1936,370 @@ if (
       });
     }
 
-    // --------------------------------------------------
-    // CALCULATE END TIME
-    // --------------------------------------------------
-
     const newEndTime = new Date(
       newStartTime.getTime() +
-        booking.serviceId.duration *
-          60 *
-          1000
+        durationMinutes * 60 * 1000
     );
-
-    // --------------------------------------------------
-    // FIND OTHER ACTIVE BOOKINGS
-    // --------------------------------------------------
-
-const existingBookings = await Booking.find({
-  businessId: booking.businessId,
-  _id: {
-    $ne: booking._id,
-  },
-  status: {
-    $in: ["pending", "confirmed"],
-  },
-}).populate(
-  "serviceId",
-  "duration bufferMinutes"
-);
-
-    // --------------------------------------------------
-    // CHECK TIME OVERLAP
-    // --------------------------------------------------
-
-const hasConflict = hasBookingConflict({
-  bookings: existingBookings,
-  startTime: newStartTime,
-  endTime: newEndTime,
-  bufferMinutes,
-});
-
-    if (hasConflict) {
-      return res.status(409).json({
-        message:
-          "This time slot is already booked. Please select another time.",
-      });
-    }
-
-    // --------------------------------------------------
-    // CREATE UNIQUE SLOT KEY
-    // --------------------------------------------------
 
     const bookingSlot =
       `${booking.businessId}_${newStartTime.toISOString()}`;
 
-    // --------------------------------------------------
-    // SAVE OLD DATE
-    // --------------------------------------------------
-
-    const oldBookingDate =
-      booking.bookingDate;
+    const oldBookingDate = booking.bookingDate;
+    const oldAssignedStaffId = booking.assignedStaffId
+      ? booking.assignedStaffId.toString()
+      : null;
 
     // --------------------------------------------------
-    // UPDATE BOOKING
+    // CHECK WHETHER TEAM MANAGEMENT IS ACTIVE
     // --------------------------------------------------
 
+    const teamEnabled = isTeamManagementEnabled(business);
 
-if (!Array.isArray(booking.statusHistory)) {
-  booking.statusHistory = [];
+    if (isHealthcareBusiness(business) && !teamEnabled) {
+  return res.status(403).json({
+    message:
+      "Healthcare bookings require an active Team Management subscription and eligible staff.",
+  });
 }
 
-const previousBookingDate = booking.bookingDate;
+    let updatedBookingId = booking._id;
 
-booking.bookingDate = newStartTime;
-booking.bookingSlot = bookingSlot;
+    // --------------------------------------------------
+    // TEAM MANAGEMENT: AUTOMATIC STAFF ASSIGNMENT
+    // --------------------------------------------------
 
-booking.statusHistory.push({
-  action: "rescheduled",
-  status: booking.status,
-  oldBookingDate: previousBookingDate,
-  newBookingDate: newStartTime,
-  changedBy: req.user.id,
-  changedByName: req.user.name || "Business owner",
-  changedAt: new Date(),
-});
+    if (teamEnabled) {
+      let successfullyRescheduled = false;
+      let noEligibleStaff = false;
 
-    // Reset reminders for the new appointment time
-    booking.reminder24hSentAt = null;
-    booking.reminder1hSentAt = null;
+      // Retry with the next available staff member if
+      // another booking reserves the selected member's time.
+      for (let attempt = 0; attempt < 10; attempt++) {
+        session = await mongoose.startSession();
 
-    try {
-      await booking.save();
+        try {
+          await session.withTransaction(async () => {
+            const currentBooking = await Booking.findById(
+              booking._id
+            ).session(session);
 
-    } catch (saveError) {
-      // MongoDB duplicate key
-      if (saveError.code === 11000) {
+            if (
+              !currentBooking ||
+              !["pending", "confirmed"].includes(
+                currentBooking.status
+              )
+            ) {
+              throw new Error(
+                "Booking is no longer available for rescheduling"
+              );
+            }
+
+            // Release old locks inside this transaction.
+            // If the transaction fails, the old locks return.
+            await releaseBookingLocks({
+              bookingId: currentBooking._id,
+              session,
+            });
+
+            // Recheck eligible staff after releasing the old
+            // locks. The helper also checks existing bookings,
+            // staff schedules and service eligibility.
+            const eligibleStaff = await getEligibleStaffForSlot({
+              business,
+              service: booking.serviceId,
+              startTime: newStartTime,
+              endTime: newEndTime,
+              bufferMinutes,
+              excludeBookingId: currentBooking._id,
+              session,
+            });
+
+            if (!eligibleStaff.length) {
+              noEligibleStaff = true;
+
+              const error = new Error(
+                "No eligible team member is available"
+              );
+              error.code = "NO_ELIGIBLE_STAFF";
+              throw error;
+            }
+
+            // The first eligible member is selected automatically.
+            const selectedStaff = eligibleStaff[0];
+
+const previousBookingDate = currentBooking.bookingDate;
+
+currentBooking.bookingDate = newStartTime;
+currentBooking.bookingSlot = bookingSlot;
+currentBooking.assignedStaffId = selectedStaff._id;
+
+            if (!Array.isArray(currentBooking.statusHistory)) {
+              currentBooking.statusHistory = [];
+            }
+
+            currentBooking.statusHistory.push({
+              action: "rescheduled",
+              status: currentBooking.status,
+              oldBookingDate: previousBookingDate,
+              newBookingDate: newStartTime,
+              changedBy: req.user.id,
+              changedByName: req.user.name || "Business owner",
+              changedAt: new Date(),
+            });
+
+            if (
+              !Array.isArray(
+                currentBooking.staffAssignmentHistory
+              )
+            ) {
+              currentBooking.staffAssignmentHistory = [];
+            }
+
+            const newStaffId = selectedStaff._id.toString();
+
+            if (oldAssignedStaffId !== newStaffId) {
+              currentBooking.staffAssignmentHistory.push({
+                action: oldAssignedStaffId
+                  ? "reassigned"
+                  : "assigned",
+                staffId: selectedStaff._id,
+                staffName: selectedStaff.name,
+                assignmentType: "automatic",
+                changedBy: req.user.id,
+                changedByName:
+                  req.user.name || "Business owner",
+                changedAt: new Date(),
+              });
+            }
+
+            currentBooking.reminder24hSentAt = null;
+            currentBooking.reminder1hSentAt = null;
+
+            await currentBooking.save({ session });
+
+            // Reserve the new member's appointment time.
+            // A duplicate-key error aborts this transaction.
+            await reserveStaffBookingLocks({
+              businessId: currentBooking.businessId,
+              staffId: selectedStaff._id,
+              bookingId: currentBooking._id,
+              startTime: newStartTime,
+              endTime: newEndTime,
+              bufferMinutes,
+              session,
+            });
+
+            updatedBookingId = currentBooking._id;
+          });
+
+          successfullyRescheduled = true;
+          break;
+        } catch (transactionError) {
+          if (
+            transactionError.code === "NO_ELIGIBLE_STAFF"
+          ) {
+            noEligibleStaff = true;
+            break;
+          }
+
+          // A concurrent booking may have taken the selected
+          // staff member's time. Retry and find another member.
+          if (transactionError.code === 11000) {
+            continue;
+          }
+
+          throw transactionError;
+        } finally {
+          await session.endSession();
+          session = null;
+        }
+      }
+
+      if (noEligibleStaff) {
         return res.status(409).json({
           message:
-            "This time slot was just booked by another customer. Please select another time.",
+            "No eligible team member is available at this time. Please select another time.",
         });
       }
 
-      throw saveError;
+      if (!successfullyRescheduled) {
+        return res.status(409).json({
+          message:
+            "This time was just booked by another customer. Please select another time.",
+        });
+      }
+    } else {
+      // --------------------------------------------------
+      // LEGACY MODE: BUSINESS-WIDE CONFLICT CHECK
+      // --------------------------------------------------
+
+      const existingBookings = await Booking.find({
+        businessId: booking.businessId,
+        _id: { $ne: booking._id },
+        status: { $in: ["pending", "confirmed"] },
+      }).populate("serviceId", "duration bufferMinutes");
+
+      const hasConflict = hasBookingConflict({
+        bookings: existingBookings,
+        startTime: newStartTime,
+        endTime: newEndTime,
+        bufferMinutes,
+      });
+
+      if (hasConflict) {
+        return res.status(409).json({
+          message:
+            "This time slot is already booked. Please select another time.",
+        });
+      }
+
+      // Update the booking and release any old staff locks
+      // together, so the booking cannot lose its old reservation
+      // if the database update fails.
+      session = await mongoose.startSession();
+
+      try {
+        await session.withTransaction(async () => {
+          const currentBooking = await Booking.findById(
+            booking._id
+          ).session(session);
+
+          if (
+            !currentBooking ||
+            !["pending", "confirmed"].includes(
+              currentBooking.status
+            )
+          ) {
+            throw new Error(
+              "Booking is no longer available for rescheduling"
+            );
+          }
+
+          await releaseBookingLocks({
+            bookingId: currentBooking._id,
+            session,
+          });
+
+const previousBookingDate = currentBooking.bookingDate;
+
+currentBooking.bookingDate = newStartTime;
+currentBooking.bookingSlot = bookingSlot;
+
+          if (currentBooking.assignedStaffId) {
+            if (
+              !Array.isArray(
+                currentBooking.staffAssignmentHistory
+              )
+            ) {
+              currentBooking.staffAssignmentHistory = [];
+            }
+
+            currentBooking.staffAssignmentHistory.push({
+              action: "unassigned",
+              staffId: currentBooking.assignedStaffId,
+              assignmentType: "automatic",
+              changedBy: req.user.id,
+              changedByName:
+                req.user.name || "Business owner",
+              changedAt: new Date(),
+            });
+
+            currentBooking.assignedStaffId = null;
+          }
+
+          if (!Array.isArray(currentBooking.statusHistory)) {
+            currentBooking.statusHistory = [];
+          }
+
+          currentBooking.statusHistory.push({
+            action: "rescheduled",
+            status: currentBooking.status,
+            oldBookingDate: previousBookingDate,
+            newBookingDate: newStartTime,
+            changedBy: req.user.id,
+            changedByName: req.user.name || "Business owner",
+            changedAt: new Date(),
+          });
+
+          currentBooking.reminder24hSentAt = null;
+          currentBooking.reminder1hSentAt = null;
+
+          await currentBooking.save({ session });
+        });
+      } finally {
+        await session.endSession();
+        session = null;
+      }
     }
 
     // --------------------------------------------------
-    // FORMAT INDIA TIME FOR CUSTOMER
+    // LOAD UPDATED BOOKING
     // --------------------------------------------------
 
-    const formattedDate =
-      newStartTime.toLocaleString(
-        "en-IN",
-        {
-          timeZone: "Asia/Kolkata",
-          dateStyle: "medium",
-          timeStyle: "short",
-        }
-      );
+    const updatedBooking = await Booking.findById(
+      updatedBookingId
+    ).populate(
+      "serviceId",
+      "name price duration slotIntervalMinutes bufferMinutes"
+    ).populate(
+      "assignedStaffId",
+      "name designation"
+    );
+
+    if (!updatedBooking) {
+      return res.status(404).json({
+        message: "Updated booking could not be found",
+      });
+    }
+
+    // --------------------------------------------------
+    // FORMAT INDIA TIME
+    // --------------------------------------------------
+
+    const formattedDate = newStartTime.toLocaleString(
+      "en-IN",
+      {
+        timeZone: "Asia/Kolkata",
+        dateStyle: "medium",
+        timeStyle: "short",
+      }
+    );
 
     // --------------------------------------------------
     // CUSTOMER NOTIFICATION
     // --------------------------------------------------
 
+    const rescheduledNotification = await Notification.create({
+      customerPhone: normalizePhone(
+        updatedBooking.customerPhone
+      ),
+      type: "booking_rescheduled",
+      title: "Booking rescheduled",
+      message:
+        `Your appointment has been rescheduled to ${formattedDate}.`,
+      bookingId: updatedBooking._id,
+    });
 
-const rescheduledNotification = await Notification.create({
-  customerPhone: normalizePhone(booking.customerPhone),
-  type: "booking_rescheduled",
-  title: "Booking rescheduled",
-  message: `Your appointment has been rescheduled to ${formattedDate}.`,
-  bookingId: booking._id,
-});
+    console.log(
+      "BOOKEASY: Sending customer reschedule push:",
+      updatedBooking._id.toString()
+    );
 
-console.log(
-  "BOOKEASY: Sending customer reschedule push:",
-  booking._id.toString()
-);
-
-await sendPushForNotification(rescheduledNotification);
-
+    await sendPushForNotification(rescheduledNotification);
 
     // --------------------------------------------------
     // RESPONSE
     // --------------------------------------------------
 
     return res.json({
-      message:
-        "Booking rescheduled successfully",
-      booking,
+      message: "Booking rescheduled successfully",
+      booking: updatedBooking,
       oldBookingDate,
       newBookingDate: newStartTime,
     });
   } catch (error) {
-    console.log(
-      "Business reschedule error:",
-      error
-    );
+    console.error("Business reschedule error:", error);
 
-    // MongoDB duplicate-key protection
     if (error.code === 11000) {
       return res.status(409).json({
         message:
@@ -1919,8 +2310,16 @@ await sendPushForNotification(rescheduledNotification);
     return res.status(500).json({
       message: "Server error",
     });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 });
+
+
+
+
 // Confirm booking
 router.patch("/:id/confirm", authMiddleware, async (req, res) => {
   try {
@@ -1932,42 +2331,48 @@ router.patch("/:id/confirm", authMiddleware, async (req, res) => {
       });
     }
 
-if (
-  booking.businessId.toString() !==
-  req.user.id.toString()
-) {
-  return res.status(403).json({
-    message:
-      "You are not allowed to modify this booking",
-  });
-}
+    if (
+      booking.businessId.toString() !==
+      req.user.id.toString()
+    ) {
+      return res.status(403).json({
+        message: "You are not allowed to modify this booking",
+      });
+    }
 
-    booking.status = "confirmed";
+    // Record confirmation only when the status actually changes.
+    if (booking.status !== "confirmed") {
+      booking.status = "confirmed";
 
-    await booking.save();
+      booking.statusHistory.push({
+        action: "confirmed",
+        status: "confirmed",
+        changedBy: req.user.id,
+        changedByName: req.user.name || "",
+        changedAt: new Date(),
+      });
 
-const confirmedNotification =
-  await Notification.create({
-    customerPhone: normalizePhone(booking.customerPhone),
-    type: "booking_confirmed",
-    title: "Booking confirmed",
-    message:
-      "Your booking has been confirmed.",
-    bookingId: booking._id,
-  });
+      await booking.save();
+    }
 
-await sendPushForNotification(
-  confirmedNotification
-);
+    const confirmedNotification = await Notification.create({
+      customerPhone: normalizePhone(booking.customerPhone),
+      type: "booking_confirmed",
+      title: "Booking confirmed",
+      message: "Your booking has been confirmed.",
+      bookingId: booking._id,
+    });
 
-    res.json({
+    await sendPushForNotification(confirmedNotification);
+
+    return res.json({
       message: "Booking confirmed successfully",
       booking,
     });
   } catch (error) {
     console.log(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error",
     });
   }
@@ -1975,7 +2380,10 @@ await sendPushForNotification(
 
 
 // Cancel booking
+
 router.patch("/:id/cancel", authMiddleware, async (req, res) => {
+  let session;
+
   try {
     const booking = await Booking.findById(req.params.id);
 
@@ -1985,160 +2393,115 @@ router.patch("/:id/cancel", authMiddleware, async (req, res) => {
       });
     }
 
-    if (booking.businessId.toString() !== req.user.id) {
+    if (
+      booking.businessId.toString() !==
+      req.user.id.toString()
+    ) {
       return res.status(403).json({
         message: "You are not allowed to modify this booking",
       });
     }
 
-if (booking.status === "cancelled") {
-  return res.status(400).json({
-    message: "This booking is already cancelled",
-  });
-}
+    if (booking.status === "cancelled") {
+      return res.status(400).json({
+        message: "This booking is already cancelled",
+      });
+    }
 
-if (!Array.isArray(booking.statusHistory)) {
-  booking.statusHistory = [];
-}
+    session = await mongoose.startSession();
 
-booking.status = "cancelled";
+    let updatedBooking;
 
-booking.statusHistory.push({
+    try {
+      await session.withTransaction(async () => {
+        const currentBooking = await Booking.findById(
+          req.params.id
+        ).session(session);
+
+        if (!currentBooking) {
+          throw new Error("Booking not found");
+        }
+
+        if (currentBooking.status === "cancelled") {
+          throw new Error("This booking is already cancelled");
+        }
+
+        if (!Array.isArray(currentBooking.statusHistory)) {
+          currentBooking.statusHistory = [];
+        }
+
+        currentBooking.status = "cancelled";
+
+currentBooking.statusHistory.push({
+  action: "cancelled",
   status: "cancelled",
   changedBy: req.user.id,
   changedByName: req.user.name || "Business owner",
   changedAt: new Date(),
 });
 
-await booking.save();
+        await currentBooking.save({ session });
 
-const cancelledNotification =
-  await Notification.create({
-    customerPhone: normalizePhone(booking.customerPhone),
-    type: "booking_cancelled",
-    title: "Booking cancelled",
-    message:
-      "Your booking has been cancelled by the business.",
-    bookingId: booking._id,
-  });
+        // Release all staff reservations for this booking.
+        await releaseBookingLocks({
+          bookingId: currentBooking._id,
+          session,
+        });
 
+        updatedBooking = currentBooking;
+      });
+    } finally {
+      await session.endSession();
+      session = null;
+    }
 
-console.log("BOOKEASY: CANCELLATION NOTIFICATION CREATED", {
-  bookingId: booking._id.toString(),
-  customerPhone: normalizePhone(booking.customerPhone),
-  notificationId: cancelledNotification._id.toString(),
-  type: cancelledNotification.type,
-});
+    // Notify the customer after the transaction succeeds.
+    const cancelledNotification = await Notification.create({
+      customerPhone: normalizePhone(updatedBooking.customerPhone),
+      type: "booking_cancelled",
+      title: "Booking cancelled",
+      message:
+        "Your booking has been cancelled by the business.",
+      bookingId: updatedBooking._id,
+    });
 
-await sendPushForNotification(cancelledNotification);
+    console.log("BOOKEASY: CANCELLATION NOTIFICATION CREATED", {
+      bookingId: updatedBooking._id.toString(),
+      customerPhone: normalizePhone(updatedBooking.customerPhone),
+      notificationId: cancelledNotification._id.toString(),
+      type: cancelledNotification.type,
+    });
 
+    await sendPushForNotification(cancelledNotification);
 
-    res.json({
+    return res.json({
       message: "Booking cancelled successfully",
-      booking,
+      booking: updatedBooking,
     });
   } catch (error) {
-    console.log(error);
+    console.error("Cancel booking error:", error);
 
-    res.status(500).json({
+    if (error.message === "This booking is already cancelled") {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+
+    if (error.message === "Booking not found") {
+      return res.status(404).json({
+        message: error.message,
+      });
+    }
+
+    return res.status(500).json({
       message: "Server error",
     });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 });
-
-
-
-
-// /**
-//  * Complete a booking.
-//  * Only the owning business can complete an active appointment.
-//  */
-// router.patch("/:id/complete", authMiddleware, async (req, res) => {
-//   try {
-//     const booking = await Booking.findById(req.params.id);
-
-//     if (!booking) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Booking not found",
-//       });
-//     }
-
-//     // Verify business ownership once.
-//     if (booking.businessId.toString() !== req.user.id.toString()) {
-//       return res.status(403).json({
-//         success: false,
-//         message: "You are not allowed to modify this booking",
-//       });
-//     }
-
-//     // Only active bookings can be completed.
-//     if (!["pending", "confirmed"].includes(booking.status)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Only pending or confirmed bookings can be completed",
-//       });
-//     }
-
-//     // Do not complete an appointment before its scheduled start.
-//     if (new Date(booking.bookingDate) > new Date()) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "A future appointment cannot be completed",
-//       });
-//     }
-
-//     if (!Array.isArray(booking.statusHistory)) {
-//       booking.statusHistory = [];
-//     }
-
-//     // Update the status and history once.
-//     booking.status = "completed";
-
-//     booking.statusHistory.push({
-//       status: "completed",
-//       changedBy: req.user.id,
-//       changedByName: req.user.name || "Business owner",
-//       changedAt: new Date(),
-//     });
-
-//     await booking.save();
-
-//     // Notify the customer after saving the booking.
-//     try {
-//       const completedNotification = await Notification.create({
-//         customerPhone: normalizePhone(booking.customerPhone),
-//         type: "booking_completed",
-//         title: "Booking completed",
-//         message:
-//           "Your booking has been completed. Thank you for choosing us!",
-//         bookingId: booking._id,
-//       });
-
-//       await sendPushForNotification(completedNotification);
-//     } catch (notificationError) {
-//       // A notification failure must not undo the saved booking.
-//       console.error(
-//         "Booking completion notification error:",
-//         notificationError
-//       );
-//     }
-
-//     return res.json({
-//       success: true,
-//       message: "Booking completed successfully",
-//       booking,
-//     });
-//   } catch (error) {
-//     console.error("Complete booking error:", error);
-
-//     return res.status(500).json({
-//       success: false,
-//       message: "Server error",
-//     });
-//   }
-// });
-
 
 
 
@@ -2148,7 +2511,10 @@ await sendPushForNotification(cancelledNotification);
  * Complete a booking.
  * Only the owning business can complete an active appointment.
  */
+
 router.patch("/:id/complete", authMiddleware, async (req, res) => {
+  let session;
+
   try {
     const booking = await Booking.findById(req.params.id);
 
@@ -2159,7 +2525,10 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
       });
     }
 
-    if (booking.businessId.toString() !== req.user.id.toString()) {
+    if (
+      booking.businessId.toString() !==
+      req.user.id.toString()
+    ) {
       return res.status(403).json({
         success: false,
         message: "You are not allowed to modify this booking",
@@ -2169,7 +2538,8 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
     if (!["pending", "confirmed"].includes(booking.status)) {
       return res.status(400).json({
         success: false,
-        message: "Only pending or confirmed bookings can be completed",
+        message:
+          "Only pending or confirmed bookings can be completed",
       });
     }
 
@@ -2180,33 +2550,74 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
       });
     }
 
-    if (!Array.isArray(booking.statusHistory)) {
-      booking.statusHistory = [];
+    session = await mongoose.startSession();
+
+    let updatedBooking;
+
+    try {
+      await session.withTransaction(async () => {
+        const currentBooking = await Booking.findById(
+          req.params.id
+        ).session(session);
+
+        if (!currentBooking) {
+          throw new Error("Booking not found");
+        }
+
+        if (!["pending", "confirmed"].includes(currentBooking.status)) {
+          throw new Error(
+            "Only pending or confirmed bookings can be completed"
+          );
+        }
+
+        if (new Date(currentBooking.bookingDate) > new Date()) {
+          throw new Error(
+            "A future appointment cannot be completed"
+          );
+        }
+
+        if (!Array.isArray(currentBooking.statusHistory)) {
+          currentBooking.statusHistory = [];
+        }
+
+        currentBooking.status = "completed";
+
+        currentBooking.statusHistory.push({
+          action: "completed",
+          status: "completed",
+          changedBy: req.user.id,
+          changedByName: req.user.name || "Business owner",
+          changedAt: new Date(),
+        });
+
+        await currentBooking.save({ session });
+
+        // Release staff reservations after successful completion.
+        await releaseBookingLocks({
+          bookingId: currentBooking._id,
+          session,
+        });
+
+        updatedBooking = currentBooking;
+      });
+    } finally {
+      await session.endSession();
+      session = null;
     }
 
-    booking.status = "completed";
-
-    booking.statusHistory.push({
-      action: "completed",
-      status: "completed",
-      changedBy: req.user.id,
-      changedByName: req.user.name || "Business owner",
-      changedAt: new Date(),
-    });
-
-    await booking.save();
-
-    // Award loyalty visit after successful booking completion.
+    // Award loyalty only after the completion transaction commits.
     let loyaltyResult = {
       awarded: false,
       reason: "NOT_PROCESSED",
     };
 
     try {
-      loyaltyResult = await awardLoyaltyVisit(booking);
+      loyaltyResult = await awardLoyaltyVisit(updatedBooking);
     } catch (loyaltyError) {
-      // Loyalty errors must not undo booking completion.
-      console.error("Loyalty visit processing error:", loyaltyError);
+      console.error(
+        "Loyalty visit processing error:",
+        loyaltyError
+      );
 
       loyaltyResult = {
         awarded: false,
@@ -2214,15 +2625,15 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
       };
     }
 
-    // Notify the customer after saving the booking.
+    // Notify customer after successful completion.
     try {
       const completedNotification = await Notification.create({
-        customerPhone: normalizePhone(booking.customerPhone),
+        customerPhone: normalizePhone(updatedBooking.customerPhone),
         type: "booking_completed",
         title: "Booking completed",
         message:
           "Your booking has been completed. Thank you for choosing us!",
-        bookingId: booking._id,
+        bookingId: updatedBooking._id,
       });
 
       await sendPushForNotification(completedNotification);
@@ -2236,16 +2647,38 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
     return res.json({
       success: true,
       message: "Booking completed successfully",
-      booking,
+      booking: updatedBooking,
       loyalty: loyaltyResult,
     });
   } catch (error) {
     console.error("Complete booking error:", error);
 
+    if (error.message === "Booking not found") {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (
+      error.message ===
+        "Only pending or confirmed bookings can be completed" ||
+      error.message === "A future appointment cannot be completed"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Server error",
     });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 });
 
@@ -2255,11 +2688,14 @@ router.patch("/:id/complete", authMiddleware, async (req, res) => {
  * Mark an appointment as a no-show.
  * Only active, eligible paid subscribers can use this feature.
  */
+
 router.patch(
   "/:id/no-show",
   authMiddleware,
   requireFeature("automated_reminders"),
   async (req, res) => {
+    let session;
+
     try {
       const booking = await Booking.findById(req.params.id);
 
@@ -2270,17 +2706,18 @@ router.patch(
         });
       }
 
-      if (booking.businessId.toString() !== req.user.id.toString()) {
-  return res.status(403).json({
-    success: false,
-    message: "You are not authorized to update this booking.",
-  });
-}
-
       if (
-        booking.status !== "pending" &&
-        booking.status !== "confirmed"
+        booking.businessId.toString() !==
+        req.user.id.toString()
       ) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You are not authorized to update this booking.",
+        });
+      }
+
+      if (!["pending", "confirmed"].includes(booking.status)) {
         return res.status(400).json({
           success: false,
           message:
@@ -2288,31 +2725,102 @@ router.patch(
         });
       }
 
-const now = new Date();
-const appointmentTime = new Date(booking.bookingDate);
+      if (new Date(booking.bookingDate) > new Date()) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "A future appointment cannot be marked as a no-show.",
+        });
+      }
 
-if (appointmentTime > now) {
-  return res.status(400).json({
-    success: false,
-    message: "A future appointment cannot be marked as a no-show.",
-  });
+      session = await mongoose.startSession();
+
+      let updatedBooking;
+
+      try {
+        await session.withTransaction(async () => {
+          const currentBooking = await Booking.findById(
+            req.params.id
+          ).session(session);
+
+          if (!currentBooking) {
+            throw new Error("Booking not found");
+          }
+
+          if (!["pending", "confirmed"].includes(currentBooking.status)) {
+            throw new Error(
+              "Only pending or confirmed appointments can be marked as no-show."
+            );
+          }
+
+          if (new Date(currentBooking.bookingDate) > new Date()) {
+            throw new Error(
+              "A future appointment cannot be marked as a no-show."
+            );
+          }
+
+currentBooking.status = "no_show";
+
+if (!Array.isArray(currentBooking.statusHistory)) {
+  currentBooking.statusHistory = [];
 }
 
-      booking.status = "no_show";
-      await booking.save();
+currentBooking.statusHistory.push({
+  action: "no_show",
+  status: "no_show",
+  changedBy: req.user.id,
+  changedByName: req.user.name || "Business owner",
+  changedAt: new Date(),
+});
+
+          await currentBooking.save({ session });
+
+          // Release staff reservations for the no-show booking.
+          await releaseBookingLocks({
+            bookingId: currentBooking._id,
+            session,
+          });
+
+          updatedBooking = currentBooking;
+        });
+      } finally {
+        await session.endSession();
+        session = null;
+      }
 
       return res.json({
         success: true,
         message: "Appointment marked as no-show.",
-        booking,
+        booking: updatedBooking,
       });
     } catch (error) {
       console.error("Mark no-show error:", error);
+
+      if (error.message === "Booking not found") {
+        return res.status(404).json({
+          success: false,
+          message: error.message,
+        });
+      }
+
+      if (
+        error.message.includes("Only pending or confirmed") ||
+        error.message.includes("future appointment")
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+        });
+      }
 
       return res.status(500).json({
         success: false,
         message: "Unable to mark appointment as no-show.",
       });
+    } finally {
+      if (session) {
+        await session.endSession();
+      }
     }
   }
 );

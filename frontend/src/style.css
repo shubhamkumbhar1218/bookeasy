@@ -2925,3 +2925,46 @@ select {
     transition: none;
   }
 }
+
+/* Service-wise team member selection */
+.service-staff-selection {
+  grid-column: 1 / -1;
+  margin: 10px 0;
+  padding: 14px;
+  border: 1px solid #dbe3ed;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.service-staff-selection > label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.service-staff-selection .field-hint {
+  color: #64748b;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.service-staff-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+
+.service-staff-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.service-staff-option input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #208aeF;
+}

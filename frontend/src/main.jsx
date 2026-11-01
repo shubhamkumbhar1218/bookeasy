@@ -23,6 +23,7 @@ import Subscription from "./pages/Subscription";
 import PaymentReturn from "./pages/PaymentReturn";
 import AdvancedAnalytics from "./pages/AdvancedAnalytics";
 import LegalPages from "./pages/LegalPages";
+import TeamManagement from "./pages/TeamManagement";
 import {
   CalendarDays,
   CheckCircle2,
@@ -1384,6 +1385,21 @@ const copyQRBookingLink = async () => {
 // ===============================
 
 function Dashboard({ user, logout }) {
+
+    // Healthcare business detection
+  const HEALTHCARE_BUSINESS_TYPES = new Set([
+    "hospital",
+    "dental clinic",
+    "doctor / clinic",
+    "physiotherapy",
+    "diagnostic lab",
+    "pet clinic / veterinary",
+  ]);
+
+  const isHealthcareBusiness = HEALTHCARE_BUSINESS_TYPES.has(
+    String(user?.businessType || "").trim().toLowerCase()
+  );
+
   // Get today's date in Indian Standard Time (IST)
   const todayIST = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
@@ -1409,6 +1425,13 @@ const [updatingBookingId, setUpdatingBookingId] = useState(null);
 
   const [bookings, setBookings] =
     useState([]);
+
+    // Team members eligible for service bookings
+const [teamStaff, setTeamStaff] = useState([]);
+const [teamEnabled, setTeamEnabled] = useState(false);
+
+// Selected team members for the service being added or edited
+const [selectedStaffIds, setSelectedStaffIds] = useState([]);
 
   const [bookingDateFilter, setBookingDateFilter] =
   useState("");
@@ -1578,6 +1601,15 @@ localStorage.setItem(
 
 const startEditService = (service) => {
   setEditingService(service._id);
+  setSelectedStaffIds(
+  (service.staffIds || [])
+    .map((staff) =>
+      typeof staff === "string"
+        ? staff
+        : staff?._id
+    )
+    .filter(Boolean)
+);
   setEditName(service.name);
   setEditDescription(service.description || "");
   setEditPrice(String(service.price));
@@ -1605,6 +1637,7 @@ const cancelEditService = () => {
   setEditDuration("30");
   setEditSlotInterval("30");
   setEditBuffer("0");
+  setSelectedStaffIds([]);
 };
 
 
@@ -1662,6 +1695,24 @@ const cancelEditService = () => {
     }
 
     try {
+      if (isHealthcareBusiness) {
+  if (!teamEnabled || teamStaff.length === 0) {
+    setError(
+      "Healthcare services require an active Team Management subscription and at least one active doctor or team member."
+    );
+    return;
+  }
+
+  if (
+    !Array.isArray(selectedStaffIds) ||
+    selectedStaffIds.length === 0
+  ) {
+    setError(
+      "Select at least one active doctor or team member for this healthcare service."
+    );
+    return;
+  }
+}
       setError("");
 
       const updatedService = await api(
@@ -1677,6 +1728,9 @@ body: JSON.stringify({
   duration: Number(editDuration),
   slotIntervalMinutes: Number(editSlotInterval),
   bufferMinutes: Number(editBuffer),
+  staffIds: teamEnabled
+  ? selectedStaffIds
+  : undefined,
 }),
 
         }
@@ -1772,6 +1826,26 @@ body: JSON.stringify({
         await api(
           `/bookings/business/${user.id}`
         );
+
+      // Load team members separately so staff access errors
+// do not prevent services and bookings from loading.
+try {
+  const staffData = await api("/staff");
+
+  const members = Array.isArray(staffData)
+    ? staffData
+    : staffData.staff || [];
+
+  setTeamStaff(
+    members.filter((member) => member.isActive)
+  );
+
+  setTeamEnabled(true);
+} catch (staffError) {
+  console.log("Team members unavailable:", staffError);
+  setTeamStaff([]);
+  setTeamEnabled(false);
+}
 
       console.log(
         "Services:",
@@ -1882,6 +1956,25 @@ const markAllNotificationsRead = async () => {
   const add = async (e) => {
     e.preventDefault();
 
+    if (isHealthcareBusiness) {
+  if (!teamEnabled || teamStaff.length === 0) {
+    setError(
+      "Healthcare services require an active Team Management subscription and at least one active doctor or team member."
+    );
+    return;
+  }
+
+  if (
+    !Array.isArray(selectedStaffIds) ||
+    selectedStaffIds.length === 0
+  ) {
+    setError(
+      "Select at least one active doctor or team member for this healthcare service."
+    );
+    return;
+  }
+}
+
     try {
       setError("");
 
@@ -1899,8 +1992,11 @@ const markAllNotificationsRead = async () => {
             form.duration
           ),
 
-          description:
-            form.description.trim(),
+description: form.description.trim(),
+
+staffIds: teamEnabled
+  ? selectedStaffIds
+  : undefined,
         }),
       });
 
@@ -1913,6 +2009,8 @@ setForm({
   bufferMinutes: "0",
   description: "",
 });
+
+setSelectedStaffIds([]);
 
 
       await load();
@@ -2348,6 +2446,16 @@ const rescheduleBooking = async () => {
 
   <div className="hero-actions">
 
+<button
+  className="outline"
+  type="button"
+  onClick={() => {
+    window.location.href = "/team-management";
+  }}
+>
+  👥
+  Team Management
+</button>
 
     <button
       className="outline"
@@ -2406,6 +2514,7 @@ const rescheduleBooking = async () => {
   🎁
   Royaltoi Rewards
 </button>
+
 
     <button
       className="outline"
@@ -2550,6 +2659,47 @@ const rescheduleBooking = async () => {
                 }
               />
 
+              {teamEnabled && teamStaff.length > 0 && (
+  <div className="service-staff-selection">
+    <label>Eligible Team Members</label>
+
+    <p className="field-hint">
+      Select the team members who can handle this service.
+      Leave everyone unchecked to allow all active team members.
+    </p>
+
+    <div className="service-staff-options">
+      {teamStaff.map((member) => (
+        <label
+          key={member._id}
+          className="service-staff-option"
+        >
+          <input
+            type="checkbox"
+            checked={selectedStaffIds.includes(member._id)}
+            onChange={(e) =>
+              setSelectedStaffIds((current) =>
+                e.target.checked
+                  ? [...current, member._id]
+                  : current.filter(
+                      (id) => id !== member._id
+                    )
+              )
+            }
+          />
+
+          <span>
+            {member.name}
+            {member.designation
+              ? ` (${member.designation})`
+              : ""}
+          </span>
+        </label>
+      ))}
+    </div>
+  </div>
+)}
+
               <button
                 className="primary"
                 type="submit"
@@ -2637,6 +2787,47 @@ const rescheduleBooking = async () => {
                             }
                             placeholder="Description"
                           />
+
+                          {teamEnabled && teamStaff.length > 0 && (
+  <div className="service-staff-selection">
+    <label>Eligible Team Members</label>
+
+    <p className="field-hint">
+      Select the team members who can handle this service.
+      Leave everyone unchecked to allow all active team members.
+    </p>
+
+    <div className="service-staff-options">
+      {teamStaff.map((member) => (
+        <label
+          key={member._id}
+          className="service-staff-option"
+        >
+          <input
+            type="checkbox"
+            checked={selectedStaffIds.includes(member._id)}
+            onChange={(e) =>
+              setSelectedStaffIds((current) =>
+                e.target.checked
+                  ? [...current, member._id]
+                  : current.filter(
+                      (id) => id !== member._id
+                    )
+              )
+            }
+          />
+
+          <span>
+            {member.name}
+            {member.designation
+              ? ` (${member.designation})`
+              : ""}
+          </span>
+        </label>
+      ))}
+    </div>
+  </div>
+)}
 
                           <input
                             type="number"
@@ -2930,6 +3121,22 @@ const rescheduleBooking = async () => {
                   : "Price unavailable"}
               </span>
             </div>
+
+            {/* ASSIGNED TEAM MEMBER */}
+{booking.assignedStaffId &&
+  typeof booking.assignedStaffId === "object" && (
+    <div>
+      <span>
+        👤 Team member:{" "}
+        <strong>
+          {booking.assignedStaffId.name}
+          {booking.assignedStaffId.designation
+            ? ` (${booking.assignedStaffId.designation})`
+            : ""}
+        </strong>
+      </span>
+    </div>
+  )}
 
             {booking.customerPhone && (
               <div>
@@ -3934,6 +4141,20 @@ function App() {
       <Navigate to="/admin" replace />
     ) : (
       <Dashboard user={user} logout={logout} />
+    )
+  }
+/>
+
+{/* Team Management */}
+<Route
+  path="/team-management"
+  element={
+    !user ? (
+      <Navigate to="/business/login" replace />
+    ) : user.role === "ADMIN" ? (
+      <Navigate to="/admin" replace />
+    ) : (
+      <TeamManagement api={api} />
     )
   }
 />

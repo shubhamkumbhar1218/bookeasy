@@ -16,6 +16,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import API_URL from "../../api";
 
+const HEALTHCARE_BUSINESS_TYPES = new Set([
+  "hospital",
+  "dental clinic",
+  "doctor / clinic",
+  "physiotherapy",
+  "diagnostic lab",
+  "pet clinic / veterinary",
+]);
+
 type Service = {
   _id: string;
   name: string;
@@ -24,6 +33,17 @@ type Service = {
   slotIntervalMinutes?: number;
   bufferMinutes?: number;
   active?: boolean;
+  staffIds?: (
+    | string
+    | { _id: string; name?: string }
+  )[];
+};
+
+type TeamStaff = {
+  _id: string;
+  name: string;
+  designation?: string;
+  isActive: boolean;
 };
 
 export default function BusinessServices() {
@@ -47,45 +67,96 @@ const [bufferMinutes, setBufferMinutes] = useState("0");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const loadServices = async () => {
-    try {
-      const userData = await AsyncStorage.getItem(
-        "bookeasy_user"
-      );
+  const [teamStaff, setTeamStaff] = useState<TeamStaff[]>([]);
+const [teamEnabled, setTeamEnabled] = useState(false);
+const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
 
-      if (!userData) {
-        router.replace("/business/login");
-        return;
-      }
 
-      const user = JSON.parse(userData);
+const [isHealthcareBusiness, setIsHealthcareBusiness] =
+  useState(false);
 
-      const response = await fetch(
-        `${API_URL}/services/${user.id}`
-      );
+const loadServices = async () => {
+  try {
+    const userData = await AsyncStorage.getItem("bookeasy_user");
+    const token = await AsyncStorage.getItem("bookeasy_token");
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setServices(Array.isArray(data) ? data : data.services || []);
-      } else {
-        Alert.alert(
-          "Error",
-          data.message || "Could not load services."
-        );
-      }
-    } catch (error) {
-      console.log("Load services error:", error);
-
-      Alert.alert(
-        "Connection error",
-        "Could not connect to the BookEasy server."
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    if (!userData || !token) {
+      router.replace("/business/login");
+      return;
     }
-  };
+
+    const user = JSON.parse(userData);
+
+    setIsHealthcareBusiness(
+  HEALTHCARE_BUSINESS_TYPES.has(
+    String(user?.businessType || "").trim().toLowerCase()
+  )
+);
+
+    // Load existing services
+    const response = await fetch(
+      `${API_URL}/services/${user.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      Alert.alert(
+        "Error",
+        data.message || "Could not load services."
+      );
+      return;
+    }
+
+    setServices(
+      Array.isArray(data) ? data : data.services || []
+    );
+
+    // Load team members if the subscription allows it
+    const staffResponse = await fetch(`${API_URL}/staff`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (staffResponse.ok) {
+      const staffData = await staffResponse.json();
+
+      const staffList = Array.isArray(staffData)
+        ? staffData
+        : Array.isArray(staffData.staff)
+        ? staffData.staff
+        : [];
+
+      setTeamStaff(
+        staffList.filter(
+          (member: TeamStaff) => member.isActive
+        )
+      );
+
+      setTeamEnabled(true);
+    } else {
+      setTeamStaff([]);
+      setTeamEnabled(false);
+    }
+  } catch (error) {
+    console.log("Load services error:", error);
+
+    Alert.alert(
+      "Connection error",
+      "Could not connect to the BookEasy server."
+    );
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
+
 
   useEffect(() => {
     loadServices();
@@ -135,6 +206,7 @@ const openAddModal = () => {
   setDuration("30");
   setSlotInterval("30");
   setBufferMinutes("0");
+  setSelectedStaffIds([]);
   setModalVisible(true);
 };
 
@@ -143,14 +215,24 @@ const openEditModal = (service: Service) => {
   setServiceName(service.name);
   setPrice(String(service.price));
   setDuration(String(service.duration));
+
   setSlotInterval(
     String(service.slotIntervalMinutes ?? 30)
   );
+
   setBufferMinutes(
     String(service.bufferMinutes ?? 0)
   );
+
+  setSelectedStaffIds(
+    (service.staffIds || []).map((item) =>
+      typeof item === "string" ? item : item._id
+    )
+  );
+
   setModalVisible(true);
 };
+
 
   const closeModal = () => {
     if (saving) return;
@@ -164,7 +246,18 @@ setSlotInterval("30");
 setBufferMinutes("0");
 setSlotInterval("30");
 setBufferMinutes("0");
+setSelectedStaffIds([]);
   };
+
+  const toggleStaffSelection = (staffId: string) => {
+  setSelectedStaffIds((current) =>
+    current.includes(staffId)
+      ? current.filter((id) => id !== staffId)
+      : [...current, staffId]
+  );
+};
+
+
 const saveService = async () => {
   if (!serviceName.trim()) {
     Alert.alert("Required", "Please enter service name.");
@@ -235,6 +328,30 @@ const saveService = async () => {
       return;
     }
 
+    if (isHealthcareBusiness) {
+  if (!teamEnabled || teamStaff.length === 0) {
+    Alert.alert(
+      "Team Management required",
+      "Healthcare services require an active Team Management subscription and at least one active doctor or team member."
+    );
+    return;
+  }
+
+  const hasSelectedActiveStaff = selectedStaffIds.some((staffId) =>
+    teamStaff.some(
+      (member) => member._id === staffId && member.isActive
+    )
+  );
+
+  if (!hasSelectedActiveStaff) {
+    Alert.alert(
+      "Select a team member",
+      "Select at least one active doctor or team member for this healthcare service."
+    );
+    return;
+  }
+}
+
     setSaving(true);
 
     const url = editingService
@@ -250,6 +367,10 @@ const body = {
   duration: Number(duration),
   slotIntervalMinutes: Number(slotInterval),
   bufferMinutes: Number(bufferMinutes),
+
+  ...(teamEnabled
+    ? { staffIds: selectedStaffIds }
+    : {}),
 };
 
     console.log("SERVICE REQUEST:", {
@@ -284,6 +405,7 @@ const body = {
     setServiceName("");
     setPrice("");
     setDuration("");
+    setSelectedStaffIds([]);
 
     await loadServices();
 
@@ -640,6 +762,69 @@ const body = {
   [0, 5, 10, 15],
   setBufferMinutes
 )}
+
+
+{(teamEnabled || isHealthcareBusiness) && (
+  <View style={styles.staffSelectionSection}>
+    <Text style={styles.label}>
+      Team Members for This Service
+    </Text>
+
+    <Text style={styles.helperText}>
+      {isHealthcareBusiness
+        ? "Select at least one active doctor or team member. This is required for healthcare services."
+        : "Select who can provide this service. Leave everyone unselected to allow all active team members."}
+    </Text>
+
+    {!teamEnabled && isHealthcareBusiness ? (
+      <Text style={styles.noStaffText}>
+        Healthcare services require an active Team Management subscription.
+        Activate it and add eligible team members.
+      </Text>
+    ) : teamStaff.length === 0 ? (
+      <Text style={styles.noStaffText}>
+        No active team members. Add members in Team Management.
+      </Text>
+    ) : (
+      teamStaff.map((member) => {
+        const selected = selectedStaffIds.includes(member._id);
+
+        return (
+          <TouchableOpacity
+            key={member._id}
+            style={[
+              styles.staffOption,
+              selected && styles.staffOptionSelected,
+            ]}
+            onPress={() => toggleStaffSelection(member._id)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.staffOptionName}>
+                {member.name}
+              </Text>
+
+              {!!member.designation && (
+                <Text style={styles.staffOptionDesignation}>
+                  {member.designation}
+                </Text>
+              )}
+            </View>
+
+            <Text
+              style={[
+                styles.staffCheckbox,
+                selected && styles.staffCheckboxSelected,
+              ]}
+            >
+              {selected ? "✓" : ""}
+            </Text>
+          </TouchableOpacity>
+        );
+      })
+    )}
+  </View>
+)}
+
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -1053,5 +1238,63 @@ optionText: {
 optionTextSelected: {
   color: "#ffffff",
 },
+
+
+staffSelectionSection: {
+  marginTop: 4,
+  marginBottom: 16,
+},
+
+staffOption: {
+  flexDirection: "row",
+  alignItems: "center",
+  padding: 12,
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: "#d1d5db",
+  backgroundColor: "#ffffff",
+  marginBottom: 8,
+},
+
+staffOptionSelected: {
+  borderColor: "#2563eb",
+  backgroundColor: "#eff6ff",
+},
+
+staffOptionName: {
+  fontSize: 14,
+  fontWeight: "700",
+  color: "#111827",
+},
+
+staffOptionDesignation: {
+  fontSize: 12,
+  color: "#6b7280",
+  marginTop: 3,
+},
+
+staffCheckbox: {
+  width: 23,
+  height: 23,
+  borderRadius: 6,
+  borderWidth: 1,
+  borderColor: "#9ca3af",
+  textAlign: "center",
+  textAlignVertical: "center",
+  color: "#ffffff",
+  overflow: "hidden",
+},
+
+staffCheckboxSelected: {
+  backgroundColor: "#2563eb",
+  borderColor: "#2563eb",
+},
+
+noStaffText: {
+  color: "#6b7280",
+  fontSize: 12,
+  paddingVertical: 8,
+},
+
 
 });

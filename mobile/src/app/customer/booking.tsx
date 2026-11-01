@@ -278,18 +278,6 @@ if (customerPhone.trim().length < 10) {
 try {
   setBooking(true);
 
-  // REGISTER CUSTOMER PUSH TOKEN BEFORE BOOKING
-  await AsyncStorage.setItem(
-    "bookeasy_customer_phone",
-    customerPhone.trim()
-  );
-
-  console.log(
-    "BOOKEASY: Registering customer push token before booking..."
-  );
-
-  await registerPushTokenWithBackend("customer");
-
   // CREATE BOOKING
 
   // ==================================================
@@ -365,6 +353,31 @@ try {
 console.log(
   "BOOKEASY: Booking created successfully."
 );
+
+// REGISTER PUSH TOKEN WITHOUT BLOCKING BOOKING CONFIRMATION
+void (async () => {
+  try {
+    await AsyncStorage.setItem(
+      "bookeasy_customer_phone",
+      customerPhone.trim()
+    );
+
+    console.log(
+      "BOOKEASY: Registering customer push token..."
+    );
+
+    await registerPushTokenWithBackend("customer");
+
+    console.log(
+      "BOOKEASY: Customer push token registered."
+    );
+  } catch (pushError) {
+    console.log(
+      "BOOKEASY: Push token registration failed:",
+      pushError
+    );
+  }
+})();
 
       // ==================================================
       // SUCCESS

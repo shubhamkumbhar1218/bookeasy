@@ -31,6 +31,7 @@ const PLANS = {
       "automated_reminders",
       "advanced_analytics",
       "loyalty_program",
+      "staff_management",
     ],
   },
 

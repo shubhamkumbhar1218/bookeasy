@@ -24,6 +24,7 @@ import {
   startAppointmentReminderScheduler,
 } from "./utils/appointmentReminderScheduler.js";
 import loyaltyRoutes from "./routes/loyaltyRoutes.js";
+import staffRoutes from "./routes/staff.js";
 
 dotenv.config();
 
@@ -79,6 +80,8 @@ app.use("/api/business", businessRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.use("/api/services", serviceRoutes);
+
+app.use("/api/staff", staffRoutes);
 
 app.use("/api/bookings", bookingRoutes);
 

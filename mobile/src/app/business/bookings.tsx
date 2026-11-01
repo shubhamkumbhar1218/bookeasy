@@ -29,6 +29,11 @@ serviceId?: {
   price?: number;
   duration?: number;
 } | string | null;
+assignedStaffId?: string | {
+  _id: string;
+  name: string;
+  designation?: string;
+} | null;
 };
 
 type AvailableSlot = {
@@ -746,6 +751,23 @@ const handleReschedule = async () => {
                     {getBookingService(booking.serviceId)?.name || "Service"}
                   </Text>
                 </View>
+
+                {/* ASSIGNED TEAM MEMBER */}
+{booking.assignedStaffId &&
+  typeof booking.assignedStaffId === "object" && (
+    <View style={styles.infoRow}>
+      <Text style={styles.infoLabel}>
+        👤 Team member
+      </Text>
+
+      <Text style={styles.infoValue}>
+        {booking.assignedStaffId.name}
+        {booking.assignedStaffId.designation
+          ? ` (${booking.assignedStaffId.designation})`
+          : ""}
+      </Text>
+    </View>
+  )}
 
                 {/* DATE */}
                 <View style={styles.infoRow}>

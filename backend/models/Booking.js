@@ -1,3 +1,4 @@
+
 import mongoose from "mongoose";
 
 const bookingSchema = new mongoose.Schema(
@@ -13,6 +14,59 @@ const bookingSchema = new mongoose.Schema(
       ref: "Service",
       required: true,
     },
+
+    // Automatically or manually assigned team member
+    assignedStaffId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Staff",
+      default: null,
+    },
+
+    // Track staff assignment and reassignment history
+    staffAssignmentHistory: [
+      {
+        action: {
+          type: String,
+          enum: ["assigned", "reassigned", "unassigned"],
+          required: true,
+        },
+
+        staffId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Staff",
+          default: null,
+        },
+
+        staffName: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+
+        assignmentType: {
+          type: String,
+          enum: ["automatic", "manual"],
+          default: "automatic",
+        },
+
+        changedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+
+        changedByName: {
+          type: String,
+          default: "System",
+          trim: true,
+        },
+
+        changedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
 
     customerName: {
       type: String,
@@ -32,10 +86,9 @@ const bookingSchema = new mongoose.Schema(
     },
 
     bookingSlot: {
-  type: String,
-  required: false,
-},
-
+      type: String,
+      required: false,
+    },
 
     // Automated reminder tracking
     reminder24hSentAt: {
@@ -48,16 +101,19 @@ const bookingSchema = new mongoose.Schema(
       default: null,
     },
 
-
-
     status: {
       type: String,
-      enum: ["pending", "confirmed", "cancelled", "completed", "no_show"],
+      enum: [
+        "pending",
+        "confirmed",
+        "cancelled",
+        "completed",
+        "no_show",
+      ],
       default: "pending",
     },
 
-    // Track who completed or cancelled the booking
-
+    // Existing booking status history
     statusHistory: [
       {
         action: {
@@ -124,29 +180,27 @@ const bookingSchema = new mongoose.Schema(
         },
       },
     ],
-
-
   },
   {
     timestamps: true,
   }
 );
 
+// Existing unique index — intentionally unchanged
+
 bookingSchema.index(
-  {
-    businessId: 1,
-    bookingSlot: 1,
-  },
+  { businessId: 1, bookingSlot: 1 },
   {
     unique: true,
+    name: "unique_unassigned_business_booking_slot",
     partialFilterExpression: {
-      status: {
-        $in: ["pending", "confirmed"],
-      },
+      status: { $in: ["pending", "confirmed"] },
       bookingSlot: { $type: "string" },
+      assignedStaffId: null,
     },
   }
 );
+
 
 const Booking = mongoose.model("Booking", bookingSchema);
 

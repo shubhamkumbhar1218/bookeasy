@@ -443,6 +443,26 @@ onPress={() => {
   </Text>
 </TouchableOpacity>
 
+
+<TouchableOpacity
+  style={styles.actionCard}
+  onPress={() => router.push("/business/team-management" as any)}
+  activeOpacity={0.8}
+>
+  <View style={styles.actionIconBox}>
+    <Text style={styles.actionIcon}>👥</Text>
+  </View>
+
+  <Text style={styles.actionTitle}>
+    Team Management
+  </Text>
+
+  <Text style={styles.actionDescription}>
+    Manage team members and working hours
+  </Text>
+</TouchableOpacity>
+
+
 {/* Royaltoi Loyalty Program */}
 <TouchableOpacity
   style={styles.actionCard}
