@@ -1601,25 +1601,33 @@ localStorage.setItem(
 
 const startEditService = (service) => {
   setEditingService(service._id);
+
+  // Restore previously assigned staff members
   setSelectedStaffIds(
-  (service.staffIds || [])
-    .map((staff) =>
-      typeof staff === "string"
-        ? staff
-        : staff?._id
-    )
-    .filter(Boolean)
-);
+    (Array.isArray(service.staffIds) ? service.staffIds : [])
+      .map((staff) =>
+        String(
+          typeof staff === "string"
+            ? staff
+            : staff?._id
+        )
+      )
+      .filter((id) => id && id !== "undefined")
+  );
+
   setEditName(service.name);
   setEditDescription(service.description || "");
   setEditPrice(String(service.price));
   setEditDuration(String(service.duration ?? 30));
+
   setEditSlotInterval(
     String(service.slotIntervalMinutes ?? 30)
   );
+
   setEditBuffer(
     String(service.bufferMinutes ?? 0)
   );
+
   setError("");
 };
 
@@ -2676,7 +2684,7 @@ const rescheduleBooking = async () => {
         >
           <input
             type="checkbox"
-            checked={selectedStaffIds.includes(member._id)}
+            
             onChange={(e) =>
               setSelectedStaffIds((current) =>
                 e.target.checked
@@ -2803,19 +2811,19 @@ const rescheduleBooking = async () => {
           key={member._id}
           className="service-staff-option"
         >
-          <input
-            type="checkbox"
-            checked={selectedStaffIds.includes(member._id)}
-            onChange={(e) =>
-              setSelectedStaffIds((current) =>
-                e.target.checked
-                  ? [...current, member._id]
-                  : current.filter(
-                      (id) => id !== member._id
-                    )
-              )
-            }
-          />
+<input
+  type="checkbox"
+  checked={selectedStaffIds.includes(String(member._id))}
+  onChange={(e) => {
+    const staffId = String(member._id);
+
+    setSelectedStaffIds((current) =>
+      e.target.checked
+        ? [...new Set([...current, staffId])]
+        : current.filter((id) => id !== staffId)
+    );
+  }}
+/>
 
           <span>
             {member.name}
@@ -4154,7 +4162,7 @@ function App() {
     ) : user.role === "ADMIN" ? (
       <Navigate to="/admin" replace />
     ) : (
-      <TeamManagement api={api} />
+      <TeamManagement api={api} businessId={user.id} />
     )
   }
 />

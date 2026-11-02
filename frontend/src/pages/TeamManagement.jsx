@@ -11,6 +11,7 @@ import {
   X,
   Clock3,
   History,
+  Trash2,
 } from "lucide-react";
 
 const DAYS = [
@@ -37,10 +38,11 @@ const emptyForm = () => ({
   phone: "",
   email: "",
   notes: "",
+  serviceIds: [],
   workingHours: createDefaultHours(),
 });
 
-export default function TeamManagement({ api }) {
+export default function TeamManagement({ api, businessId }) {
   const [staff, setStaff] = useState([]);
   const [form, setForm] = useState(emptyForm());
   const [editingId, setEditingId] = useState(null);
@@ -54,6 +56,9 @@ export default function TeamManagement({ api }) {
   const [historyData, setHistoryData] = useState(null);
 const [historyLoading, setHistoryLoading] = useState(false);
 const [historyError, setHistoryError] = useState("");
+const [services, setServices] = useState([]);
+const [servicesLoading, setServicesLoading] = useState(false);
+const [deletingId, setDeletingId] = useState(null);
 
   const loadStaff = async () => {
     try {
@@ -79,9 +84,32 @@ const [historyError, setHistoryError] = useState("");
     }
   };
 
-  useEffect(() => {
+  const loadServices = async () => {
+  try {
+    setServicesLoading(true);
+
+    const data = await api(`/services/${businessId}`);
+
+    setServices(
+      Array.isArray(data)
+        ? data
+        : Array.isArray(data.services)
+          ? data.services
+          : []
+    );
+  } catch (err) {
+    setError(err.message || "Unable to load services.");
+  } finally {
+    setServicesLoading(false);
+  }
+};
+
+useEffect(() => {
+  if (businessId) {
     loadStaff();
-  }, []);
+    loadServices();
+  }
+}, [businessId]);
 
   const updateField = (field, value) => {
     setForm((current) => ({
@@ -135,14 +163,23 @@ const [historyError, setHistoryError] = useState("");
         : createDefaultHours();
 
     setEditingId(member._id);
-    setForm({
-      name: member.name || "",
-      designation: member.designation || "",
-      phone: member.phone || "",
-      email: member.email || "",
-      notes: member.notes || "",
-      workingHours,
-    });
+const assignedServiceIds = services
+  .filter((service) =>
+    (service.staffIds || []).some(
+      (id) => String(id?._id || id) === String(member._id)
+    )
+  )
+  .map((service) => String(service._id));
+
+setForm({
+  name: member.name || "",
+  designation: member.designation || "",
+  phone: member.phone || "",
+  email: member.email || "",
+  notes: member.notes || "",
+  serviceIds: assignedServiceIds,
+  workingHours,
+});
     setError("");
     setMessage("");
     setShowForm(true);
@@ -179,14 +216,15 @@ const [historyError, setHistoryError] = useState("");
       setError("");
       setMessage("");
 
-      const payload = {
-        name: form.name.trim(),
-        designation: form.designation.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim(),
-        notes: form.notes.trim(),
-        workingHours: form.workingHours,
-      };
+const payload = {
+  name: form.name.trim(),
+  designation: form.designation.trim(),
+  phone: form.phone.trim(),
+  email: form.email.trim(),
+  notes: form.notes.trim(),
+  serviceIds: form.serviceIds,
+  workingHours: form.workingHours,
+};
 
       if (editingId) {
         await api(`/staff/${editingId}`, {
@@ -244,6 +282,46 @@ const [historyError, setHistoryError] = useState("");
       setChangingId(null);
     }
   };
+
+  const deleteStaff = async (member) => {
+  const confirmed = window.confirm(
+    `Permanently delete ${member.name}?\n\n` +
+    "This action cannot be undone.\n\n" +
+    "Their future pending and confirmed appointments will be unassigned. " +
+    "Existing appointment records and work history will be preserved."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setDeletingId(member._id);
+    setError("");
+    setMessage("");
+
+    const data = await api(`/staff/${member._id}`, {
+      method: "DELETE",
+    });
+
+    setStaff((current) =>
+      current.filter((item) => item._id !== member._id)
+    );
+
+    // Refresh services because the backend removes this staff ID
+    // from Service.staffIds.
+    await loadServices();
+
+    setMessage(
+      data.message ||
+      `${member.name} was permanently deleted.`
+    );
+  } catch (err) {
+    setError(
+      err.message || "Unable to permanently delete team member."
+    );
+  } finally {
+    setDeletingId(null);
+  }
+};
 
   const openWorkHistory = async (member) => {
   try {
@@ -432,6 +510,21 @@ const closeWorkHistory = () => {
                           ? "Deactivate"
                           : "Activate"}
                     </button>
+
+                    <button
+  className="danger"
+  type="button"
+  disabled={
+    deletingId === member._id ||
+    changingId === member._id
+  }
+  onClick={() => deleteStaff(member)}
+>
+  <Trash2 size={16} />
+  {deletingId === member._id
+    ? "Deleting..."
+    : "Delete"}
+</button>
                   </div>
                 </div>
               ))}
@@ -720,6 +813,74 @@ const closeWorkHistory = () => {
                     placeholder="Optional notes about this team member"
                   />
                 </label>
+
+                <div className="full-width" style={{ marginTop: 20 }}>
+  <h3>Assign services</h3>
+
+  <p className="muted">
+    Select the services this team member can handle.
+  </p>
+
+  {servicesLoading ? (
+    <p className="muted">Loading services...</p>
+  ) : services.length === 0 ? (
+    <p className="muted">
+      No services available. Add services before assigning them.
+    </p>
+  ) : (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gap: 10,
+      }}
+    >
+      {services.map((service) => {
+        const serviceId = String(service._id);
+        const selected = form.serviceIds.includes(serviceId);
+
+        return (
+          <label
+            key={service._id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: 12,
+              border: "1px solid var(--border-color, #ddd)",
+              borderRadius: 10,
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(e) => {
+                const nextIds = e.target.checked
+                  ? [...form.serviceIds, serviceId]
+                  : form.serviceIds.filter(
+                      (id) => id !== serviceId
+                    );
+
+                updateField("serviceIds", nextIds);
+              }}
+            />
+
+            <span>
+              <strong>{service.name}</strong>
+              {service.price != null && (
+                <small style={{ display: "block" }}>
+                  ₹{service.price}
+                </small>
+              )}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  )}
+</div>
+
               </div>
 
               <div style={{ marginTop: 24 }}>

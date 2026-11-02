@@ -18,6 +18,8 @@ import BookingSlotLock from "../models/BookingSlotLock.js";
 
 import {
   getEligibleStaffForSlot,
+  prepareStaffAvailabilityContext,
+  hasEligibleStaffForSlot,
 } from "../utils/staffAssignment.js";
 
 import {
@@ -360,9 +362,10 @@ router.get("/availability", async (req, res) => {
 
     const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
     const now = new Date();
-    const slots = [];
 
-    // Generate each possible service slot.
+    // Generate candidate slots first.
+    const candidateSlots = [];
+
     for (
       let minutes = openMinutes;
       minutes + durationMinutes + bufferMinutes <= closeMinutes;
@@ -389,45 +392,73 @@ router.get("/availability", async (req, res) => {
         slotDate.getTime() + durationMinutes * 60000
       );
 
+      candidateSlots.push({
+        startTime: slotDate,
+        endTime: slotEnd,
+      });
+    }
+
+    if (candidateSlots.length === 0) {
+      return res.json({
+        date,
+        slots: [],
+      });
+    }
+
+    let staffAvailabilityContext = null;
+    let existingBookings = [];
+
+    if (teamEnabled) {
+      // Fetch staff, bookings and locks once for all candidate slots.
+      staffAvailabilityContext =
+        await prepareStaffAvailabilityContext({
+          business,
+          service,
+          candidateSlots,
+          excludeBookingId: excludeBookingId || null,
+        });
+    } else {
+      // Preserve legacy business-wide scheduling.
+      // Fetch active bookings only once instead of once per slot.
+      const bookingQuery = {
+        businessId,
+        status: { $in: ["pending", "confirmed"] },
+      };
+
+      if (excludeBookingId) {
+        bookingQuery._id = { $ne: excludeBookingId };
+      }
+
+      existingBookings = await Booking.find(bookingQuery)
+        .populate("serviceId", "duration bufferMinutes");
+    }
+
+    const slots = [];
+
+    for (const candidate of candidateSlots) {
       let available = false;
 
       if (teamEnabled) {
-        const eligibleStaff = await getEligibleStaffForSlot({
+        available = hasEligibleStaffForSlot({
           business,
           service,
-          startTime: slotDate,
-          endTime: slotEnd,
-          excludeBookingId: excludeBookingId || null,
+          startTime: candidate.startTime,
+          endTime: candidate.endTime,
+          context: staffAvailabilityContext,
         });
-
-        available = eligibleStaff.length > 0;
       } else {
-        // Preserve legacy business-wide scheduling for plans
-        // without active team management.
-        const bookingQuery = {
-          businessId,
-          status: { $in: ["pending", "confirmed"] },
-        };
-
-        if (excludeBookingId) {
-          bookingQuery._id = { $ne: excludeBookingId };
-        }
-
-        const existingBookings = await Booking.find(bookingQuery)
-          .populate("serviceId", "duration bufferMinutes");
-
         available = !hasBookingConflict({
           bookings: existingBookings,
-          startTime: slotDate,
-          endTime: slotEnd,
+          startTime: candidate.startTime,
+          endTime: candidate.endTime,
           bufferMinutes,
         });
       }
 
       if (available) {
         slots.push({
-          value: slotDate.toISOString(),
-          label: slotDate.toLocaleTimeString("en-IN", {
+          value: candidate.startTime.toISOString(),
+          label: candidate.startTime.toLocaleTimeString("en-IN", {
             timeZone: "Asia/Kolkata",
             hour: "2-digit",
             minute: "2-digit",
@@ -855,7 +886,7 @@ router.post("/public", async (req, res) => {
 
 
 
-// GET STAFF WORK HISTORY
+// GET STAFF WORK HISTORY — also supports permanently deleted staff.
 router.get(
   "/staff/:staffId/work-history",
   authMiddleware,
@@ -871,20 +902,11 @@ router.get(
         });
       }
 
-      // Verify that this staff member belongs to the logged-in business.
-      // Do not filter by isActive: inactive staff need historical access.
       const staffMember = await Staff.findOne({
         _id: staffId,
         businessId,
       }).select("name designation isActive");
 
-      if (!staffMember) {
-        return res.status(404).json({
-          message: "Team member not found.",
-        });
-      }
-
-      // Include both current and previous assignments.
       const bookings = await Booking.find({
         businessId,
         $or: [
@@ -896,22 +918,49 @@ router.get(
         .sort({ bookingDate: -1 })
         .lean();
 
-      const now = new Date();
+      // If the Staff document was deleted, recover the name
+      // from the saved booking assignment history.
+      const matchingEvents = bookings
+        .flatMap((booking) => booking.staffAssignmentHistory || [])
+        .filter(
+          (event) =>
+            String(event.staffId?._id || event.staffId) ===
+            String(staffId)
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.changedAt || 0) -
+            new Date(a.changedAt || 0)
+        );
 
-      const appointments = bookings.map((booking) => {
-        const assignmentHistory = (
+      if (!staffMember && matchingEvents.length === 0) {
+        return res.status(404).json({
+          message: "Team member history not found.",
+        });
+      }
+
+      const staff = staffMember
+        ? staffMember.toObject()
+        : {
+            _id: staffId,
+            name: matchingEvents[0].staffName || "Deleted team member",
+            designation: "",
+            isActive: false,
+            deleted: true,
+          };
+
+      const appointments = bookings.map((booking) => ({
+        ...booking,
+        staffAssignmentHistory: (
           booking.staffAssignmentHistory || []
         ).filter(
           (event) =>
             String(event.staffId?._id || event.staffId) ===
             String(staffId)
-        );
+        ),
+      }));
 
-        return {
-          ...booking,
-          staffAssignmentHistory: assignmentHistory,
-        };
-      });
+      const now = new Date();
 
       const summary = {
         total: appointments.length,
@@ -932,7 +981,7 @@ router.get(
       };
 
       return res.status(200).json({
-        staff: staffMember,
+        staff,
         summary,
         appointments,
       });

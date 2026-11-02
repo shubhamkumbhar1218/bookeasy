@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   registerPushTokenWithBackend,
 } from "../../services/notifications";
@@ -51,6 +51,7 @@ export default function CustomerBookingScreen() {
   const [booking, setBooking] = useState(false);
 
   const [error, setError] = useState("");
+  const availabilityRequestId = useRef(0);
 
   // ======================================================
   // NEXT 7 DATES
@@ -109,100 +110,90 @@ export default function CustomerBookingScreen() {
   // LOAD AVAILABILITY
   // ======================================================
 
-  const loadAvailability = async (
-    date: string
-  ) => {
-    if (
-      !params.businessId ||
-      !params.serviceId
-    ) {
-      setError(
-        "Business or service information is missing."
-      );
+const loadAvailability = async (date: string) => {
+  if (!params.businessId || !params.serviceId) {
+    setError("Business or service information is missing.");
+    return;
+  }
 
+  const requestId = ++availabilityRequestId.current;
+
+  try {
+    setLoadingSlots(true);
+    setError("");
+    setSelectedSlot(null);
+    setSlots([]);
+
+    const url =
+      `${API_URL}/bookings/availability` +
+      `?businessId=${encodeURIComponent(params.businessId)}` +
+      `&serviceId=${encodeURIComponent(params.serviceId)}` +
+      `&date=${encodeURIComponent(date)}`;
+
+    console.log("Availability URL:", url);
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    // Ignore responses belonging to an older date selection.
+    if (requestId !== availabilityRequestId.current) {
       return;
     }
 
-    try {
-      setLoadingSlots(true);
-      setError("");
-      setSelectedSlot(null);
-      setSlots([]);
-
-      const url =
-        `${API_URL}/bookings/availability` +
-        `?businessId=${encodeURIComponent(
-          params.businessId
-        )}` +
-        `&serviceId=${encodeURIComponent(
-          params.serviceId
-        )}` +
-        `&date=${encodeURIComponent(
-          date
-        )}`;
-
-      console.log(
-        "Availability URL:",
-        url
+    if (!response.ok) {
+      throw new Error(
+        data.message || "Unable to load available times."
       );
+    }
 
-      const response =
-        await fetch(url);
+    const availableSlots = Array.isArray(data.slots)
+      ? data.slots
+      : [];
 
-      const data =
-        await response.json();
+    setSlots(availableSlots);
 
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-            "Unable to load available times."
-        );
-      }
-
-      setSlots(
-        Array.isArray(data.slots)
-          ? data.slots
-          : []
-      );
-
-      if (
-        !data.slots ||
-        data.slots.length === 0
-      ) {
-        setError(
-          data.message ||
-            "No available slots for this date."
-        );
-      }
-    } catch (error) {
-      console.log(
-        "Availability error:",
-        error
-      );
-
+    if (availableSlots.length === 0) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to load available times."
+        data.message || "No available slots for this date."
       );
-    } finally {
+    }
+  } catch (error) {
+    if (requestId !== availabilityRequestId.current) {
+      return;
+    }
+
+    console.log("Availability error:", error);
+
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Unable to load available times."
+    );
+  } finally {
+    // An older request must not stop the latest request's loader.
+    if (requestId === availabilityRequestId.current) {
       setLoadingSlots(false);
     }
-  };
+  }
+};
 
   // ======================================================
   // INITIAL DATE
   // ======================================================
 
-  useEffect(() => {
-    if (dates.length > 0) {
-      const firstDate = dates[0];
+useEffect(() => {
+  if (dates.length > 0) {
+    const firstDate = dates[0];
 
-      setSelectedDate(firstDate);
+    setSelectedDate(firstDate);
+    loadAvailability(firstDate);
+  }
 
-      loadAvailability(firstDate);
-    }
-  }, []);
+  return () => {
+    // Invalidate any pending request when this screen unmounts.
+    availabilityRequestId.current += 1;
+  };
+}, []);
 
   // ======================================================
   // DATE SELECT

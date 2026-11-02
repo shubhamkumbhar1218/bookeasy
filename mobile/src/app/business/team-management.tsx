@@ -32,6 +32,14 @@ type Staff = {
   notes?: string;
   isActive: boolean;
   workingHours?: WorkingHour[];
+  serviceIds?: string[];
+};
+
+type BusinessService = {
+  _id: string;
+  name: string;
+  staffIds?: (string | { _id: string })[];
+  isActive?: boolean;
 };
 
 type WorkHistoryAppointment = {
@@ -135,6 +143,10 @@ const [historyStaff, setHistoryStaff] = useState<Staff | null>(null);
     createDefaultHours()
   );
 
+  const [services, setServices] = useState<BusinessService[]>([]);
+const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+const [servicesLoading, setServicesLoading] = useState(false);
+
   const getToken = async () => {
     const token = await AsyncStorage.getItem("bookeasy_token");
 
@@ -207,11 +219,73 @@ const [historyStaff, setHistoryStaff] = useState<Staff | null>(null);
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadStaff(true);
-    }, [])
-  );
+  const loadServices = async () => {
+  try {
+    setServicesLoading(true);
+
+    const token = await getToken();
+    if (!token) return;
+
+    const storedUser = await AsyncStorage.getItem("bookeasy_user");
+    const user = storedUser ? JSON.parse(storedUser) : null;
+    const businessId = user?.id || user?._id;
+
+    if (!businessId) {
+      Alert.alert("Error", "Business account information not found.");
+      return;
+    }
+
+    const response = await fetch(
+      `${API_URL}/services/${businessId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      await AsyncStorage.multiRemove([
+        "bookeasy_token",
+        "bookeasy_user",
+      ]);
+      router.replace("/business/login");
+      return;
+    }
+
+    if (!response.ok) {
+      Alert.alert(
+        "Could not load services",
+        data.message || "Please try again."
+      );
+      return;
+    }
+
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data.services)
+      ? data.services
+      : [];
+
+    setServices(list.filter((service: BusinessService) =>
+      service.isActive !== false
+    ));
+  } catch (error) {
+    console.log("Load services error:", error);
+    Alert.alert("Error", "Could not load business services.");
+  } finally {
+    setServicesLoading(false);
+  }
+};
+
+useFocusEffect(
+  useCallback(() => {
+    loadStaff(true);
+    loadServices();
+  }, [])
+);
 
   const resetForm = () => {
     setEditingStaff(null);
@@ -221,6 +295,7 @@ const [historyStaff, setHistoryStaff] = useState<Staff | null>(null);
     setEmail("");
     setNotes("");
     setWorkingHours(createDefaultHours());
+    setSelectedServiceIds([]);
   };
 
   const openAddModal = () => {
@@ -228,16 +303,41 @@ const [historyStaff, setHistoryStaff] = useState<Staff | null>(null);
     setModalVisible(true);
   };
 
-  const openEditModal = (member: Staff) => {
-    setEditingStaff(member);
-    setName(member.name || "");
-    setDesignation(member.designation || "");
-    setPhone(member.phone || "");
-    setEmail(member.email || "");
-    setNotes(member.notes || "");
-    setWorkingHours(normalizeHours(member.workingHours));
-    setModalVisible(true);
-  };
+const openEditModal = (member: Staff) => {
+  setEditingStaff(member);
+  setName(member.name || "");
+  setDesignation(member.designation || "");
+  setPhone(member.phone || "");
+  setEmail(member.email || "");
+  setNotes(member.notes || "");
+  setWorkingHours(normalizeHours(member.workingHours));
+
+  // Load services already assigned to this staff member
+  const assignedServiceIds = services
+    .filter((service) =>
+      service.staffIds?.some((staffItem) => {
+        const staffId =
+          typeof staffItem === "string"
+            ? staffItem
+            : staffItem._id;
+
+        return String(staffId) === String(member._id);
+      })
+    )
+    .map((service) => service._id);
+
+  setSelectedServiceIds(assignedServiceIds);
+
+  setModalVisible(true);
+};
+
+const toggleService = (serviceId: string) => {
+  setSelectedServiceIds((current) =>
+    current.includes(serviceId)
+      ? current.filter((id) => id !== serviceId)
+      : [...current, serviceId]
+  );
+};
 
   const closeModal = () => {
     if (saving) return;
@@ -301,14 +401,15 @@ const [historyStaff, setHistoryStaff] = useState<Staff | null>(null);
 
       setSaving(true);
 
-      const body = {
-        name: name.trim(),
-        designation: designation.trim(),
-        phone: phone.trim(),
-        email: email.trim(),
-        notes: notes.trim(),
-        workingHours,
-      };
+const body = {
+  name: name.trim(),
+  designation: designation.trim(),
+  phone: phone.trim(),
+  email: email.trim(),
+  notes: notes.trim(),
+  workingHours,
+  serviceIds: selectedServiceIds,
+};
 
       const url = editingStaff
         ? `${API_URL}/staff/${editingStaff._id}`
@@ -441,6 +542,83 @@ const [historyStaff, setHistoryStaff] = useState<Staff | null>(null);
       ]
     );
   };
+
+  const permanentlyDeleteStaff = async (member: Staff) => {
+  Alert.alert(
+    "Permanently delete staff?",
+    `Are you sure you want to permanently delete ${member.name}?\n\nThis cannot be undone. Their future appointments will be unassigned, but existing appointment records and work history will be preserved.`,
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete permanently",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const token = await getToken();
+            if (!token) return;
+
+            setProcessingId(member._id);
+
+            const response = await fetch(
+              `${API_URL}/staff/${member._id}`,
+              {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+            const data = await response.json();
+
+            if (response.status === 401) {
+              await AsyncStorage.multiRemove([
+                "bookeasy_token",
+                "bookeasy_user",
+              ]);
+
+              router.replace("/business/login");
+              return;
+            }
+
+            if (!response.ok) {
+              Alert.alert(
+                "Delete failed",
+                data.message || "Could not delete this staff member."
+              );
+              return;
+            }
+
+            setStaff((current) =>
+              current.filter((item) => item._id !== member._id)
+            );
+
+            // Refresh service assignments after the backend removes
+            // this staff member from Service.staffIds.
+            await loadServices();
+
+            Alert.alert(
+              "Staff deleted",
+              `${member.name} was permanently deleted.\n${data.unassignedBookings || 0} future booking(s) were unassigned.`
+            );
+          } catch (error) {
+            console.log("Permanent staff deletion error:", error);
+
+            Alert.alert(
+              "Connection error",
+              "Could not connect to the BookEasy server."
+            );
+          } finally {
+            setProcessingId(null);
+          }
+        },
+      },
+    ]
+  );
+};
 
   const openWorkHistory = async (member: Staff) => {
   setHistoryStaff(member);
@@ -807,6 +985,18 @@ const filteredStaff = staff.filter((member) => {
                       : "Activate"}
                   </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+  style={styles.deleteButton}
+  disabled={processingId === member._id}
+  onPress={() => permanentlyDeleteStaff(member)}
+>
+  <Text style={styles.deleteButtonText}>
+    {processingId === member._id
+      ? "Please wait..."
+      : "Delete"}
+  </Text>
+</TouchableOpacity>
               </View>
             </View>
           ))
@@ -891,6 +1081,72 @@ const filteredStaff = staff.filter((member) => {
                 onChangeText={setNotes}
                 multiline
               />
+
+              <Text style={styles.sectionTitle}>
+  Assign Services
+</Text>
+
+<Text style={styles.helperText}>
+  Select the services this team member can handle.
+  You can select multiple services.
+</Text>
+
+{servicesLoading ? (
+  <View style={styles.servicesLoading}>
+    <ActivityIndicator size="small" color="#2563eb" />
+    <Text style={styles.servicesLoadingText}>
+      Loading services...
+    </Text>
+  </View>
+) : services.length === 0 ? (
+  <View style={styles.noServicesCard}>
+    <Text style={styles.noServicesText}>
+      No active services found. Please add services first.
+    </Text>
+  </View>
+) : (
+  <View style={styles.serviceList}>
+    {services.map((service) => {
+      const isSelected = selectedServiceIds.includes(service._id);
+
+      return (
+        <TouchableOpacity
+          key={service._id}
+          style={[
+            styles.serviceOption,
+            isSelected && styles.serviceOptionSelected,
+          ]}
+          onPress={() => toggleService(service._id)}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[
+              styles.serviceCheckbox,
+              isSelected && styles.serviceCheckboxSelected,
+            ]}
+          >
+            {isSelected && (
+              <Text style={styles.serviceCheckmark}>✓</Text>
+            )}
+          </View>
+
+          <Text
+            style={[
+              styles.serviceOptionText,
+              isSelected && styles.serviceOptionTextSelected,
+            ]}
+          >
+            {service.name}
+          </Text>
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+)}
+
+<Text style={styles.selectedServicesCount}>
+  {selectedServiceIds.length} service(s) selected
+</Text>
 
               <Text style={styles.sectionTitle}>
                 Weekly Working Hours
@@ -1444,11 +1700,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 18,
   },
-  cardActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 13,
-  },
+cardActions: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: 10,
+  marginTop: 13,
+},
   editButton: {
     flex: 1,
     height: 42,
@@ -1553,6 +1810,98 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 12,
   },
+
+  servicesLoading: {
+  flexDirection: "row",
+  alignItems: "center",
+  padding: 15,
+  backgroundColor: "#f9fafb",
+  borderRadius: 12,
+  marginBottom: 12,
+},
+
+servicesLoadingText: {
+  marginLeft: 10,
+  fontSize: 13,
+  color: "#6b7280",
+},
+
+noServicesCard: {
+  backgroundColor: "#f9fafb",
+  borderWidth: 1,
+  borderColor: "#e5e7eb",
+  borderRadius: 12,
+  padding: 14,
+  marginBottom: 12,
+},
+
+noServicesText: {
+  fontSize: 13,
+  color: "#6b7280",
+  lineHeight: 19,
+},
+
+serviceList: {
+  gap: 9,
+  marginBottom: 10,
+},
+
+serviceOption: {
+  flexDirection: "row",
+  alignItems: "center",
+  padding: 13,
+  borderWidth: 1,
+  borderColor: "#e5e7eb",
+  borderRadius: 11,
+  backgroundColor: "#ffffff",
+},
+
+serviceOptionSelected: {
+  borderColor: "#2563eb",
+  backgroundColor: "#eff6ff",
+},
+
+serviceCheckbox: {
+  width: 22,
+  height: 22,
+  borderWidth: 1.5,
+  borderColor: "#9ca3af",
+  borderRadius: 6,
+  alignItems: "center",
+  justifyContent: "center",
+  marginRight: 11,
+},
+
+serviceCheckboxSelected: {
+  backgroundColor: "#2563eb",
+  borderColor: "#2563eb",
+},
+
+serviceCheckmark: {
+  color: "#ffffff",
+  fontSize: 14,
+  fontWeight: "900",
+},
+
+serviceOptionText: {
+  flex: 1,
+  fontSize: 14,
+  color: "#374151",
+  fontWeight: "600",
+},
+
+serviceOptionTextSelected: {
+  color: "#1d4ed8",
+  fontWeight: "800",
+},
+
+selectedServicesCount: {
+  fontSize: 12,
+  color: "#2563eb",
+  fontWeight: "700",
+  marginBottom: 15,
+},
+
   dayCard: {
     borderWidth: 1,
     borderColor: "#e5e7eb",
@@ -1882,6 +2231,23 @@ filterText: {
 },
 filterTextActive: {
   color: "#ffffff",
+},
+
+deleteButton: {
+  flex: 1,
+  height: 42,
+  borderRadius: 10,
+  backgroundColor: "#fee2e2",
+  borderWidth: 1,
+  borderColor: "#fecaca",
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+deleteButtonText: {
+  color: "#dc2626",
+  fontWeight: "800",
+  fontSize: 12,
 },
 
 });
