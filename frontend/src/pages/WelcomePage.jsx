@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -26,8 +25,9 @@ const bannerSlides = [
     button: "Explore Businesses",
     target: "customer",
     image:
-      "https://images.unsplash.com/photo-1761839256791-6a93f89fb8b0?auto=format&fit=crop&w=1200&q=85",
-    imageAlt: "Hair stylist serving a salon customer",
+      "https://www.saviojohnpereira.com/images/gallery/750x1000/28.jpg",
+    imageAlt:
+      "Indian hairstylist styling a woman's hair in a premium salon",
     visualTitle: "BOOK SMARTER",
     visualSubtitle: "Appointments made simple"
   },
@@ -41,8 +41,9 @@ const bannerSlides = [
     button: "Register Your Business",
     target: "business",
     image:
-      "https://images.unsplash.com/photo-1761718210089-ba3bb5ccb54f?auto=format&fit=crop&w=1200&q=85",
-    imageAlt: "Professional beauty treatment",
+      "https://www.wondergifts.in/cdn/shop/files/7830568894550-emotional_lifestyle_crop_700x.png?v=1775189611",
+    imageAlt:
+      "Woman enjoying a premium spa and beauty experience",
     visualTitle: "GROW YOUR BUSINESS",
     visualSubtitle: "Your business, your way"
   },
@@ -56,8 +57,9 @@ const bannerSlides = [
     button: "Get Started",
     target: "business",
     image:
-      "https://images.unsplash.com/photo-1758875569399-99a7d80ace43?auto=format&fit=crop&w=1200&q=85",
-    imageAlt: "Fitness training at a gym",
+      "https://www.alphacoach.app/_next/image?q=75&url=%2F_next%2Fstatic%2Fmedia%2Fhome-banner3Mobile.d10a9047.jpg&w=1920",
+    imageAlt:
+      "Fitness trainer guiding a client at a modern gym",
     visualTitle: "BOOKINGS 24/7",
     visualSubtitle: "Never miss an appointment"
   },
@@ -71,8 +73,9 @@ const bannerSlides = [
     button: "Discover BookEasy",
     target: "business",
     image:
-      "https://images.unsplash.com/photo-1631217868264-e5b90bb7e133?auto=format&fit=crop&w=1200&q=85",
-    imageAlt: "Healthcare professional in a clinic",
+      "https://scodclinic.com/assets/scod/expertise/doctor-consultation.png",
+    imageAlt:
+      "Doctor consulting a patient in a modern clinic",
     visualTitle: "STAY ORGANIZED",
     visualSubtitle: "Smart appointment reminders"
   },
@@ -86,8 +89,9 @@ const bannerSlides = [
     button: "Explore Premium",
     target: "business",
     image:
-      "https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=1200&q=85",
-    imageAlt: "Professional business team working together",
+      "https://gujaratmanpowerservices.com/assets/mission-meeting-DB1Yvn32.png",
+    imageAlt:
+      "Indian professionals working together in a modern office",
     visualTitle: "PREMIUM MEMBERSHIP",
     visualSubtitle: "More tools. More possibilities.",
     pricing: true
@@ -110,13 +114,13 @@ function WelcomePage() {
     navigate("/business/login");
   };
 
-const handleBannerAction = (target) => {
-  if (target === "customer") {
-    handleCustomer();
-  } else if (target === "business") {
-    handleBusiness();
-  }
-};
+  const handleBannerAction = (target) => {
+    if (target === "customer") {
+      handleCustomer();
+    } else if (target === "business") {
+      handleBusiness();
+    }
+  };
 
   const nextSlide = () => {
     setCurrentSlide((previous) =>
@@ -204,6 +208,7 @@ const handleBannerAction = (target) => {
                   <span className="banner-monthly-price">
                     Just ₹249.17/month when billed yearly
                   </span>
+
                   <span className="banner-monthly-comparison">
                     Monthly plan: ₹299/month
                   </span>
@@ -222,28 +227,32 @@ const handleBannerAction = (target) => {
               </button>
             </div>
 
-<div className="banner-visual">
-  <img
-    className="banner-visual-image"
-    src={activeBanner.image}
-    alt={activeBanner.imageAlt}
-    loading={currentSlide === 0 ? "eager" : "lazy"}
-  />
+            {/* Banner Image */}
+            <div className="banner-visual">
+              <img
+                className="banner-visual-image"
+                src={activeBanner.image}
+                alt={activeBanner.imageAlt}
+                loading={currentSlide === 0 ? "eager" : "lazy"}
+                onError={(event) => {
+                  event.currentTarget.style.display = "none";
+                }}
+              />
 
-  <div className="banner-visual-overlay" />
+              <div className="banner-visual-overlay" />
 
-  <div className="banner-visual-label">
-    <strong>{activeBanner.visualTitle}</strong>
-    <span>{activeBanner.visualSubtitle}</span>
-  </div>
+              <div className="banner-visual-label">
+                <strong>{activeBanner.visualTitle}</strong>
+                <span>{activeBanner.visualSubtitle}</span>
+              </div>
 
-  {activeBanner.pricing && (
-    <div className="banner-premium-tag">
-      <Sparkles size={15} />
-      PREMIUM
-    </div>
-  )}
-</div>
+              {activeBanner.pricing && (
+                <div className="banner-premium-tag">
+                  <Sparkles size={15} />
+                  PREMIUM
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Slider Controls */}
@@ -286,13 +295,21 @@ const handleBannerAction = (target) => {
             <button
               type="button"
               className="banner-pause"
-              onClick={() => setIsPaused((previous) => !previous)}
+              onClick={() =>
+                setIsPaused((previous) => !previous)
+              }
               aria-label={
-                isPaused ? "Resume automatic banners" : "Pause automatic banners"
+                isPaused
+                  ? "Resume automatic banners"
+                  : "Pause automatic banners"
               }
               title={isPaused ? "Resume" : "Pause"}
             >
-              {isPaused ? <Play size={15} /> : <Pause size={15} />}
+              {isPaused ? (
+                <Play size={15} />
+              ) : (
+                <Pause size={15} />
+              )}
             </button>
           </div>
         </section>
@@ -417,3 +434,5 @@ const handleBannerAction = (target) => {
 }
 
 export default WelcomePage;
+
+
